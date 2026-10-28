@@ -1,0 +1,82 @@
+{
+  "exported_at": "2026-10-27T18:50:15.870708800-06:00",
+  "plugin_version": "0.6.0",
+  "session_id": "b9e41215-7f51-434e-a4b4-9c7b3083bff5",
+  "reason": "item_container_changed",
+  "kind": "bank",
+  "item_count": 12,
+  "items": [
+    {
+      "slot": 0,
+      "id": 6570,
+      "quantity": 1,
+      "name": "Fire cape"
+    },
+    {
+      "slot": 1,
+      "id": 28792,
+      "quantity": 1,
+      "name": "Bone mace"
+    },
+    {
+      "slot": 2,
+      "id": 11840,
+      "quantity": 1,
+      "name": "Dragon boots"
+    },
+    {
+      "slot": 3,
+      "id": 12436,
+      "quantity": 1,
+      "name": "Amulet of fury (or)"
+    },
+    {
+      "slot": 4,
+      "id": 6524,
+      "quantity": 1,
+      "name": "Toktz-ket-xil"
+    },
+    {
+      "slot": 5,
+      "id": 28869,
+      "quantity": 1,
+      "name": "Hunters' sunlight crossbow"
+    },
+    {
+      "slot": 6,
+      "id": 28794,
+      "quantity": 1,
+      "name": "Bone shortbow"
+    },
+    {
+      "slot": 7,
+      "id": 28872,
+      "quantity": 3287,
+      "name": "Sunlight antler bolts"
+    },
+    {
+      "slot": 8,
+      "id": 10499,
+      "quantity": 1,
+      "name": "Ava's accumulator"
+    },
+    {
+      "slot": 9,
+      "id": 12610,
+      "quantity": 1,
+      "name": "Book of Law"
+    },
+    {
+      "slot": 10,
+      "id": 6920,
+      "quantity": 1,
+      "name": "Infinity boots"
+    },
+    {
+      "slot": 11,
+      "id": 6922,
+      "quantity": 1,
+      "name": "Infinity gloves"
+    }
+  ]
+}

@@ -494,12 +494,12 @@ Spec: Data sources → What each API offers (OSRS Wiki), Fetching and caching (w
 - Page text: drop `sup.reference`, navboxes and edit links; keep headings, paragraphs, list items and table rows as `cell | cell`; links become their text.
 - Page cache: key `page:<title>:<index>` with `revision`; older than 1 day → one `latestRevisions` call for all stale titles; re-download only changed pages.
 
-- [ ] **Step 1: Capture the fixtures** (search "Dragon Slayer II"; sections and section 1 of `Dragon_Slayer_II`; revisions for the 12 diary titles in `ARCHITECTURE.md` → Tools; Bucket `bucket('quest').select('page_name','requirements').where('page_name','Dragon Slayer II').run()`; expandtemplates of `{{Globals|ca elite points}}`).
-- [ ] **Step 2: Write the failing tests**: search returns `Dragon Slayer II` first with URL `https://oldschool.runescape.wiki/w/Dragon_Slayer_II`; section text has no `<` characters and is ≤ 4,000 + truncation note characters; a cached page 2 days old with an unchanged revision is not re-downloaded; with a changed revision it is; `cached` returns the stale value when `load` throws `SourceError`; `expandTemplates('{{Globals|ca elite points}}')` → `'1100'` from the fixture.
-- [ ] **Step 3: Run**. Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run**: PASS.
-- [ ] **Step 6: Checkpoint.**
+- [x] **Step 1: Capture the fixtures** (search "Dragon Slayer II"; sections and section 1 of `Dragon_Slayer_II`; revisions for the 12 diary titles in `ARCHITECTURE.md` → Tools; Bucket `bucket('quest').select('page_name','requirements').where('page_name','Dragon Slayer II').run()`; expandtemplates of `{{Globals|ca elite points}}`).
+- [x] **Step 2: Write the failing tests**: search returns `Dragon Slayer II` first with URL `https://oldschool.runescape.wiki/w/Dragon_Slayer_II`; section text has no `<` characters and is ≤ 4,000 + truncation note characters; a cached page 2 days old with an unchanged revision is not re-downloaded; with a changed revision it is; `cached` returns the stale value when `load` throws `SourceError`; `expandTemplates('{{Globals|ca elite points}}')` → `'1100'` from the fixture.
+- [x] **Step 3: Run**. Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run**: PASS.
+- [x] **Step 6: Checkpoint.**
 
 ### Task 16: Prices and the item index
 
@@ -517,11 +517,11 @@ Spec: Data sources → What each API offers (OSRS Wiki prices); Tools → loose 
   ```
 - Matching: case-insensitive; exact name first; then every query word a prefix of a name word in order ("dragon scim" → Dragon scimitar); then substring.
 
-- [ ] **Step 1: Write the failing tests**: `find('dragon scim')[0].name === 'Dragon scimitar'`; `find('WHIP')[0].name === 'Abyssal whip'`; `find('zzz')` is empty; `/latest` is requested once within 5 min across two calls; prices above `2_147_483_647` round-trip unchanged.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** against `https://prices.runescape.wiki/api/v2/osrs/mapping` and `/latest`.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: `find('dragon scim')[0].name === 'Dragon scimitar'`; `find('WHIP')[0].name === 'Abyssal whip'`; `find('zzz')` is empty; `/latest` is requested once within 5 min across two calls; prices above `2_147_483_647` round-trip unchanged.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** against `https://prices.runescape.wiki/api/v2/osrs/mapping` and `/latest`.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 17: Character Export reader and update modes
 
@@ -554,7 +554,7 @@ Spec: RuneLite data (Character Export), including "When the files are read" and 
 - Reading: compare each file's `mtime` with `source_state.file_mtime`; read only changed files; on invalid JSON wait 250 ms and retry, 3 attempts in total, then `markSourceError` and keep the old data.
 - `useFileCheck(accountId)`: in Automatic mode, calls the endpoint every `pollSeconds` while `document.visibilityState === 'visible'`, then invalidates the account's queries when anything changed; in Manual mode, only Refresh calls it. Chat turns call `checkFiles` server-side before answering (Task 28).
 
-- [ ] **Step 1: Write the failing tests** (temp dirs; fake `sleep`):
+- [x] **Step 1: Write the failing tests** (temp dirs; fake `sleep`):
   - a folder named `Sample\u00a0Name` is found for `nameKey('sample_name')` (Review Focus 1)
   - a second `checkFiles` with no `mtime` changes reads nothing (spy on `readFile`)
   - a bank file that's invalid JSON on the first read and valid on the second is saved; `changed` includes `ce_bank` (Review Focus 3)
@@ -563,10 +563,10 @@ Spec: RuneLite data (Character Export), including "When the files are read" and 
   - every fixture file parses with its schema, and `exported_at` `2026-10-27T18:49:51.806569700-06:00` becomes `2026-10-28T00:49:51.806Z`
   - a folder with only the six files Task 0 produced → `missing` is exactly `ce_seed_vault`, `ce_inventory`, `ce_equipment`, each with its fix text
   - `mergeDiaryNames`: an earlier snapshot with Ardougne `easy` names (10 tasks) and a latest file without them → Ardougne `easy` keeps the 10 names with `namesAsOf` = the earlier snapshot's time; Karamja names come from the latest file; when `tasks_done` is higher than the names' completed count, `namesStale` is true
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Verify** the tests PASS; in the app, play with Automatic mode on and see Overview update within `pollSeconds`.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Verify** the tests PASS; in the app, play with Automatic mode on and see Overview update within `pollSeconds`.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 18: Temple source
 
@@ -584,12 +584,12 @@ Spec: Data sources → What each API offers (TempleOSRS).
   ```
 - Base `https://templeosrs.com/api/collection-log/`. Category display names come from the key (`vorkath` → `Vorkath`, `chambers_of_xeric` → `Chambers of Xeric`). Fill the lookup's `temple` field.
 
-- [ ] **Step 1: Capture the fixtures.**
-- [ ] **Step 2: Write the failing tests**: the fixture gives `obtained === 587`, `total === 1734`; every category gets a tab; an item with a count has `obtained: true` and its date; the "never synced" response → `null`.
-- [ ] **Step 3: Run**. Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run**: PASS.
-- [ ] **Step 6: Checkpoint.**
+- [x] **Step 1: Capture the fixtures.**
+- [x] **Step 2: Write the failing tests**: the fixture gives `obtained === 587`, `total === 1734`; every category gets a tab; an item with a count has `obtained: true` and its date; the "never synced" response → `null`.
+- [x] **Step 3: Run**. Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run**: PASS.
+- [x] **Step 6: Checkpoint.**
 
 ### Task 19: Overview progress rows and combat achievement tiers
 
@@ -608,11 +608,11 @@ Spec: Frontend → Overview; Goals → Combat achievements.
 - Thresholds come from `{{Globals|ca <t> points}}`; points per task = `{{Globals|ca <t> task points}}` ÷ `{{Globals|ca <t> tasks}}`, with `<t>` in `easy, medium, hard, elite, master, gm`. On 2026-10-27 the required points were 41, 169, 436, 1100, 1965, 2697.
 
 - Collection log row: from Temple; when Temple has no data, `obtained` falls back to the hiscores' `Collections Logged` score with `total: null` (shown as "812 logged, sync Temple for details").
-- [ ] **Step 1: Write the failing tests**: with the fixture thresholds, completed `{ Easy: 41, Medium: 64, Hard: 89, Elite: 0, … }` and points per task 1, 2, 3 → `points === 41 + 128 + 267 === 436`, `tier === 'Hard'`, `nextTier === 'Elite'`, `nextTierPoints === 1100`; the Overview service fills `quests`, `diaryTiers`, `combatAchievements` and `collectionLog` from the fixtures; with no Temple data, `collectionLog` is `{ obtained: <Collections Logged score>, total: null }`; `missing` lists `ce_bank` with its fix when there's no bank.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement**, and show the four rows with icons (`Quest_point_icon.png`, `Achievement_Diaries_icon.png`, `Combat_achievements_icon.png`, `Collection_log.png`), the worn gear row, and each `missing` entry's fix.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: with the fixture thresholds, completed `{ Easy: 41, Medium: 64, Hard: 89, Elite: 0, … }` and points per task 1, 2, 3 → `points === 41 + 128 + 267 === 436`, `tier === 'Hard'`, `nextTier === 'Elite'`, `nextTierPoints === 1100`; the Overview service fills `quests`, `diaryTiers`, `combatAchievements` and `collectionLog` from the fixtures; with no Temple data, `collectionLog` is `{ obtained: <Collections Logged score>, total: null }`; `missing` lists `ce_bank` with its fix when there's no bank.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement**, and show the four rows with icons (`Quest_point_icon.png`, `Achievement_Diaries_icon.png`, `Combat_achievements_icon.png`, `Collection_log.png`), the worn gear row, and each `missing` entry's fix.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 20: Bank and gear page
 
@@ -631,11 +631,11 @@ Spec: Frontend → Pages (Bank and gear); Tools → `get_bank`, `get_gear`.
 - Worn layout (3 columns × 5 rows): head; cape, neck, ammo; weapon, body, shield; legs; hands, feet, ring.
 - Equipment `slot` numbers (confirmed on real files): 0 head, 1 cape, 2 neck, 3 weapon, 4 body, 5 shield, 7 legs, 9 hands, 10 feet, 12 ring, 13 ammo. A two-handed weapon leaves 5 empty. Inventory items carry their slot (0–27); fill the 28-slot array by `slot`, `null` elsewhere.
 
-- [ ] **Step 1: Write the failing tests**: total value from the fixture equals the hand-computed sum; `mostValuable[0]` is the priciest stack; `search('blood')` finds the blood runes with `where: 'bank'`; inventory items at slots 0, 1, 3, 4 and 10 give a 28-entry array with `null` at the other 23; an equipment item with `slot: 13` lands in the ammo position and slot 5 stays empty for a two-handed weapon; an ironman account has `ironmanNote: true`.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** the service and the page as in the approved mockup.
-- [ ] **Step 4: Run**: PASS; check the page in the app.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: total value from the fixture equals the hand-computed sum; `mostValuable[0]` is the priciest stack; `search('blood')` finds the blood runes with `where: 'bank'`; inventory items at slots 0, 1, 3, 4 and 10 give a 28-entry array with `null` at the other 23; an equipment item with `slot: 13` lands in the ammo position and slot 5 stays empty for a two-handed weapon; an ironman account has `ironmanNote: true`.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** the service and the page as in the approved mockup.
+- [x] **Step 4: Run**: PASS; check the page in the app.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 21: Collection log page
 
@@ -643,11 +643,11 @@ Spec: Frontend → Pages (Collection log).
 
 **Files:** Create `client/src/pages/CollectionLog/CollectionLog.tsx` (+ `.module.css`, test). Modify `server/src/routes/accounts.ts` (`GET /api/accounts/:id/collection-log` → `CollectionLog`).
 
-- [ ] **Step 1: Write the failing test**: with the Temple fixture, the Bosses tab lists entries with `obtained of total`; a complete entry has the done class; selecting an item shows `First obtained <date>` in the user's time zone; missing items render greyed (`data-missing="true"`).
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** tabs Bosses, Raids, Clues, Minigames, Other; the entry list; the item grid with icons and counts; totals and "Synced with Temple <relative time>".
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing test**: with the Temple fixture, the Bosses tab lists entries with `obtained of total`; a complete entry has the done class; selecting an item shows `First obtained <date>` in the user's time zone; missing items render greyed (`data-missing="true"`).
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** tabs Bosses, Raids, Clues, Minigames, Other; the entry list; the item grid with icons and counts; totals and "Synced with Temple <relative time>".
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ---
 

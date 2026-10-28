@@ -1,0 +1,40 @@
+{
+  "exported_at": "2026-10-27T18:50:15.870708800-06:00",
+  "plugin_version": "0.6.0",
+  "session_id": "b9e41215-7f51-434e-a4b4-9c7b3083bff5",
+  "reason": "item_container_changed",
+  "kind": "seed_vault",
+  "item_count": 5,
+  "items": [
+    {
+      "slot": 0,
+      "id": 5295,
+      "quantity": 37,
+      "name": "Ranarr seed"
+    },
+    {
+      "slot": 1,
+      "id": 5300,
+      "quantity": 12,
+      "name": "Snapdragon seed"
+    },
+    {
+      "slot": 2,
+      "id": 5304,
+      "quantity": 4,
+      "name": "Torstol seed"
+    },
+    {
+      "slot": 3,
+      "id": 5316,
+      "quantity": 3,
+      "name": "Magic seed"
+    },
+    {
+      "slot": 4,
+      "id": 5315,
+      "quantity": 6,
+      "name": "Yew seed"
+    }
+  ]
+}

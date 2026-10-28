@@ -14,8 +14,9 @@ const RETENTION: Record<SourceKind, Retention> = {
   ce_combat_achievements: 'every_change',
   ce_bank: 'daily',
   ce_seed_vault: 'daily',
-  // Rewritten every few seconds while playing; the hiscores and Wise Old Man keep stats history.
-  ce_character: 'daily',
+  // Every change too, though it's rewritten every few seconds while playing: the full levels
+  // and XP history is wanted.
+  ce_character: 'every_change',
   ce_inventory: 'latest',
   ce_equipment: 'latest',
   wom_gains_week: 'latest',
@@ -78,6 +79,35 @@ export async function listSources(db: Kysely<DB>, kind: SourceKind): Promise<Sou
     .orderBy('fetched_at', 'desc')
     .execute();
   return rows.map(toSourceRow);
+}
+
+/** When each of an account's saved files was written (its modified time), by kind. */
+export async function savedFileTimes(
+  db: Kysely<DB>,
+  accountId: number,
+): Promise<Map<SourceKind, string | null>> {
+  const rows = await db
+    .selectFrom('source_state')
+    .select(['kind', 'file_mtime'])
+    .where('account_id', '=', accountId)
+    .execute();
+  return new Map(rows.map((row) => [row.kind as SourceKind, row.file_mtime]));
+}
+
+/** An account's snapshots of a kind (its history), the newest first. */
+export async function listSnapshots(
+  db: Kysely<DB>,
+  accountId: number,
+  kind: SourceKind,
+): Promise<{ takenAt: string; data: string }[]> {
+  const rows = await db
+    .selectFrom('snapshots')
+    .select(['taken_at', 'data'])
+    .where('account_id', '=', accountId)
+    .where('kind', '=', kind)
+    .orderBy('taken_at', 'desc')
+    .execute();
+  return rows.map((row) => ({ takenAt: row.taken_at, data: row.data }));
 }
 
 type SaveInput = {

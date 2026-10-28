@@ -7,7 +7,12 @@ type IconProps = {
   size: number;
   /** For an icon beside its printed name: screen readers skip it rather than say the name twice. */
   decorative?: boolean;
-} & ({ kind: 'skill' | 'boss'; name: string } | { kind: 'item'; id: number; name: string });
+} & (
+  | { kind: 'skill' | 'boss'; name: string }
+  | { kind: 'item'; id: number; name: string }
+  /** A wiki image by its file name, for one not named `<name>_icon.png` (`Collection_log.png`). */
+  | { kind: 'wiki'; file: string; name: string }
+);
 
 /**
  * A game icon, which the server fetches once and keeps; pixel art stays sharp when scaled. An
@@ -17,7 +22,7 @@ export function Icon(props: IconProps): JSX.Element {
   const src =
     props.kind === 'item'
       ? `/api/icons/item/${props.id}`
-      : `/api/icons/wiki/${encodeURIComponent(wikiIconFile(props.name, props.kind))}`;
+      : `/api/icons/wiki/${encodeURIComponent(props.kind === 'wiki' ? props.file : wikiIconFile(props.name, props.kind))}`;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const square = { width: props.size, height: props.size };
   if (failedSrc === src) {

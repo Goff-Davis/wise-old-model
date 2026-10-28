@@ -7,6 +7,7 @@ import {
   AccountTypeSchema,
   formatNumber,
   formatTime,
+  TEMPLE_SYNC_STEPS,
 } from '@wom/shared';
 import { type FormEvent, type JSX, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -41,6 +42,25 @@ function womFinding(found: AccountLookup): string {
   return found.womType
     ? `Tracks ${found.name} as ${AS_TYPE[found.womType]}.`
     : `Tracks ${found.name}.`;
+}
+
+function characterExportFinding(found: AccountLookup, zone: string): string {
+  const { found: written, lastWritten } = found.characterExport;
+  if (written === null) return "Couldn't check.";
+  return written && lastWritten
+    ? `Found. Last written ${formatTime(lastWritten, zone, 'relative')}.`
+    : `Not found yet. Log in to ${found.name} with the Character Export plugin on, then open the bank and each diary journal once.`;
+}
+
+function templeFinding(found: AccountLookup, zone: string): string {
+  const { synced, lastChecked } = found.temple;
+  if (synced === null) return "Couldn't check.";
+  if (!synced) {
+    return `No collection log yet. ${TEMPLE_SYNC_STEPS}`;
+  }
+  return lastChecked
+    ? `Has the collection log, last synced ${formatTime(lastChecked, zone, 'relative')}.`
+    : 'Has the collection log.';
 }
 
 /**
@@ -171,17 +191,9 @@ export function AddAccountForm(props: {
                 )}
               </dd>
               <dt>Character Export</dt>
-              <dd>
-                {found.characterExport.found && found.characterExport.lastWritten
-                  ? `Found. Last written ${formatTime(found.characterExport.lastWritten, zone, 'relative')}.`
-                  : `Not found yet. Log in to ${found.name} with the Character Export plugin on, then open the bank and each diary journal once.`}
-              </dd>
+              <dd>{characterExportFinding(found, zone)}</dd>
               <dt>TempleOSRS</dt>
-              <dd>
-                {found.temple.synced
-                  ? 'Has the collection log.'
-                  : 'No collection log yet. To sync it, add the Temple OSRS plugin to RuneLite, then open the collection log in game and press its sync button.'}
-              </dd>
+              <dd>{templeFinding(found, zone)}</dd>
             </dl>
             {found.problems.length > 0 && (
               <ul aria-label="What went wrong" className={styles.problems}>

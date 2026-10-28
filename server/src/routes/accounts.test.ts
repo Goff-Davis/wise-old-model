@@ -1,8 +1,12 @@
+import { statSync } from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { Freshness } from '@wom/shared';
 import type { Kysely } from 'kysely';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   call,
+  exportFixture,
   type FakeAnswer,
   fakeRequester,
   fixture,
@@ -11,13 +15,15 @@ import {
   outage,
   testConfig,
   testDb,
+  writeExportFiles,
 } from '../../test/helpers.ts';
 import { createApp } from '../app.ts';
 import type { DB } from '../db/schema.ts';
-import { getSource, saveSource } from '../store/sourceState.ts';
+import { getSource, listSnapshots, saveSource } from '../store/sourceState.ts';
 
 const HISCORES = 'https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=';
 const WOM = 'https://api.wiseoldman.net/v2';
+const TEMPLE = 'https://templeosrs.com/api/collection-log/player_collection_log.php?player=';
 
 /** An answer: the text, an error to throw, or a function giving the text later. */
 type Answer = FakeAnswer | (() => Promise<string>);
@@ -33,18 +39,30 @@ const womPlayer = (name: string, type: string, updatedAt?: string) =>
   });
 
 /**
- * The app, with a requester answering by "METHOD url" (or just the url for a GET). Anything else
- * throws a plain error, which the app turns into a 500, so an unexpected request fails the test.
+ * The app, with a requester answering by "METHOD url" (or just the url for a GET). Temple hasn't
+ * seen any name unless a test says otherwise. Anything else throws a plain error, which the app
+ * turns into a 500, so an unexpected request fails the test.
  */
 async function setup(answers: Record<string, Answer> = {}) {
   const db = await testDb();
   const fake = fakeRequester(({ method, url }) => {
-    const found = answers[`${method} ${url}`] ?? (method === 'GET' ? answers[url] : undefined);
+    const found =
+      answers[`${method} ${url}`] ??
+      (method === 'GET' ? answers[url] : undefined) ??
+      (url.startsWith(TEMPLE) ? fixture('temple/not-synced.json') : undefined);
     if (found === undefined) return new Error(`No answer for ${method} ${url}`);
     return typeof found === 'function' ? found() : found;
   });
-  const app = createApp({ config: testConfig(), db, req: fake.req });
-  return { db, app, ...fake };
+  const config = testConfig();
+  const app = createApp({ config, db, req: fake.req });
+  /** Gives the account (by its folder name) Character Export's files, from Sample Name's. */
+  const exportFiles = (folder: string, files: string[]) =>
+    writeExportFiles(
+      config.runeliteDir,
+      folder,
+      Object.fromEntries(files.map((file) => [file, exportFixture(file)])),
+    );
+  return { db, app, exportFiles, ...fake };
 }
 
 describe('GET /api/accounts/lookup', () => {
@@ -127,6 +145,64 @@ describe('GET /api/accounts/lookup', () => {
     expect(res.body).toMatchObject({ onHiscores: true, totalLevel: 2278, combatLevel: 126 });
   });
 
+  it("says whether Character Export has written the name's files, and when it last did", async () => {
+    const { app, exportFiles } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: notFound('Hiscores'),
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+    });
+    const dir = exportFiles('lumby_pete', ['quests.json', 'character.json']);
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    const newest = Math.max(
+      statSync(path.join(dir, 'quests.json')).mtimeMs,
+      statSync(path.join(dir, 'character.json')).mtimeMs,
+    );
+    expect(res.body).toMatchObject({
+      characterExport: { found: true, lastWritten: new Date(newest).toISOString() },
+    });
+  });
+
+  it('says whether the name has synced its collection log on Temple, and when it last did', async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: notFound('Hiscores'),
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+      [`${TEMPLE}Lumby%20Pete`]: fixture('temple/clog-mikael-summary.json'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    expect(res.body).toMatchObject({
+      temple: { synced: true, lastChecked: '2026-10-24T06:43:21.000Z' },
+      problems: [],
+    });
+  });
+
+  it("leaves Character Export's answer unknown when the RuneLite folder can't be read", async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: notFound('Hiscores'),
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+    });
+    vi.spyOn(fs, 'readdir').mockRejectedValue(
+      Object.assign(new Error('denied'), { code: 'EACCES' }),
+    );
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      characterExport: { found: null, lastWritten: null },
+      problems: ["Character Export: the RuneLite folder couldn't be read (EACCES)"],
+    });
+  });
+
+  it("leaves Temple's answer unknown, not unsynced, while it's down", async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: notFound('Hiscores'),
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+      [`${TEMPLE}Lumby%20Pete`]: outage('Temple'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    expect(res.body).toMatchObject({
+      temple: { synced: null, lastChecked: null },
+      problems: ['Temple: server error (500)'],
+    });
+  });
+
   it('refuses something that cannot be an OSRS name', async () => {
     const { app, requests } = await setup();
     for (const name of ['', 'a name far too long', '..', 'Lumby/Pete', '___', ' - ']) {
@@ -160,6 +236,16 @@ describe('POST /api/accounts', () => {
     });
   });
 
+  it("reads the new account's Character Export files, so its first overview has them", async () => {
+    const { db, app, exportFiles } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+    });
+    exportFiles('Lumby Pete', ['quests.json']);
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: false }));
+    const { account } = res.body as { account: { id: number } };
+    expect(await getSource(db, account.id, 'ce_quests')).not.toBeNull();
+  });
+
   it('marks a type the user picked as set by hand', async () => {
     const { app } = await setup({
       [`${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'ironman'),
@@ -179,7 +265,12 @@ describe('POST /api/accounts', () => {
       womPlayer('Lumby Pete', 'ironman'),
     );
     await call(app, { path: `/api/accounts/${account.id}/overview` });
-    expect(requests).toEqual([`GET ${WOM}/players/Lumby%20Pete`, `GET ${HISCORES}Lumby%20Pete`]);
+    // The overview asks only for what the add didn't fetch: the hiscores and Temple's log.
+    expect(requests).toEqual([
+      `GET ${WOM}/players/Lumby%20Pete`,
+      `GET ${HISCORES}Lumby%20Pete`,
+      `GET ${TEMPLE}Lumby%20Pete&categories=all&includenames=1&includemissingitems=1`,
+    ]);
   });
 
   it('saves the answer of the update that started tracking', async () => {
@@ -399,12 +490,172 @@ describe('GET, PATCH and DELETE /api/accounts', () => {
   });
 });
 
+describe('POST /api/accounts/:id/files/check', () => {
+  const check = (id: number) => ({
+    method: 'POST' as const,
+    path: `/api/accounts/${id}/files/check`,
+  });
+
+  it("reads the account's Character Export files and says what changed and what's missing", async () => {
+    const { db, app, exportFiles } = await setup();
+    const account = await insertAccount(db, { name: 'Lumby Pete' });
+    exportFiles('Lumby Pete', ['quests.json', 'bank.json']);
+    const res = await call(app, check(account.id));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      changed: ['ce_quests', 'ce_bank'],
+      missing: [
+        'ce_character',
+        'ce_diaries',
+        'ce_combat_achievements',
+        'ce_seed_vault',
+        'ce_inventory',
+        'ce_equipment',
+      ],
+      errors: [],
+    });
+    expect((await call(app, check(account.id))).body).toMatchObject({ changed: [] });
+  });
+
+  it("answers 404 for an account that doesn't exist", async () => {
+    const { app } = await setup();
+    expect((await call(app, check(9))).status).toBe(404);
+  });
+});
+
+describe('GET /api/accounts/:id/bank', () => {
+  const PRICES = 'https://prices.runescape.wiki/api/v2/osrs';
+  const prices = {
+    [`${PRICES}/mapping`]: JSON.stringify([
+      { id: 11840, name: 'Dragon boots', members: true, value: 25_000, icon: 'Dragon boots.png' },
+    ]),
+    [`${PRICES}/latest`]: JSON.stringify({
+      data: { 11840: { high: 210_000, highTime: 1_793_000_000, low: null, lowTime: null } },
+    }),
+  };
+
+  it("answers with the account's bank and gear, searched", async () => {
+    const { db, app, exportFiles } = await setup(prices);
+    const account = await insertAccount(db, { name: 'Lumby Pete' });
+    exportFiles('Lumby Pete', ['bank.json', 'equipment.json']);
+    await call(app, { method: 'POST', path: `/api/accounts/${account.id}/files/check` });
+    const res = await call(app, { path: `/api/accounts/${account.id}/bank?search=dragon%20boots` });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      totalValue: 210_000,
+      ironmanNote: true,
+      search: [
+        { name: 'Dragon boots', where: 'bank', unitPrice: 210_000 },
+        { name: 'Dragon boots', where: 'equipment', unitPrice: 210_000 },
+      ],
+    });
+  });
+
+  it('takes an empty search as none', async () => {
+    const { db, app } = await setup(prices);
+    const account = await insertAccount(db, { name: 'Lumby Pete' });
+    const res = await call(app, { path: `/api/accounts/${account.id}/bank?search=%20` });
+    expect(res.body).toMatchObject({ search: null });
+  });
+
+  it('refuses a search over 100 characters', async () => {
+    const { db, app } = await setup(prices);
+    const account = await insertAccount(db, { name: 'Lumby Pete' });
+    const res = await call(app, {
+      path: `/api/accounts/${account.id}/bank?search=${'a'.repeat(101)}`,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining('at most 100 characters') });
+  });
+
+  it("answers 404 for an account that doesn't exist", async () => {
+    const { app } = await setup(prices);
+    expect((await call(app, { path: '/api/accounts/9/bank' })).status).toBe(404);
+  });
+});
+
+describe('GET /api/accounts/:id/collection-log', () => {
+  it("answers with the account's collection log from Temple, each entry in its tab", async () => {
+    const { db, app } = await setup({
+      [`${TEMPLE}Lumby%20Pete&categories=all&includenames=1&includemissingitems=1`]:
+        fixture('temple/clog-mikael.json'),
+      'https://templeosrs.com/api/collection-log/categories.php': fixture('temple/categories.json'),
+    });
+    const account = await insertAccount(db, { name: 'Lumby Pete' });
+    const res = await call(app, { path: `/api/accounts/${account.id}/collection-log` });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      log: { obtained: 587, total: 1734, categories: [{ name: 'Vorkath', tab: 'bosses' }, {}, {}] },
+      freshness: { kind: 'temple_clog', stale: false },
+    });
+  });
+
+  it("answers 404 for an account that doesn't exist", async () => {
+    const { app } = await setup();
+    expect((await call(app, { path: '/api/accounts/9/collection-log' })).status).toBe(404);
+  });
+});
+
 describe('POST /api/accounts/:id/refresh', () => {
+  const TEMPLE_LOG = '&categories=all&includenames=1&includemissingitems=1';
   const lumbyPete = (answer: (site: string) => string | Error) => ({
     [`${HISCORES}Lumby%20Pete`]: answer('Hiscores'),
     [`${WOM}/players/Lumby%20Pete`]: answer('Wise Old Man'),
     [`${WOM}/players/Lumby%20Pete/gained?period=week`]: answer('Wise Old Man'),
     [`${WOM}/players/Lumby%20Pete/achievements`]: answer('Wise Old Man'),
+    [`${TEMPLE}Lumby%20Pete${TEMPLE_LOG}`]: answer('Temple'),
+  });
+
+  it("fetches the account's collection log from Temple too", async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(outage),
+      [`${TEMPLE}Lumby%20Pete${TEMPLE_LOG}`]: fixture('temple/clog-mikael.json'),
+    });
+    const account = await insertAccount(db);
+    const res = await call(app, { method: 'POST', path: `/api/accounts/${account.id}/refresh` });
+    expect((res.body as { freshness: Freshness[] }).freshness.at(-1)).toMatchObject({
+      kind: 'temple_clog',
+      stale: false,
+    });
+    expect((await getSource(db, account.id, 'temple_clog'))?.data).toBe(
+      fixture('temple/clog-mikael.json'),
+    );
+  });
+
+  it("adds no snapshot of Temple's log when only the player's rank moved", async () => {
+    let rank = 93_130;
+    const log = () =>
+      JSON.stringify({
+        data: {
+          ...JSON.parse(fixture('temple/clog-mikael.json')).data,
+          collections_hiscores_rank: rank,
+        },
+      });
+    const { db, app } = await setup({
+      ...lumbyPete(outage),
+      [`${TEMPLE}Lumby%20Pete${TEMPLE_LOG}`]: async () => log(),
+    });
+    const account = await insertAccount(db);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      await call(app, { method: 'POST', path: `/api/accounts/${account.id}/refresh` });
+      // Two minutes on, others have overtaken the player; the log itself is the same.
+      vi.setSystemTime(Date.now() + 2 * 60_000);
+      rank = 93_200;
+      await call(app, { method: 'POST', path: `/api/accounts/${account.id}/refresh` });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect((await getSource(db, account.id, 'temple_clog'))?.data).toBe(log());
+    expect(await listSnapshots(db, account.id, 'temple_clog')).toHaveLength(1);
+  });
+
+  it("reads the account's Character Export files too", async () => {
+    const { db, app, exportFiles } = await setup(lumbyPete(outage));
+    const account = await insertAccount(db);
+    exportFiles('Lumby Pete', ['quests.json']);
+    await call(app, { method: 'POST', path: `/api/accounts/${account.id}/refresh` });
+    expect(await getSource(db, account.id, 'ce_quests')).not.toBeNull();
   });
 
   it('answers 200 with every source stale when every source fails (Review Focus 4)', async () => {
@@ -421,6 +672,7 @@ describe('POST /api/accounts/:id/refresh', () => {
       'wom_player',
       'wom_gains_week',
       'wom_achievements',
+      'temple_clog',
     ]);
     expect(freshness.every((f) => f.stale)).toBe(true);
     expect(renameSuggestion).toBeNull();
@@ -560,6 +812,7 @@ describe('POST /api/accounts/:id/refresh', () => {
       [`${WOM}/players/Lumby%20Peter`]: womPlayer('Lumby Peter', 'ironman', now),
       [`${WOM}/players/Lumby%20Peter/gained?period=week`]: fixture('wom/gained-week.json'),
       [`${WOM}/players/Lumby%20Peter/achievements`]: '[]',
+      [`${TEMPLE}Lumby%20Peter${TEMPLE_LOG}`]: fixture('temple/clog-mikael.json'),
     });
     const account = await lumbyPeteFoundOn20th(db);
     expect(suggestion(await call(app, refresh(account.id)))).toBe('Lumby Peter');
@@ -577,6 +830,7 @@ describe('POST /api/accounts/:id/refresh', () => {
       ['wom_player', false, null],
       ['wom_gains_week', false, null],
       ['wom_achievements', false, null],
+      ['temple_clog', false, null],
     ]);
     expect(suggestion(res)).toBeNull();
     expect(requests).toContain(`GET ${HISCORES}Lumby%20Peter`);
@@ -599,14 +853,15 @@ describe('GET /api/accounts/:id/overview', () => {
       topKills: [{ name: 'TzTok-Jad', kills: 186 }],
     });
     expect((res.body as { skills: unknown[] }).skills).toHaveLength(24);
-    expect(requests).toHaveLength(2);
-    expect(requests).toEqual(
-      expect.arrayContaining([`GET ${HISCORES}Lynx%20Titan`, `GET ${WOM}/players/Lynx%20Titan`]),
-    );
+    expect([...requests].sort()).toEqual([
+      `GET ${WOM}/players/Lynx%20Titan`,
+      `GET ${HISCORES}Lynx%20Titan`,
+      `GET ${TEMPLE}Lynx%20Titan&categories=all&includenames=1&includemissingitems=1`,
+    ]);
 
     // Opened again within the freshness limits: nothing is fetched.
     await call(app, { path: `/api/accounts/${account.id}/overview` });
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
   });
 
   it('answers with what it has, marked stale, when the sources are down', async () => {
@@ -622,6 +877,7 @@ describe('GET /api/accounts/:id/overview', () => {
     expect(freshness.map((entry) => [entry.kind, entry.stale, entry.error])).toEqual([
       ['hiscores', true, 'Hiscores: server error (500)'],
       ['wom_player', true, 'Wise Old Man: server error (500)'],
+      ['temple_clog', true, "Temple: Lynx Titan hasn't synced their collection log yet"],
     ]);
   });
 
@@ -652,6 +908,7 @@ describe('GET /api/accounts/:id/overview', () => {
     expect(body.freshness.map((entry) => [entry.kind, entry.fetchedAt, entry.stale])).toEqual([
       ['hiscores', lastWeek, true],
       ['wom_player', lastWeek, true],
+      ['temple_clog', null, true],
     ]);
   });
 

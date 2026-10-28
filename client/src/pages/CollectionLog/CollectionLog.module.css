@@ -1,0 +1,157 @@
+.page {
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px 28px;
+}
+
+.page h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+.totals {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.stale {
+  margin: 0;
+  color: var(--in-progress);
+}
+
+/* Tabs like the in-game log's, the open one raised. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tabs button {
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  background: none;
+  color: var(--muted);
+}
+
+.tabs button[aria-selected="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.log {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.entries,
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entries {
+  display: grid;
+  gap: 1px;
+}
+
+.entries button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--text);
+  text-align: left;
+}
+
+.entries button[aria-current="true"] {
+  background: var(--raised);
+}
+
+.entries .done {
+  color: var(--done);
+}
+
+.count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.done .count {
+  color: inherit;
+}
+
+/* The open entry's items stay in view while the entry list scrolls by. */
+.entry {
+  position: sticky;
+  top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.6rem, 1fr));
+  gap: 6px;
+}
+
+.items button {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  width: 100%;
+  height: 54px;
+  padding: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.items button[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.items button[data-missing="true"] {
+  color: var(--muted);
+}
+
+.items button[data-missing="true"] img {
+  filter: grayscale(1) brightness(0.45);
+}
+
+/* The picked item's line stays at the top while a long grid scrolls under it. */
+.detail {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 1.4em;
+  margin: 0;
+  padding: 2px 0;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.refresh {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}

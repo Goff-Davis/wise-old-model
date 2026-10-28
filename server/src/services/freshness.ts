@@ -2,6 +2,7 @@ import { type Freshness, HOUR_MS, MINUTE_MS, type SourceKind } from '@wom/shared
 import type { Kysely } from 'kysely';
 import type { AccountRow, DB } from '../db/schema.ts';
 import { NotFoundError, SourceError } from '../http/requester.ts';
+import { shareIn, withinLimit } from '../store/cache.ts';
 import { getSource, markSourceError, type SourceRow, saveSource } from '../store/sourceState.ts';
 
 /** The kinds fetched from other sites; Character Export's files are read instead. */
@@ -19,6 +20,9 @@ export const TTL_MS: Record<OnlineKind, number> = {
 /** Refresh skips the limits above, but never fetches a source again within a minute. */
 export const REFRESH_FLOOR_MS = MINUTE_MS;
 
+/** Every online kind, in the order Refresh lists them. */
+export const ONLINE_KINDS = Object.keys(TTL_MS) as OnlineKind[];
+
 /**
  * On Refresh, these kinds wait for another's answer, which can bring an update: Wise Old Man's
  * gains and achievements wait for its player answer, which may have asked it to update the
@@ -33,10 +37,16 @@ const WAITS_FOR: Partial<Record<OnlineKind, OnlineKind>> = {
 type Options = { force: boolean; now: Date };
 
 /**
- * For each kind, how to fetch it for an account: the answer as text, exactly as received. The
- * options say whether it's a Refresh, on which a site may be asked to update first.
+ * A fetch's answer as text, exactly as received or, when parts of it move without the data
+ * changing (a rank, a sync time), with the text to compare for changes instead.
  */
-export type Fetchers = Record<OnlineKind, (account: AccountRow, opts: Options) => Promise<string>>;
+export type Fetched = string | { data: string; compare: string };
+
+/**
+ * For each kind, how to fetch it for an account. The options say whether it's a Refresh, on
+ * which a site may be asked to update first.
+ */
+export type Fetchers = Record<OnlineKind, (account: AccountRow, opts: Options) => Promise<Fetched>>;
 
 type Failure = { at: number; error: string; notFound: boolean };
 
@@ -61,7 +71,7 @@ const memoryKey = (accountId: number, kind: OnlineKind) => `${accountId}:${kind}
 
 /** Forgets an account's remembered failures: after a rename they were the old name's. */
 export function forgetFailures(memory: FreshnessMemory, accountId: number): void {
-  for (const kind of Object.keys(TTL_MS) as OnlineKind[]) {
+  for (const kind of ONLINE_KINDS) {
     memory.failures.delete(memoryKey(accountId, kind));
   }
 }
@@ -73,9 +83,12 @@ function timeOf(iso: string | null | undefined): number {
   return Number.isNaN(time) ? 0 : time;
 }
 
-/** A kind's freshness: stale when it has never been fetched, or its last attempt failed. */
-function freshness(
-  kind: OnlineKind,
+/**
+ * A kind's freshness: stale when it has never been fetched (or read, for a file), or its last
+ * attempt failed.
+ */
+export function freshnessOf(
+  kind: SourceKind,
   fetchedAt: string | null,
   error: string | null,
   notFound: boolean,
@@ -86,9 +99,9 @@ function freshness(
 /** The kind as last saved and attempted, without fetching. */
 function current(kind: OnlineKind, row: SourceRow | null, failure: Failure | undefined): Freshness {
   if (row) {
-    return freshness(kind, row.fetchedAt, row.error, row.error !== null && !!failure?.notFound);
+    return freshnessOf(kind, row.fetchedAt, row.error, row.error !== null && !!failure?.notFound);
   }
-  return freshness(kind, null, failure?.error ?? null, failure?.notFound ?? false);
+  return freshnessOf(kind, null, failure?.error ?? null, failure?.notFound ?? false);
 }
 
 /**
@@ -110,27 +123,27 @@ async function check(
   const age = now - lastAttempt;
   const limit = opts.force ? REFRESH_FLOOR_MS : TTL_MS[kind];
   // An attempt dated more than a minute ahead (the clock went back) doesn't count as fresh.
-  if (lastAttempt > 0 && age < limit && age > -MINUTE_MS) return current(kind, row, failure);
+  if (lastAttempt > 0 && withinLimit(age, limit)) return current(kind, row, failure);
 
   const at = opts.now.toISOString();
   // The last good data stays; the failure is remembered, a 404 as one.
   const fail = async (error: string, isNotFound: boolean) => {
     deps.memory.failures.set(key, { at: now, error, notFound: isNotFound });
     await markSourceError(deps.db, account.id, kind, error, at);
-    return freshness(kind, row?.fetchedAt ?? null, error, isNotFound);
+    return freshnessOf(kind, row?.fetchedAt ?? null, error, isNotFound);
   };
   if (notFound !== null) return fail(notFound, true);
   try {
-    const data = await deps.fetchers[kind](account, opts);
+    const fetched = await deps.fetchers[kind](account, opts);
     await saveSource(deps.db, {
       accountId: account.id,
       kind,
-      data,
+      ...(typeof fetched === 'string' ? { data: fetched } : fetched),
       fetchedAt: at,
       timeZone: deps.timeZone,
     });
     deps.memory.failures.delete(key);
-    return freshness(kind, at, null, false);
+    return freshnessOf(kind, at, null, false);
   } catch (error) {
     if (!(error instanceof SourceError)) throw error;
     return fail(error.message, error instanceof NotFoundError);
@@ -145,14 +158,9 @@ function freshen(
   opts: Options,
   notFound: string | null,
 ): Promise<Freshness> {
-  const key = memoryKey(account.id, kind);
-  const pending = deps.memory.inFlight.get(key);
-  if (pending) return pending;
-  const run = check(deps, account, kind, opts, notFound).finally(() => {
-    deps.memory.inFlight.delete(key);
-  });
-  deps.memory.inFlight.set(key, run);
-  return run;
+  return shareIn(deps.memory.inFlight, memoryKey(account.id, kind), () =>
+    check(deps, account, kind, opts, notFound),
+  );
 }
 
 /**

@@ -19,7 +19,10 @@ import { accountsQuery } from './api/accounts.ts';
 import { AddAccountForm } from './components/AddAccountDialog.tsx';
 import { Menu } from './components/Menu.tsx';
 import { AccountsProblem } from './components/Problem.tsx';
+import { useFileCheck } from './data/useFileCheck.ts';
 import { Layout } from './layout/Layout.tsx';
+import { BankGear } from './pages/BankGear/BankGear.tsx';
+import { CollectionLog } from './pages/CollectionLog/CollectionLog.tsx';
 import { Overview } from './pages/Overview/Overview.tsx';
 import { PAGES, type PageId, pagePath } from './pages/pageList.ts';
 import { Settings } from './pages/Settings/Settings.tsx';
@@ -62,18 +65,20 @@ function Home(): JSX.Element {
 /** The pages built so far; the others show their title until their tasks arrive. */
 const BUILT: Partial<Record<PageId, () => JSX.Element>> = {
   overview: Overview,
+  bank: BankGear,
+  'collection-log': CollectionLog,
   settings: Settings,
 };
 
 function AccountPage(): JSX.Element {
   const { accountId = '', page = '' } = useParams();
   const accounts = useQuery(accountsQuery);
+  const exists = accounts.data?.some((account) => String(account.id) === accountId) ?? false;
+  useFileCheck(exists ? accountId : null);
   const current = PAGES.find((p) => p.id === page);
   if (!current) return <Navigate to={pagePath(accountId, 'overview')} replace />;
   // An account that doesn't exist (deleted, or a mistyped URL) goes home.
-  if (accounts.data && !accounts.data.some((account) => String(account.id) === accountId)) {
-    return <Navigate to="/" replace />;
-  }
+  if (accounts.data && !exists) return <Navigate to="/" replace />;
 
   // The page waits for the account list, so it never asks about an account that isn't there. A
   // failed reload keeps what was loaded (the menu says it failed). Each account gets a fresh

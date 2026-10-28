@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
@@ -8,15 +8,55 @@ import { DEFAULT_PORT, nameKey } from '@wom/shared';
 import type { Express } from 'express';
 import type { Insertable, Kysely } from 'kysely';
 import { onTestFinished } from 'vitest';
+import type { CaThresholds } from '../src/calc/combatAchievements.ts';
 import type { Config } from '../src/config.ts';
 import { type OpenOptions, openDatabase } from '../src/db/open.ts';
 import type { AccountRow, AccountsTable, DB } from '../src/db/schema.ts';
 import { listenLocal } from '../src/http/listen.ts';
 import { NotFoundError, type Requester, SourceError } from '../src/http/requester.ts';
+import type { AccountDeps } from '../src/services/accounts.ts';
+import { createFreshnessMemory } from '../src/services/freshness.ts';
 
 /** A file from `server/test/fixtures` (say `wom/player-phil03.json`), as text. */
 export function fixture(file: string): string {
   return readFileSync(new URL(`./fixtures/${file}`, import.meta.url), 'utf8');
+}
+
+/** One of Sample Name's Character Export files (say `bank.json`), as text. */
+export const exportFixture = (file: string) => fixture(`character-export/Sample Name/${file}`);
+
+/**
+ * Character Export's folder `folder` in `runeliteDir`, holding `files` (file name → text), each
+ * dated `mtime` when given; gives the folder's path.
+ */
+export function writeExportFiles(
+  runeliteDir: string,
+  folder: string,
+  files: Record<string, string>,
+  mtime?: Date,
+): string {
+  const dir = path.join(runeliteDir, 'character-exporter', folder);
+  mkdirSync(dir, { recursive: true });
+  for (const [file, text] of Object.entries(files)) {
+    writeFileSync(path.join(dir, file), text);
+    if (mtime) utimesSync(path.join(dir, file), mtime, mtime);
+  }
+  return dir;
+}
+
+/** The combat achievement thresholds the wiki fixture gives (expandtemplates-ca-thresholds.json). */
+export const FIXTURE_CA_THRESHOLDS: CaThresholds = {
+  Easy: { pointsPerTask: 1, pointsRequired: 41 },
+  Medium: { pointsPerTask: 2, pointsRequired: 169 },
+  Hard: { pointsPerTask: 3, pointsRequired: 436 },
+  Elite: { pointsPerTask: 4, pointsRequired: 1100 },
+  Master: { pointsPerTask: 5, pointsRequired: 1965 },
+  Grandmaster: { pointsPerTask: 6, pointsRequired: 2697 },
+};
+
+/** The services' deps: this database and requester, a fresh memory and an empty RuneLite folder. */
+export function testAccountDeps(db: Kysely<DB>, req: Requester): AccountDeps {
+  return { db, req, memory: createFreshnessMemory(), runeliteDir: tempDir() };
 }
 
 /** What a fake site answers: text (JSON text, for `json()`), bytes, or an error to throw. */

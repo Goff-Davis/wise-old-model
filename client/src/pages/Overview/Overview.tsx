@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ACCOUNT_TYPE_LABELS,
   type Account,
+  capitalize,
   type Freshness,
   formatNumber,
   formatTime,
@@ -12,7 +13,9 @@ import { type JSX, useId, useState } from 'react';
 import { useParams } from 'react-router';
 import { overviewQuery, useRefreshAccount, useRenameAccount } from '../../api/accounts.ts';
 import { Icon } from '../../components/Icon.tsx';
+import { pageStates } from '../../components/PageStates.tsx';
 import { Problem } from '../../components/Problem.tsx';
+import { RefreshButton } from '../../components/RefreshButton.tsx';
 import { StatsTiles } from '../../components/StatsTiles.tsx';
 import { useTimeZone } from '../../settings/useSettings.ts';
 import styles from './Overview.module.css';
@@ -33,11 +36,114 @@ const SOURCE_NAMES: Record<SourceKind, string> = {
   ce_equipment: 'Worn gear',
 };
 
+/** When a source was fetched, or for Character Export's files, when the plugin saved them. */
 function freshnessText(entry: Freshness, zone: string): string {
+  const file = entry.kind.startsWith('ce_');
   const fetched = entry.fetchedAt
-    ? `Fetched ${formatTime(entry.fetchedAt, zone, 'relative')}`
-    : 'Not fetched yet';
+    ? `${file ? 'Saved' : 'Fetched'} ${formatTime(entry.fetchedAt, zone, 'relative')}`
+    : file
+      ? 'Not read yet'
+      : 'Not fetched yet';
   return entry.error ? `${fetched}. The last try failed: ${entry.error}` : fetched;
+}
+
+function caText(ca: NonNullable<OverviewData['progress']['combatAchievements']>): string {
+  const points = `${formatNumber(ca.points)} points`;
+  const reached = ca.tier ? `${ca.tier} tier, ${points}` : points;
+  return ca.nextTier && ca.nextTierPoints !== null
+    ? `${reached} (${ca.nextTier} at ${formatNumber(ca.nextTierPoints)})`
+    : reached;
+}
+
+/** Quests, diary tiers, combat achievements and the collection log, each with its wiki icon. */
+function Progress(props: { progress: OverviewData['progress'] }) {
+  const id = useId();
+  const { quests, diaryTiers, combatAchievements, collectionLog } = props.progress;
+  const rows = [
+    {
+      label: 'Quests',
+      icon: 'Quest_point_icon.png',
+      value: quests && `${formatNumber(quests.done)} of ${formatNumber(quests.total)}`,
+    },
+    {
+      label: 'Achievement diaries',
+      icon: 'Achievement_Diaries_icon.png',
+      value: diaryTiers && `${diaryTiers.done} of ${diaryTiers.total} tiers`,
+    },
+    {
+      label: 'Combat achievements',
+      icon: 'Combat_achievements_icon.png',
+      value: combatAchievements && caText(combatAchievements),
+    },
+    {
+      label: 'Collection log',
+      icon: 'Collection_log.png',
+      value:
+        collectionLog &&
+        (collectionLog.total === null
+          ? `${formatNumber(collectionLog.obtained)} logged, sync Temple for details`
+          : `${formatNumber(collectionLog.obtained)} of ${formatNumber(collectionLog.total)}`),
+    },
+  ];
+  return (
+    <section aria-labelledby={id} className={styles.section}>
+      <h3 id={id}>Progress</h3>
+      <ul className={styles.progress}>
+        {rows.map((row) => (
+          <li key={row.label}>
+            <Icon kind="wiki" file={row.icon} name={row.label} size={28} decorative />
+            <dl>
+              <dt>{row.label}</dt>
+              <dd className={row.value ? undefined : styles.note}>
+                {row.value ?? 'Not known yet'}
+              </dd>
+            </dl>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** What the account wears, by slot, with each item's icon. */
+function WornGear(props: { worn: OverviewData['worn'] }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className={styles.section}>
+      <h3 id={id}>Worn gear</h3>
+      {props.worn === null || props.worn.length === 0 ? (
+        <p className={styles.note}>{props.worn ? 'Nothing worn.' : 'Not known yet.'}</p>
+      ) : (
+        <ul className={styles.gear}>
+          {props.worn.map((item) => (
+            <li key={item.slot}>
+              <Icon kind="item" id={item.id} name={item.name} size={32} decorative />
+              <span className={styles.slot}>{capitalize(item.slot)}</span>
+              <span>{item.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** The data the account doesn't have yet, and what to do in game for each. */
+function Missing(props: { missing: OverviewData['missing'] }) {
+  const id = useId();
+  if (props.missing.length === 0) return null;
+  return (
+    <section aria-labelledby={id} className={styles.section}>
+      <h3 id={id}>What's missing</h3>
+      <ul className={styles.missing}>
+        {props.missing.map((entry) => (
+          <li key={entry.kind}>
+            {SOURCE_NAMES[entry.kind]}: {entry.fix}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function BossKills(props: {
@@ -128,54 +234,40 @@ function Sources(props: { account: Account; freshness: Freshness[] }) {
           Couldn't rename {props.account.name}. {rename.error.message}
         </Problem>
       )}
-      {refresh.isError && <Problem>Couldn't refresh. {refresh.error.message}</Problem>}
-      <div>
-        <button type="button" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-          {refresh.isPending ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </div>
+      <RefreshButton refresh={refresh} />
     </section>
   );
 }
 
 /**
  * The selected account at a glance: name, type, combat and total level, the stats tiles, the
- * top boss kill counts (expandable to all of them), and where the data came from and when.
+ * progress rows, the top boss kill counts (expandable to all of them), worn gear, what's missing
+ * and how to get it, and where the data came from and when.
  */
 export function Overview(): JSX.Element {
   const { accountId = '' } = useParams();
   const overview = useQuery(overviewQuery(accountId));
 
-  if (overview.isPending) return <p className={styles.loading}>Loading the overview…</p>;
-  if (!overview.data) {
-    return (
-      <Problem className={styles.failed}>
-        Couldn't load the overview. {overview.error?.message}
-      </Problem>
-    );
-  }
+  const state = pageStates(overview, 'the overview');
+  if ('show' in state) return state.show;
 
-  const { account, skills, freshness, missing } = overview.data;
+  const { data, reloadFailed } = state;
+  const { account, skills, freshness, missing } = data;
   const hiscores = freshness.find((entry) => entry.kind === 'hiscores');
   return (
     <div className={styles.overview}>
-      {/* A failed reload keeps what was shown. */}
-      {overview.isError && (
-        <Problem>Couldn't reload the overview. {overview.error.message}</Problem>
-      )}
+      {reloadFailed}
       <header>
         <h2>{account.name}</h2>
         <p className={styles.type}>{ACCOUNT_TYPE_LABELS[account.type]}</p>
         <dl className={styles.facts}>
           <div>
             <dt>Combat level</dt>
-            <dd>{overview.data.combatLevel ?? '–'}</dd>
+            <dd>{data.combatLevel ?? '–'}</dd>
           </div>
           <div>
             <dt>Total level</dt>
-            <dd>
-              {overview.data.totalLevel === null ? '–' : formatNumber(overview.data.totalLevel)}
-            </dd>
+            <dd>{data.totalLevel === null ? '–' : formatNumber(data.totalLevel)}</dd>
           </div>
         </dl>
       </header>
@@ -185,15 +277,19 @@ export function Overview(): JSX.Element {
         </p>
       )}
       {skills.length > 0 ? (
-        <StatsTiles skills={skills} totalLevel={overview.data.totalLevel} />
+        <StatsTiles skills={skills} totalLevel={data.totalLevel} />
       ) : (
         !hiscores?.notFound && <p className={styles.note}>No stats yet.</p>
       )}
+      <Progress progress={data.progress} />
       <BossKills
-        top={overview.data.topKills}
-        all={overview.data.allKills}
+        top={data.topKills}
+        all={data.allKills}
         bossListFix={missing.find((entry) => entry.kind === 'wom_player')?.fix ?? null}
       />
+      <WornGear worn={data.worn} />
+      {/* The boss list's fix shows with the kill counts. */}
+      <Missing missing={missing.filter((entry) => entry.kind !== 'wom_player')} />
       <Sources account={account} freshness={freshness} />
     </div>
   );

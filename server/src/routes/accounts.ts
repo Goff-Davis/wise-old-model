@@ -1,16 +1,24 @@
-import { AccountChangesSchema, AccountNameSchema, NewAccountSchema } from '@wom/shared';
+import {
+  AccountChangesSchema,
+  AccountNameSchema,
+  BankSearchSchema,
+  NewAccountSchema,
+} from '@wom/shared';
 import { Router } from 'express';
 import { parseInput } from '../http/errors.ts';
 import {
   type AccountDeps,
   addAccount,
   changeAccount,
+  checkAccountFiles,
   deleteAccount,
   findAccount,
   listAccounts,
   lookupAccount,
   refreshAccount,
 } from '../services/accounts.ts';
+import { getBankView } from '../services/bank.ts';
+import { getCollectionLogView } from '../services/collectionLog.ts';
 import { getOverview } from '../services/overview.ts';
 
 export function accountRoutes(deps: AccountDeps): Router {
@@ -22,12 +30,12 @@ export function accountRoutes(deps: AccountDeps): Router {
   });
 
   router.get('/accounts/lookup', async (req, res) => {
-    res.json(await lookupAccount(deps.req, parseInput(AccountNameSchema, req.query.name)));
+    res.json(await lookupAccount(deps, parseInput(AccountNameSchema, req.query.name)));
   });
 
   router.post('/accounts', async (req, res) => {
     const input = parseInput(NewAccountSchema, req.body);
-    res.status(201).json(await addAccount(db, deps.req, input, new Date()));
+    res.status(201).json(await addAccount(deps, input, new Date()));
   });
 
   router.patch('/accounts/:id', async (req, res) => {
@@ -43,6 +51,21 @@ export function accountRoutes(deps: AccountDeps): Router {
   router.get('/accounts/:id/overview', async (req, res) => {
     const row = await findAccount(db, req.params.id);
     res.json(await getOverview(deps, row, new Date()));
+  });
+
+  router.get('/accounts/:id/bank', async (req, res) => {
+    const row = await findAccount(db, req.params.id);
+    const search = parseInput(BankSearchSchema, req.query.search);
+    res.json(await getBankView(deps, row, search, new Date()));
+  });
+
+  router.get('/accounts/:id/collection-log', async (req, res) => {
+    const row = await findAccount(db, req.params.id);
+    res.json(await getCollectionLogView(deps, row, new Date()));
+  });
+
+  router.post('/accounts/:id/files/check', async (req, res) => {
+    res.json(await checkAccountFiles(deps, await findAccount(db, req.params.id)));
   });
 
   router.post('/accounts/:id/refresh', async (req, res) => {

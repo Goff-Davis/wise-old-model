@@ -95,6 +95,27 @@ describe('Overview', () => {
     expect(within(sources).getByText('Wise Old Man')).toBeTruthy();
   });
 
+  it('says when Character Export saved each file, rather than when it was fetched', async () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    const { page } = renderOverview(
+      testOverview(LUMBY_PETE, {
+        freshness: [
+          {
+            kind: 'ce_quests',
+            fetchedAt: fiveMinutesAgo,
+            stale: false,
+            error: null,
+            notFound: false,
+          },
+        ],
+      }),
+    );
+    const sources = await within(page).findByRole('region', { name: 'Sources' });
+    expect(within(sources).getByText('Quests').nextElementSibling?.textContent).toBe(
+      'Saved 5 minutes ago',
+    );
+  });
+
   it('says why a source is stale, and since when its data dates', async () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
     const { page } = renderOverview(
@@ -207,5 +228,115 @@ describe('Overview', () => {
     expect((await within(page).findByRole('alert')).textContent).toBe(
       "Couldn't load the overview. Something went wrong.",
     );
+  });
+});
+
+describe('Overview progress, gear and missing data', () => {
+  const progress = {
+    quests: { done: 118, total: 214 },
+    diaryTiers: { done: 7, total: 48 },
+    combatAchievements: { tier: 'Easy', points: 119, nextTier: 'Medium', nextTierPoints: 169 },
+    collectionLog: { obtained: 587, total: 1734 },
+  };
+
+  /** The Progress section's rows, as [label, value, icon]. */
+  async function rows(overview: Overview) {
+    const { page } = renderOverview(overview);
+    const section = await within(page).findByRole('region', { name: 'Progress' });
+    return within(section)
+      .getAllByRole('listitem')
+      .map((row) => [
+        row.querySelector('dt')?.textContent,
+        row.querySelector('dd')?.textContent,
+        row.querySelector('img')?.getAttribute('src'),
+      ]);
+  }
+
+  it('shows quests, diary tiers, combat achievements and the collection log, with their icons', async () => {
+    expect(await rows(testOverview(LUMBY_PETE, { progress }))).toEqual([
+      ['Quests', '118 of 214', '/api/icons/wiki/Quest_point_icon.png'],
+      ['Achievement diaries', '7 of 48 tiers', '/api/icons/wiki/Achievement_Diaries_icon.png'],
+      [
+        'Combat achievements',
+        'Easy tier, 119 points (Medium at 169)',
+        '/api/icons/wiki/Combat_achievements_icon.png',
+      ],
+      ['Collection log', '587 of 1,734', '/api/icons/wiki/Collection_log.png'],
+    ]);
+  });
+
+  it("says how many items are logged when Temple has no details, and when a row isn't known", async () => {
+    const shown = await rows(
+      testOverview(LUMBY_PETE, {
+        progress: {
+          quests: null,
+          diaryTiers: null,
+          combatAchievements: { tier: null, points: 30, nextTier: 'Easy', nextTierPoints: 41 },
+          collectionLog: { obtained: 812, total: null },
+        },
+      }),
+    );
+    expect(shown.map(([label, value]) => [label, value])).toEqual([
+      ['Quests', 'Not known yet'],
+      ['Achievement diaries', 'Not known yet'],
+      ['Combat achievements', '30 points (Easy at 41)'],
+      ['Collection log', '812 logged, sync Temple for details'],
+    ]);
+  });
+
+  it('lists the worn gear with item icons', async () => {
+    const { page } = renderOverview(
+      testOverview(LUMBY_PETE, {
+        worn: [
+          { slot: 'head', id: 29047, name: 'Blood Moon helm' },
+          { slot: 'cape', id: 6570, name: 'Fire cape' },
+        ],
+      }),
+    );
+    const gear = await within(page).findByRole('region', { name: 'Worn gear' });
+    const items = within(gear).getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual(['HeadBlood Moon helm', 'CapeFire cape']);
+    expect(items[0]?.querySelector('img')?.getAttribute('src')).toBe('/api/icons/item/29047');
+  });
+
+  it("says when the worn gear isn't known yet, as when its file has never read", async () => {
+    const { page } = renderOverview(testOverview(LUMBY_PETE, { worn: null }));
+    const gear = await within(page).findByRole('region', { name: 'Worn gear' });
+    expect(within(gear).getByText('Not known yet.')).toBeTruthy();
+  });
+
+  it('says when nothing is worn', async () => {
+    const { page } = renderOverview(testOverview(LUMBY_PETE, { worn: [] }));
+    const gear = await within(page).findByRole('region', { name: 'Worn gear' });
+    expect(within(gear).getByText('Nothing worn.')).toBeTruthy();
+  });
+
+  it("says what's missing and how to get it", async () => {
+    const { page } = renderOverview(
+      testOverview(LUMBY_PETE, {
+        missing: [
+          { kind: 'ce_bank', fix: 'Open your bank in game so Character Export saves it.' },
+          {
+            kind: 'ce_quests',
+            fix: 'Log in to this account in RuneLite with the Character Export plugin on.',
+          },
+        ],
+      }),
+    );
+    const missing = await within(page).findByRole('region', { name: "What's missing" });
+    expect(
+      within(missing)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'Bank: Open your bank in game so Character Export saves it.',
+      'Quests: Log in to this account in RuneLite with the Character Export plugin on.',
+    ]);
+  });
+
+  it("has no missing section when nothing's missing", async () => {
+    const { page } = renderOverview(testOverview());
+    await within(page).findByRole('region', { name: 'Progress' });
+    expect(within(page).queryByRole('region', { name: "What's missing" })).toBeNull();
   });
 });

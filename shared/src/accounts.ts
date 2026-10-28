@@ -22,6 +22,9 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   hardcore_group: 'Hardcore group ironman',
 };
 
+/** Whether accounts of this type have a bank: ultimate ironmen can't use one. */
+export const hasBank = (type: AccountType): boolean => type !== 'ultimate';
+
 /** Every kind of data saved per account: the online sources, then Character Export's files. */
 export const SourceKindSchema = z.enum([
   'hiscores',
@@ -40,6 +43,9 @@ export const SourceKindSchema = z.enum([
 ]);
 
 export type SourceKind = z.infer<typeof SourceKindSchema>;
+
+/** Data an account doesn't have yet, and how to get it. */
+export const MissingSchema = z.object({ kind: SourceKindSchema, fix: z.string() });
 
 /**
  * How fresh one kind of an account's data is. `stale` means the last attempt to fetch it failed
@@ -85,8 +91,9 @@ export const AccountSchema = z.object({
 export type Account = z.infer<typeof AccountSchema>;
 
 /**
- * What the add-account dialog shows about a name before it's added. `onHiscores` and
- * `womTracked` are null when that source couldn't be checked; `problems` says why.
+ * What the add-account dialog shows about a name before it's added. `onHiscores`, `womTracked`,
+ * `temple.synced` and `characterExport.found` are null when that source couldn't be checked;
+ * `problems` says why.
  */
 export const AccountLookupSchema = z.object({
   name: z.string(),
@@ -95,8 +102,9 @@ export const AccountLookupSchema = z.object({
   totalLevel: z.number().nullable(),
   womType: AccountTypeSchema.nullable(),
   womTracked: z.boolean().nullable(),
-  characterExport: z.object({ found: z.boolean(), lastWritten: z.string().nullable() }),
-  temple: z.object({ synced: z.boolean(), lastChecked: z.string().nullable() }),
+  characterExport: z.object({ found: z.boolean().nullable(), lastWritten: z.string().nullable() }),
+  /** Whether the name has synced its collection log on TempleOSRS, and when it last did. */
+  temple: z.object({ synced: z.boolean().nullable(), lastChecked: z.string().nullable() }),
   /** Sources that couldn't be checked, and why, so "not found" isn't claimed when it's unknown. */
   problems: z.array(z.string()),
 });
@@ -133,3 +141,15 @@ export const RefreshAnswerSchema = z.object({
 });
 
 export type RefreshAnswer = z.infer<typeof RefreshAnswerSchema>;
+
+/**
+ * What a check of an account's Character Export files found: the kinds whose data changed,
+ * those with no file yet, and those whose file couldn't be read (the data from before stays).
+ */
+export const FileCheckSchema = z.object({
+  changed: z.array(SourceKindSchema),
+  missing: z.array(SourceKindSchema),
+  errors: z.array(z.object({ kind: SourceKindSchema, message: z.string() })),
+});
+
+export type FileCheck = z.infer<typeof FileCheckSchema>;

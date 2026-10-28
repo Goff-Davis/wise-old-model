@@ -52,6 +52,22 @@ export async function fetchChecked<T>(
 }
 
 /**
+ * `promise`'s value or, when a site failed (a SourceError), `fallback` with why; anything else
+ * is a bug and goes on.
+ */
+export async function orSourceFailure<T, F>(
+  promise: Promise<T>,
+  fallback: F,
+): Promise<{ value: T | F; error: string | null }> {
+  try {
+    return { value: await promise, error: null };
+  } catch (error) {
+    if (!(error instanceof SourceError)) throw error;
+    return { value: fallback, error: error.message };
+  }
+}
+
+/**
  * Saved data read back with its source's parser, or null when it no longer reads (when it's
  * JSON, the parser logs why).
  */

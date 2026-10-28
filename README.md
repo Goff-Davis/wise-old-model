@@ -27,7 +27,7 @@ It rebuilds, for personal use, the idea behind "Waise Old Man" (the Gielinor bot
 
 ## Status
 
-Being built in phases. Phases 1 and 2 are in place: the local server, its database and settings, and the three-column app in both themes; adding an account by name (looked up on the hiscores and Wise Old Man); and the Overview page with the stats tiles, top boss kill counts, where the data came from and when, and Refresh. Character Export's game data, Temple's collection log, the wiki, the other pages and the chat are still to come. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
+Being built in phases. Phases 1 to 3 are in place: the local server, its database and settings, and the three-column app in both themes; adding an account by name (looked up on the hiscores, Wise Old Man, TempleOSRS and Character Export's files); the Overview page with the stats tiles, quests, diaries, combat achievements, the collection log, top boss kill counts, worn gear, what's missing, where the data came from and when, and Refresh; Character Export's game data read from RuneLite's folder as you play (or on Refresh); and the Bank and gear and Collection log pages. The This week and Goals pages, the calculations and the chat are still to come. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
 
 ## Requirements
 
@@ -35,7 +35,7 @@ Being built in phases. Phases 1 and 2 are in place: the local server, its databa
 - Claude Code signed in with your Claude plan (run `claude`, then `/login`, once on each machine), or an Anthropic API key. The chat runs Claude Code through the Claude Agent SDK, so with a plan it uses your plan's usage.
 - RuneLite with these Plugin Hub plugins:
   - [Character Export](https://github.com/DZWNK/Character-Export): quests, diaries, combat achievements, bank and gear.
-  - Temple OSRS: collection log. Press its sync button in the collection log once, then turn on its automatic sync of new items and the in-game "Collection log – New addition notification" setting.
+  - Temple OSRS: collection log. Temple keeps a sync only for a player it has a profile for, so first search your name on [templeosrs.com](https://templeosrs.com) and press Update. Then press the plugin's sync button in the collection log once, and turn on its automatic sync of new items and the in-game "Collection log – New addition notification" setting.
 
 ## Setup and running
 
@@ -62,12 +62,12 @@ These steps run what exists so far (see Status).
 
 ## Data sources and attribution
 
-OSRS Hiscores (Jagex), [Wise Old Man](https://wiseoldman.net), [TempleOSRS](https://templeosrs.com) and the [OSRS Wiki](https://oldschool.runescape.wiki), with item icons from [RuneLite](https://runelite.net)'s icon server. Quests, diaries, bank and gear, which the hiscores don't include, come from the Character Export RuneLite plugin, which saves them to local JSON files and sends nothing anywhere. Wiki content is licensed CC BY-NC-SA 3.0, so answers always link back to the source page.
+OSRS Hiscores (Jagex), [Wise Old Man](https://wiseoldman.net), [TempleOSRS](https://templeosrs.com) and the [OSRS Wiki](https://oldschool.runescape.wiki), with item icons from [RuneLite](https://runelite.net)'s icon server and Grand Exchange prices from the wiki's [real-time prices API](https://prices.runescape.wiki). Quests, diaries, bank and gear, which the hiscores don't include, come from the Character Export RuneLite plugin, which saves them to local JSON files and sends nothing anywhere. Wiki content is licensed CC BY-NC-SA 3.0, so answers always link back to the source page.
 
 ## License
 
 The code is under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): anyone may use, change and share it for noncommercial purposes (personal use, hobby projects, study, research, noncommercial organizations), but not commercially. That covers this project's own code only:
 
 - Wise Old Model is not affiliated with Jagex, Wise Old Man, TempleOSRS, the OSRS Wiki or RuneLite. Old School RuneScape is a trademark of Jagex Ltd., and game data and images are Jagex's. Game icons are downloaded when first used and never stored in this repository.
-- Test fixtures in `server/test/fixtures` are samples of the data the app reads, some trimmed: responses captured from the public APIs above and, once that phase is built, Character Export files renamed so they hold no real account's name. They remain their sources' data; anything taken from the OSRS Wiki stays under CC BY-NC-SA 3.0.
+- Test fixtures in `server/test/fixtures` are samples of the data the app reads, some trimmed: responses captured from the public APIs above, and Character Export files renamed so they hold no real account's name. They remain their sources' data; anything taken from the OSRS Wiki stays under CC BY-NC-SA 3.0.
 - The fonts (Alegreya, Alegreya Sans and Silkscreen) are under the SIL Open Font License 1.1 and are installed from npm through Fontsource.

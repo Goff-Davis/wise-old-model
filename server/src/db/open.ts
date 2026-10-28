@@ -17,9 +17,10 @@ export type OpenOptions = {
 };
 
 /**
- * Opens (creating if needed) the database, with write-ahead logging for files; backs up an
- * existing file when a migration is pending; migrates to the latest; then turns on foreign keys.
- * Anything that fails closes the file again.
+ * Opens (creating if needed) the database, with write-ahead logging for files (synchronous
+ * NORMAL, SQLite's recommendation for it); backs up an existing file when a migration is
+ * pending; migrates to the latest; then turns on foreign keys. Anything that fails closes the
+ * file again.
  */
 export async function openDatabase(file: string, opts: OpenOptions): Promise<Kysely<DB>> {
   const inMemory = file === ':memory:';
@@ -30,7 +31,13 @@ export async function openDatabase(file: string, opts: OpenOptions): Promise<Kys
   const db = new Kysely<DB>({ dialect: nodeSqliteDialect(raw) });
   try {
     raw.exec('PRAGMA busy_timeout = 5000');
-    if (!inMemory) raw.exec('PRAGMA journal_mode = WAL');
+    if (!inMemory) {
+      raw.exec('PRAGMA journal_mode = WAL');
+      // With write-ahead logging this can't corrupt the file; a power cut can lose only the
+      // last few saves, which the next file check or fetch makes again. It saves waiting for
+      // the disk on every save (about 7 ms each), several times a minute while playing.
+      raw.exec('PRAGMA synchronous = NORMAL');
+    }
 
     const migrator = new Migrator({
       db,

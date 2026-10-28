@@ -6,6 +6,7 @@ import {
   AccountTypeSchema,
   type AddedAccount,
   effectiveTimeZone,
+  type FileCheck,
   type Freshness,
   type NewAccount,
   nameKey,
@@ -17,7 +18,10 @@ import { HttpError } from '../http/errors.ts';
 import { type Requester, SourceError } from '../http/requester.ts';
 import { getSettings } from '../settings/settingsRepo.ts';
 import type { Checked } from '../sources/answers.ts';
+import { checkFiles, exportFolderStatus } from '../sources/characterExport.ts';
 import { fetchHiscores, fetchHiscoresText, hiscoresLevels } from '../sources/hiscores.ts';
+import { comparableLog, fetchCollectionLogText, getSyncStatus } from '../sources/temple.ts';
+import type { WikiCtx } from '../sources/wiki.ts';
 import {
   fetchAchievementsText,
   fetchGainsText,
@@ -35,17 +39,10 @@ import {
   type Fetchers,
   type FreshnessMemory,
   forgetFailures,
+  ONLINE_KINDS,
   type OnlineKind,
   REFRESH_FLOOR_MS,
 } from './freshness.ts';
-
-/** The online kinds with a source so far; Temple's collection log arrives in a later phase. */
-const REFRESHED_KINDS: OnlineKind[] = [
-  'hiscores',
-  'wom_player',
-  'wom_gains_week',
-  'wom_achievements',
-];
 
 export function toAccount(row: AccountRow): Account {
   return {
@@ -88,12 +85,21 @@ function noting(problems: string[]) {
   };
 }
 
-/** What the hiscores and Wise Old Man know about a name, for the add-account dialog. */
-export async function lookupAccount(req: Requester, name: string): Promise<AccountLookup> {
+/**
+ * What the hiscores, Wise Old Man, TempleOSRS (whether the name has synced its collection log)
+ * and Character Export (whether it has written the name's files) know about a name, for the
+ * add-account dialog.
+ */
+export async function lookupAccount(
+  deps: { req: Requester; runeliteDir: string },
+  name: string,
+): Promise<AccountLookup> {
   const problems: string[] = [];
-  const [hiscores, player] = await Promise.all([
-    fetchHiscores(req, name).catch(noting(problems)),
-    getPlayer(req, name).catch(noting(problems)),
+  const [hiscores, player, temple, characterExport] = await Promise.all([
+    fetchHiscores(deps.req, name).catch(noting(problems)),
+    getPlayer(deps.req, name).catch(noting(problems)),
+    getSyncStatus(deps.req, name).catch(noting(problems)),
+    exportFolderStatus(deps.runeliteDir, nameKey(name)).catch(noting(problems)),
   ]);
   return {
     name: player?.displayName ?? hiscores?.name ?? name,
@@ -101,8 +107,8 @@ export async function lookupAccount(req: Requester, name: string): Promise<Accou
     ...hiscoresLevels(hiscores ?? null),
     womType: player ? accountTypeFromWom(player.type) : null,
     womTracked: player === undefined ? null : player !== null,
-    characterExport: { found: false, lastWritten: null },
-    temple: { synced: false, lastChecked: null },
+    characterExport: characterExport ?? { found: null, lastWritten: null },
+    temple: temple ?? { synced: null, lastChecked: null },
     problems,
   };
 }
@@ -115,14 +121,15 @@ function alreadyAdded(name: string): HttpError {
  * Adds an account. Wise Old Man is asked about the name and, when it doesn't track it and the
  * person chose tracking, asked to start; the type counts as from Wise Old Man only when it
  * matches its type. Wise Old Man failing doesn't stop the add, but a tracking that didn't start
- * is reported. Its answer is saved, so the account's first page needn't ask for it again.
+ * is reported. Its answer is saved, so the account's first page needn't ask for it again, and
+ * the account's Character Export files are read.
  */
 export async function addAccount(
-  db: Kysely<DB>,
-  req: Requester,
+  deps: AccountDeps,
   input: NewAccount,
   now: Date,
 ): Promise<AddedAccount> {
+  const { db, req } = deps;
   const key = nameKey(input.name);
   const existing = await db
     .selectFrom('accounts')
@@ -168,9 +175,11 @@ export async function addAccount(
       kind: 'wom_player',
       data: player.text,
       fetchedAt: now.toISOString(),
-      timeZone: effectiveTimeZone(await getSettings(db)),
+      timeZone: await settingsTimeZone(db),
     });
   }
+  // Its files are read now, so its first page has them in Manual mode too.
+  await checkAccountFiles(deps, row);
   return { account: toAccount(row), problems };
 }
 
@@ -220,14 +229,20 @@ export async function deleteAccount(db: Kysely<DB>, row: AccountRow): Promise<vo
   await db.deleteFrom('accounts').where('id', '=', row.id).execute();
 }
 
-/** How each online kind is fetched for an account: the answer as text, exactly as received. */
+/**
+ * How each online kind is fetched for an account: the answer as text, exactly as received, and
+ * for Temple's log the text to compare for changes, so a moved rank adds no snapshot.
+ */
 function onlineFetchers(req: Requester): Fetchers {
   return {
     hiscores: (account) => fetchHiscoresText(req, account.name),
     wom_player: (account, opts) => fetchPlayerText(req, account.name, opts),
     wom_gains_week: (account) => fetchGainsText(req, account.name, { period: 'week' }),
     wom_achievements: (account) => fetchAchievementsText(req, account.name),
-    temple_clog: () => Promise.reject(new SourceError('Temple', null, 'Temple: not set up yet')),
+    temple_clog: async (account) => {
+      const data = await fetchCollectionLogText(req, account.name);
+      return { data, compare: comparableLog(data) };
+    },
   };
 }
 
@@ -265,7 +280,29 @@ async function suggestRename(
   return suggestion;
 }
 
-export type AccountDeps = { db: Kysely<DB>; req: Requester; memory: FreshnessMemory };
+export type AccountDeps = {
+  db: Kysely<DB>;
+  req: Requester;
+  memory: FreshnessMemory;
+  /** Where Character Export writes each account's files, in `character-exporter/`. */
+  runeliteDir: string;
+};
+
+/** The wiki and prices sources' context for these deps, on a clock stopped at `now`. */
+export function wikiCtx(deps: AccountDeps, now: Date): WikiCtx {
+  return { req: deps.req, db: deps.db, now: () => now };
+}
+
+/** The zone day-based history is kept in: the one the settings say. */
+async function settingsTimeZone(db: Kysely<DB>): Promise<string> {
+  return effectiveTimeZone(await getSettings(db));
+}
+
+/** Reads the account's Character Export files that changed since they were last read. */
+export async function checkAccountFiles(deps: AccountDeps, row: AccountRow): Promise<FileCheck> {
+  const timeZone = await settingsTimeZone(deps.db);
+  return checkFiles({ db: deps.db, runeliteDir: deps.runeliteDir, timeZone }, row);
+}
 
 /** ensureFresh with the app's own sources, saving day-based history in the settings' zone. */
 export async function freshenAccount(
@@ -274,7 +311,7 @@ export async function freshenAccount(
   kinds: OnlineKind[],
   opts: { force: boolean; now: Date },
 ): Promise<Freshness[]> {
-  const timeZone = effectiveTimeZone(await getSettings(deps.db));
+  const timeZone = await settingsTimeZone(deps.db);
   return ensureFresh(
     { db: deps.db, fetchers: onlineFetchers(deps.req), timeZone, memory: deps.memory },
     row,
@@ -284,15 +321,19 @@ export async function freshenAccount(
 }
 
 /**
- * Refresh: fetches every online kind that's over a minute old. When the hiscores no longer know
- * the account's name, Wise Old Man's name changes may say what it became.
+ * Refresh: fetches every online kind that's over a minute old, and reads the Character Export
+ * files that changed (in Manual mode, the only time they're read). When the hiscores no longer
+ * know the account's name, Wise Old Man's name changes may say what it became.
  */
 export async function refreshAccount(
   deps: AccountDeps,
   row: AccountRow,
   now: Date,
 ): Promise<RefreshAnswer> {
-  const freshness = await freshenAccount(deps, row, REFRESHED_KINDS, { force: true, now });
+  const [freshness] = await Promise.all([
+    freshenAccount(deps, row, ONLINE_KINDS, { force: true, now }),
+    checkAccountFiles(deps, row),
+  ]);
   const hiscores = freshness.find((entry) => entry.kind === 'hiscores');
   return {
     freshness,

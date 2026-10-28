@@ -136,12 +136,61 @@
   color: var(--in-progress);
 }
 
-.loading {
+.progress,
+.gear {
+  display: grid;
   margin: 0;
-  padding: 20px 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.progress {
+  gap: 8px;
+}
+
+.progress li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.progress dl {
+  display: grid;
+  margin: 0;
+}
+
+.progress dt {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.progress dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.gear li {
+  display: grid;
+  grid-template-columns: 32px 4.5rem minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.gear li:last-child {
+  border-bottom: 0;
+}
+
+.slot {
   color: var(--muted);
 }
 
-.failed {
-  padding: 20px 24px;
+.missing {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--in-progress);
 }

@@ -25,6 +25,10 @@
   --tile-level: #ffff00;
   --tile-level-shadow: #000000;
 
+  /* Stack sizes on items, in the game's colors: under 100,000 (--tile-level), thousands, millions. */
+  --stack-thousands: #ffffff;
+  --stack-millions: #00ff80;
+
   --font-serif: "Alegreya", Georgia, serif;
   --font-sans: "Alegreya Sans", system-ui, sans-serif;
   --font-pixel: "Silkscreen", monospace;
@@ -50,6 +54,9 @@
   --tile-name: #3d3122;
   --tile-level: #7a3a00;
   --tile-level-shadow: #f7f0dd;
+
+  --stack-thousands: #2b2116;
+  --stack-millions: #25622a;
 }
 
 *,
@@ -84,6 +91,16 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* Text only screen readers get. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 :focus-visible {

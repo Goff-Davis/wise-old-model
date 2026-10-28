@@ -1,0 +1,40 @@
+{
+  "exported_at": "2026-10-27T18:55:34.467282300-06:00",
+  "plugin_version": "0.6.0",
+  "session_id": "98df1deb-361a-4306-b58c-4b9c82298379",
+  "reason": "item_container_changed",
+  "kind": "inventory",
+  "item_count": 5,
+  "items": [
+    {
+      "slot": 0,
+      "id": 29577,
+      "quantity": 1,
+      "name": "Burning claws"
+    },
+    {
+      "slot": 1,
+      "id": 557,
+      "quantity": 63,
+      "name": "Earth rune"
+    },
+    {
+      "slot": 3,
+      "id": 12791,
+      "quantity": 1,
+      "name": "Rune pouch"
+    },
+    {
+      "slot": 4,
+      "id": 995,
+      "quantity": 109655321,
+      "name": "Coins"
+    },
+    {
+      "slot": 10,
+      "id": 563,
+      "quantity": 412,
+      "name": "Law rune"
+    }
+  ]
+}

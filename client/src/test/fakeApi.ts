@@ -2,12 +2,18 @@ import type { QueryClient } from '@tanstack/react-query';
 import {
   type Account,
   type AccountLookup,
+  type BankView,
+  type CollectionLogView,
   defaultSettings,
   type Overview,
   type Settings,
 } from '@wom/shared';
 import { onTestFinished, vi } from 'vitest';
 import { createQueryClient } from '../api/queryClient.ts';
+
+/** The server refusing a request: `status`, with the error answer it sends. */
+export const refusal = (status: number, error: string) =>
+  new Response(JSON.stringify({ error }), { status });
 
 /** The zone this browser reports, which the app saves as detectedTimeZone. */
 export const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -18,13 +24,16 @@ export const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
  */
 export type FakeRoute = (request: { url: URL; body: unknown }) => unknown;
 
+// An open account checks its Character Export files in Automatic mode.
+const FILE_CHECK = /^\/api\/accounts\/\d+\/files\/check$/;
+
 /**
  * Stands in for the server: `routes`, keyed by method and path without the query ("GET
  * /api/accounts"), and the settings routes, which every page uses, recording every change sent
  * to them (and refusing each with `refuse`, when given). Settings start at the defaults plus
- * `settings`, with this browser's zone already saved, so the app has nothing to report. Any
- * other request fails the test once it finishes: inside the app it would only turn into an
- * error message.
+ * `settings`, with this browser's zone already saved, so the app has nothing to report. An
+ * account's file check finds nothing changed unless `routes` answers it. Any other request
+ * fails the test once it finishes: inside the app it would only turn into an error message.
  */
 export function fakeApi(
   opts: { settings?: Partial<Settings>; refuse?: string; routes?: Record<string, FakeRoute> } = {},
@@ -42,6 +51,9 @@ export function fakeApi(
       if (route) {
         const answer = await route({ url, body });
         return answer instanceof Response ? answer : Response.json(answer);
+      }
+      if (method === 'POST' && FILE_CHECK.test(url.pathname)) {
+        return Response.json({ changed: [], missing: [], errors: [] });
       }
       if (url.pathname !== '/api/settings' || (method !== 'GET' && method !== 'PATCH')) {
         unexpected.push(`${method} ${String(input)}`);
@@ -114,7 +126,7 @@ export function testOverview(account: Account = LUMBY_PETE, changes: Partial<Ove
       { name: 'Zulrah', kills: 1_500 },
     ],
     progress: { quests: null, diaryTiers: null, combatAchievements: null, collectionLog: null },
-    worn: [],
+    worn: null,
     freshness: [
       { kind: 'hiscores', fetchedAt, stale: false, error: null, notFound: false },
       { kind: 'wom_player', fetchedAt, stale: false, error: null, notFound: false },
@@ -122,4 +134,105 @@ export function testOverview(account: Account = LUMBY_PETE, changes: Partial<Ove
     missing: [],
   };
   return { ...overview, ...changes };
+}
+
+/** A Bank and gear page for an ironman with nothing saved yet, plus `changes`. */
+export function testBankView(changes: Partial<BankView> = {}): BankView {
+  return {
+    bankSeenAt: null,
+    wornSavedAt: null,
+    inventorySavedAt: null,
+    hasBank: true,
+    totalValue: null,
+    pricesAsOf: null,
+    pricesError: null,
+    mostValuable: [],
+    bank: null,
+    seedVault: null,
+    worn: null,
+    inventory: null,
+    search: null,
+    searchMore: false,
+    ironmanNote: true,
+    missing: [],
+    failed: [],
+    ...changes,
+  };
+}
+
+/** A collection log item: obtained `count` times, first on `date`, or missing. */
+const logItem = (id: number, name: string, count = 0, date: string | null = null) => ({
+  id,
+  name,
+  count,
+  date,
+  obtained: count > 0,
+});
+
+/**
+ * Lumby Pete's collection log on Temple, synced two hours ago, plus `changes`: Vorkath (4 of
+ * 6, as in the Temple fixture) and Giant Mole (complete) in Bosses, Chambers of Xeric in Raids,
+ * Castle Wars (complete, one item without a count) in Minigames.
+ */
+export function testCollectionLogView(changes: Partial<CollectionLogView> = {}): CollectionLogView {
+  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60_000).toISOString();
+  return {
+    log: {
+      lastChecked: hoursAgo(2),
+      // The last new item came days before the last sync.
+      lastChanged: hoursAgo(72),
+      obtained: 587,
+      total: 1734,
+      categories: [
+        {
+          key: 'vorkath',
+          tab: 'bosses',
+          name: 'Vorkath',
+          items: [
+            logItem(21992, 'Vorki'),
+            logItem(21907, "Vorkath's head", 97, '2025-08-24T00:38:30.000Z'),
+            logItem(11286, 'Draconic visage'),
+            logItem(22006, 'Skeletal visage', 1, '2025-08-26T17:13:37.000Z'),
+            logItem(22106, 'Jar of Decay', 2, '2025-10-18T20:18:50.000Z'),
+            logItem(22111, 'Dragonbone necklace', 5, '2025-09-05T11:37:57.000Z'),
+          ],
+        },
+        {
+          key: 'giant_mole',
+          tab: 'bosses',
+          name: 'Giant Mole',
+          items: [
+            logItem(12646, 'Baby mole', 1, '2025-03-01T10:00:00.000Z'),
+            logItem(7418, 'Mole skin', 40, '2025-02-27T10:00:00.000Z'),
+            logItem(7416, 'Mole claw', 31, '2025-02-27T10:00:00.000Z'),
+          ],
+        },
+        {
+          key: 'chambers_of_xeric',
+          tab: 'raids',
+          name: 'Chambers of Xeric',
+          items: [logItem(20851, 'Olmlet'), logItem(20997, 'Twisted bow')],
+        },
+        {
+          key: 'castle_wars',
+          tab: 'minigames',
+          name: 'Castle Wars',
+          items: [
+            logItem(4071, 'Decorative helm', 1, '2025-01-09T17:52:00.000Z'),
+            // Obtained, but Temple has no count for it.
+            { ...logItem(4068, 'Decorative sword'), obtained: true },
+          ],
+        },
+      ],
+    },
+    tabsError: null,
+    freshness: {
+      kind: 'temple_clog',
+      fetchedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      stale: false,
+      error: null,
+      notFound: false,
+    },
+    ...changes,
+  };
 }

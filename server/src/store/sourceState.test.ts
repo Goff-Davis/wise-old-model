@@ -6,6 +6,7 @@ import { insertAccount, testDb } from '../../test/helpers.ts';
 import type { DB } from '../db/schema.ts';
 import {
   getSource,
+  listSnapshots,
   listSources,
   markSourceError,
   retentionFor,
@@ -244,6 +245,22 @@ describe('listSources', () => {
   });
 });
 
+describe('listSnapshots', () => {
+  it("gives an account's history of a kind, the newest first", async () => {
+    const { db, accountId } = await withAccount();
+    const { id: iron } = await insertAccount(db, { name: 'Iron Pete' });
+    const save = (id: number, data: string, fetchedAt: string) =>
+      saveSource(db, { accountId: id, kind: 'ce_diaries', data, fetchedAt, timeZone: CHICAGO });
+    await save(accountId, '{"v":1}', '2026-10-20T10:00:00.000Z');
+    await save(accountId, '{"v":2}', '2026-10-25T10:00:00.000Z');
+    await save(iron, '{"v":9}', '2026-10-26T10:00:00.000Z');
+    expect(await listSnapshots(db, accountId, 'ce_diaries')).toEqual([
+      { takenAt: '2026-10-25T10:00:00.000Z', data: '{"v":2}' },
+      { takenAt: '2026-10-20T10:00:00.000Z', data: '{"v":1}' },
+    ]);
+  });
+});
+
 describe('markSourceError', () => {
   it('keeps the last good data and notes the error, until the next successful fetch', async () => {
     const { db, accountId } = await withAccount();
@@ -300,10 +317,9 @@ describe('retentionFor', () => {
       'ce_quests',
       'ce_diaries',
       'ce_combat_achievements',
+      'ce_character',
     ];
-    // The character file is rewritten every few seconds while playing; the hiscores and Wise
-    // Old Man keep the stats history.
-    const daily: SourceKind[] = ['ce_bank', 'ce_seed_vault', 'ce_character'];
+    const daily: SourceKind[] = ['ce_bank', 'ce_seed_vault'];
     const latest: SourceKind[] = [
       'ce_inventory',
       'ce_equipment',

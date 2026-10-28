@@ -12,7 +12,9 @@ async function devServer() {
   return config.server;
 }
 
-describe('the Vite dev server', () => {
+// Each test loads Vite's config afresh, and the first load (Vite and its React plugin) can take
+// several seconds while the machine is busy.
+describe('the Vite dev server', { timeout: 30_000 }, () => {
   it('checks files for changes once a second, since a WSL checkout on a Windows drive gets no change events', async () => {
     expect((await devServer())?.watch).toMatchObject({ usePolling: true, interval: 1000 });
   });

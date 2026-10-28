@@ -1,0 +1,218 @@
+.page {
+  display: grid;
+  gap: 22px;
+  padding: 20px 24px 28px;
+}
+
+.page h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+.seen {
+  max-width: 34rem;
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.section h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* What's shown is from before: the latest file couldn't be read. */
+.stale {
+  max-width: 34rem;
+  margin: 4px 0 0;
+  color: var(--in-progress);
+}
+
+.search {
+  max-width: 34rem;
+}
+
+/* The search's status stays in the page, so screen readers announce it; it takes room only
+   when it says something. */
+.status {
+  margin: 0;
+  color: var(--muted);
+}
+
+.search form {
+  display: flex;
+  gap: 8px;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.search input::placeholder {
+  color: var(--muted);
+}
+
+/* The worn gear and the inventory side by side, as in game. */
+.gear {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  align-items: flex-start;
+}
+
+.equipment,
+.inventory,
+.valuable,
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.equipment {
+  display: grid;
+  grid-template-columns: repeat(3, 40px);
+  grid-template-rows: repeat(5, 38px);
+  gap: 4px;
+}
+
+.slot {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--raised);
+}
+
+.empty {
+  opacity: 0.45;
+}
+
+.inventory {
+  display: grid;
+  grid-template-columns: repeat(4, 36px);
+  grid-auto-rows: 32px;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--bg);
+}
+
+.inventory li {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* A stack's size in its corner, in the game's colors for it. */
+.stack {
+  position: absolute;
+  top: 0;
+  left: 1px;
+  color: var(--tile-level);
+  font-size: 0.72rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 1px 1px 0 var(--tile-level-shadow);
+  pointer-events: none;
+}
+
+.stack[data-size="thousands"] {
+  color: var(--stack-thousands);
+}
+
+.stack[data-size="millions"] {
+  color: var(--stack-millions);
+}
+
+.valuable {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 4px 16px;
+}
+
+.items {
+  display: grid;
+}
+
+.valuable li,
+.items li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+}
+
+.items li {
+  border-bottom: 1px solid var(--rule);
+}
+
+.items li:last-child {
+  border-bottom: 0;
+}
+
+/* A search's find also says where it's kept. */
+.items li.found {
+  grid-template-columns: 30px minmax(0, 1fr) auto auto;
+}
+
+/* Space under the search box, only for what's there. */
+.status:not(:empty),
+.search > .items,
+.searchProblem {
+  margin-top: 10px;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.where {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.worth {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.lists {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  max-width: 34rem;
+}
+
+.lists .items {
+  justify-self: stretch;
+}
+
+.more {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+}

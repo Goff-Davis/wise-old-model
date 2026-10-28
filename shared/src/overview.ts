@@ -1,5 +1,17 @@
 import { z } from 'zod';
-import { AccountSchema, FreshnessSchema, SourceKindSchema } from './accounts.ts';
+import { AccountSchema, FreshnessSchema, MissingSchema, type SourceKind } from './accounts.ts';
+
+/**
+ * The Character Export files the Overview uses (its sources and what's missing list them in
+ * this order): those it shows, and the bank, which the AI's overview needs.
+ */
+export const OVERVIEW_FILES = [
+  'ce_quests',
+  'ce_diaries',
+  'ce_combat_achievements',
+  'ce_bank',
+  'ce_equipment',
+] as const satisfies readonly SourceKind[];
 
 const KillCountSchema = z.object({ name: z.string(), kills: z.number() });
 
@@ -21,19 +33,23 @@ export const OverviewSchema = z.object({
   progress: z.object({
     quests: z.object({ done: z.number(), total: z.number() }).nullable(),
     diaryTiers: z.object({ done: z.number(), total: z.number() }).nullable(),
+    /** The tier reached (none before Easy), its points, and the next tier with what it needs. */
     combatAchievements: z
       .object({
         tier: z.string().nullable(),
         points: z.number(),
+        nextTier: z.string().nullable(),
         nextTierPoints: z.number().nullable(),
       })
       .nullable(),
+    /** From TempleOSRS; without it, the hiscores' Collections Logged count, with no total. */
     collectionLog: z.object({ obtained: z.number(), total: z.number().nullable() }).nullable(),
   }),
-  worn: z.array(z.object({ slot: z.string(), id: z.number(), name: z.string() })),
+  /** By slot (`head`, `cape`, `neck`, `weapon`, …); null until Character Export's file has read. */
+  worn: z.array(z.object({ slot: z.string(), id: z.number(), name: z.string() })).nullable(),
   freshness: z.array(FreshnessSchema),
   /** Data the account doesn't have yet, and how to get it. */
-  missing: z.array(z.object({ kind: SourceKindSchema, fix: z.string() })),
+  missing: z.array(MissingSchema),
 });
 
 export type Overview = z.infer<typeof OverviewSchema>;

@@ -21,9 +21,12 @@ function Opened() {
   return open ? <AddAccountDialog open onClose={() => setOpen(false)} /> : <p>Dialog closed</p>;
 }
 
-/** The dialog, open, over a router that has the account pages it may open. */
+/**
+ * The dialog, open, over a router that has the account pages it may open. Times show in UTC, so
+ * they read the same in every zone.
+ */
 function renderDialog(routes: Record<string, FakeRoute>) {
-  fakeApi({ routes });
+  fakeApi({ routes, settings: { timeZone: 'UTC' } });
   const router = createMemoryRouter(
     [
       { path: '/', element: <Opened /> },
@@ -124,11 +127,13 @@ describe('AddAccountDialog', () => {
         totalLevel: null,
         womTracked: null,
         womType: null,
+        temple: { synced: null, lastChecked: null },
+        characterExport: { found: null, lastWritten: null },
         problems: ['Hiscores: server error (500)', 'Wise Old Man: no connection'],
       }),
     });
     const dialog = await lookUp('Lumby Pete');
-    for (const source of ['Hiscores', 'Wise Old Man']) {
+    for (const source of ['Hiscores', 'Wise Old Man', 'TempleOSRS', 'Character Export']) {
       expect(within(dialog).getByText(source).nextElementSibling?.textContent).toBe(
         "Couldn't check.",
       );
@@ -140,6 +145,20 @@ describe('AddAccountDialog', () => {
         .map((item) => item.textContent),
     ).toEqual(['Hiscores: server error (500)', 'Wise Old Man: no connection']);
     expect(within(dialog).queryByRole('checkbox')).toBeNull();
+  });
+
+  it('says when the name last synced its collection log on Temple', async () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString();
+    renderDialog({
+      'GET /api/accounts/lookup': () => ({
+        ...found,
+        temple: { synced: true, lastChecked: threeDaysAgo },
+      }),
+    });
+    const dialog = await lookUp('Lumby Pete');
+    expect(within(dialog).getByText('TempleOSRS').nextElementSibling?.textContent).toBe(
+      'Has the collection log, last synced 3 days ago.',
+    );
   });
 
   it('adds the account as the lookup named it, then opens its overview', async () => {

@@ -10,7 +10,7 @@ function Level(props: { value: number | null }): JSX.Element {
       {props.value === null ? (
         <>
           <span aria-hidden="true">–</span>
-          <span className={styles.hidden}>unknown</span>
+          <span className="visually-hidden">unknown</span>
         </>
       ) : (
         formatNumber(props.value)

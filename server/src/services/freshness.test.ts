@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { insertAccount, testDb } from '../../test/helpers.ts';
 import type { AccountRow, DB } from '../db/schema.ts';
 import { NotFoundError, SourceError } from '../http/requester.ts';
-import { getSource, saveSource } from '../store/sourceState.ts';
+import { getSource, listSnapshots, saveSource } from '../store/sourceState.ts';
 import { createFreshnessMemory, ensureFresh, type Fetchers, type OnlineKind } from './freshness.ts';
 
 const NOW = new Date('2026-10-27T15:00:00.000Z');
@@ -82,6 +82,20 @@ describe('ensureFresh', () => {
 
     await ensureFresh(deps, account, ['temple_clog'], { force: false, now: at(31) });
     expect(calls).toEqual(['hiscores', 'temple_clog']);
+  });
+
+  it('compares an answer by the text its fetcher gives for that, so a moved rank adds no history', async () => {
+    const { db, account, fetchers, deps } = await setup();
+    vi.mocked(fetchers.temple_clog)
+      .mockResolvedValueOnce({ data: '{"rank":2,"log":[1]}', compare: '{"log":[1]}' })
+      .mockResolvedValueOnce({ data: '{"rank":3,"log":[1]}', compare: '{"log":[1]}' });
+    await ensureFresh(deps, account, ['temple_clog'], { force: false, now: NOW });
+    await ensureFresh(deps, account, ['temple_clog'], { force: false, now: at(61) });
+    // The newest answer is what's saved, but only the first is history.
+    expect((await getSource(db, account.id, 'temple_clog'))?.data).toBe('{"rank":3,"log":[1]}');
+    expect(await listSnapshots(db, account.id, 'temple_clog')).toEqual([
+      { takenAt: NOW.toISOString(), data: '{"rank":2,"log":[1]}' },
+    ]);
   });
 
   it('on Refresh, refetches data 2 minutes old but not 30 seconds old', async () => {

@@ -135,6 +135,13 @@ describe('openDatabase', () => {
     expect(result.rows[0]?.journal_mode).toBe('wal');
   });
 
+  it("doesn't wait for the disk on every save, as SQLite recommends with write-ahead logging", async () => {
+    const db = await testDb(path.join(tempDir('wom-db-'), 'wise-old-model.db'));
+    const result = await sql<{ synchronous: number }>`PRAGMA synchronous`.execute(db);
+    // 1 is NORMAL (2, FULL, is the default).
+    expect(result.rows[0]?.synchronous).toBe(1);
+  });
+
   it('waits up to 5 seconds for a lock instead of failing at once', async () => {
     const db = await testDb();
     const result = await sql<{ timeout: number }>`PRAGMA busy_timeout`.execute(db);

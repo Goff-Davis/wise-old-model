@@ -1,0 +1,9 @@
+.loading {
+  margin: 0;
+  padding: 20px 24px;
+  color: var(--muted);
+}
+
+.failed {
+  padding: 20px 24px;
+}

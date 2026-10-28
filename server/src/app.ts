@@ -79,7 +79,15 @@ export function createApp(deps: AppDeps): Express {
   // One requester for the whole app, so each site's queue and spacing cover every request.
   const req = deps.req ?? createRequester({ userAgent: userAgent(config) });
   app.use('/api', settingsRoutes(deps.db));
-  app.use('/api', accountRoutes({ db: deps.db, req, memory: createFreshnessMemory() }));
+  app.use(
+    '/api',
+    accountRoutes({
+      db: deps.db,
+      req,
+      memory: createFreshnessMemory(),
+      runeliteDir: config.runeliteDir,
+    }),
+  );
   app.use('/api', iconRoutes(createIconStore(req, config.dataDir)));
 
   app.use('/api', (_req, _res, next) => {

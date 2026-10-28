@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+client/dist/
+coverage/
+
+# Local config and secrets (.env.example is committed)
+.env
+.env.*
+!.env.example
+
+# Brainstorming mockups
+.superpowers/
+
+# Logs
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

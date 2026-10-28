@@ -29,14 +29,6 @@
   padding: 0;
 }
 
-.field select {
-  padding: 6px 8px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--raised);
-  color: var(--text);
-}
-
 .choices {
   display: flex;
   gap: 18px;
@@ -52,9 +44,4 @@
   margin: 0;
   padding: 20px 24px;
   color: var(--muted);
-}
-
-.problem {
-  margin: 0;
-  color: var(--not-started);
 }

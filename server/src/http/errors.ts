@@ -1,6 +1,7 @@
 import type { ErrorAnswer } from '@wom/shared';
 import type { ErrorRequestHandler } from 'express';
 import { z } from 'zod';
+import { SourceError } from './requester.ts';
 
 const SERVER_ERROR =
   "Something went wrong on Wise Old Model's server. Its console has the details.";
@@ -25,15 +26,20 @@ export function parseInput<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /**
- * Errors answer in JSON like everything else, and only here. An error meant for the client (`expose: true`,
- * which body-parser and http-errors set for a body that isn't JSON or is too large) keeps its
- * status and message. Anything else is a 500 whose details go to the server's console only,
- * even when it carries a 4xx: a missing file's path, or another site's status, isn't the
- * browser's business.
+ * Errors answer in JSON like everything else, and only here. An error meant for the client
+ * (`expose: true`: an HttpError, or body-parser's answer to a body that isn't JSON or is too
+ * large) keeps its 4xx status and message, and another site's failure (a SourceError, whose
+ * message is written for the person) is a 502 with its message. Anything else is a 500 whose
+ * details go to the server's console only, even when it carries a status: a missing file's path
+ * isn't the browser's business.
  */
 export const jsonErrors: ErrorRequestHandler = (error, _req, res, next) => {
   if (res.headersSent) {
     next(error);
+    return;
+  }
+  if (error instanceof SourceError) {
+    res.status(502).json({ error: error.message } satisfies ErrorAnswer);
     return;
   }
   const { status, expose } = error as { status?: unknown; expose?: unknown };

@@ -2,7 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { THEME_HINT_KEY, useApplySettings } from '../../settings/useSettings.ts';
-import { browserZone, fakeSettingsApi, testQueryClient } from '../../test/fakeApi.ts';
+import { browserZone, fakeApi, testQueryClient } from '../../test/fakeApi.ts';
 import { Settings } from './Settings.tsx';
 
 /** The settings page as the app mounts it, with the settings applied to the document. */
@@ -21,7 +21,7 @@ function renderSettings() {
 
 describe('Settings → Display', () => {
   it('switches the theme, applies it to the page and remembers it for the next load', async () => {
-    const patches = fakeSettingsApi({ theme: 'dark' });
+    const patches = fakeApi({ settings: { theme: 'dark' } });
     renderSettings();
     const display = await screen.findByRole('region', { name: 'Display' });
     expect(within(display).getByRole('radio', { name: 'Dark' })).toHaveProperty('checked', true);
@@ -35,7 +35,7 @@ describe('Settings → Display', () => {
   });
 
   it('offers Automatic (showing the detected zone), UTC and every zone, and saves a pick', async () => {
-    const patches = fakeSettingsApi({});
+    const patches = fakeApi();
     renderSettings();
     const select = await screen.findByRole('combobox', { name: 'Time zone' });
     const options = within(select)
@@ -53,12 +53,12 @@ describe('Settings → Display', () => {
 
   it("reports the browser's time zone when it differs from the saved one, and only then", async () => {
     const otherZone = browserZone === 'Pacific/Auckland' ? 'Europe/London' : 'Pacific/Auckland';
-    const patches = fakeSettingsApi({ detectedTimeZone: otherZone });
+    const patches = fakeApi({ settings: { detectedTimeZone: otherZone } });
     renderSettings();
     await waitFor(() => expect(patches).toEqual([{ detectedTimeZone: browserZone }]));
     cleanup();
 
-    const none = fakeSettingsApi({ detectedTimeZone: browserZone, theme: 'light' });
+    const none = fakeApi({ settings: { detectedTimeZone: browserZone, theme: 'light' } });
     renderSettings();
     await screen.findByRole('region', { name: 'Display' });
     // The theme effect ran, so the zone effect beside it ran too.
@@ -73,7 +73,7 @@ describe('Settings → Display', () => {
       'Europe/London',
     ]);
     const log = vi.spyOn(console, 'error');
-    fakeSettingsApi({});
+    fakeApi();
     renderSettings();
     const select = await screen.findByRole('combobox', { name: 'Time zone' });
     const options = within(select)
@@ -84,7 +84,7 @@ describe('Settings → Display', () => {
   });
 
   it("still works when the saved zone is one this browser doesn't know", async () => {
-    fakeSettingsApi({ theme: 'light', timeZone: 'Mars/Olympus_Mons' });
+    fakeApi({ settings: { theme: 'light', timeZone: 'Mars/Olympus_Mons' } });
     renderSettings();
     const select = await screen.findByRole('combobox', { name: 'Time zone' });
     expect(select).toHaveProperty('value', 'Mars/Olympus_Mons');
@@ -92,7 +92,7 @@ describe('Settings → Display', () => {
   });
 
   it("shows the server's reason when a change can't be saved", async () => {
-    fakeSettingsApi({ theme: 'dark' }, { refuse: 'theme: Invalid option' });
+    fakeApi({ settings: { theme: 'dark' }, refuse: 'theme: Invalid option' });
     renderSettings();
     const display = await screen.findByRole('region', { name: 'Display' });
     fireEvent.click(within(display).getByRole('radio', { name: 'Light' }));

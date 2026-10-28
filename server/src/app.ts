@@ -4,17 +4,24 @@ import { fileURLToPath } from 'node:url';
 import { VITE_DEV_PORT } from '@wom/shared';
 import express, { type Express, type RequestHandler, Router } from 'express';
 import type { Kysely } from 'kysely';
-import type { Config } from './config.ts';
+import { type Config, userAgent } from './config.ts';
 import type { DB } from './db/schema.ts';
 import { HttpError, jsonErrors } from './http/errors.ts';
 import { localOnly } from './http/localOnly.ts';
+import { createRequester, type Requester } from './http/requester.ts';
+import { accountRoutes } from './routes/accounts.ts';
+import { iconRoutes } from './routes/icons.ts';
 import { settingsRoutes } from './routes/settings.ts';
+import { createFreshnessMemory } from './services/freshness.ts';
+import { createIconStore } from './sources/icons.ts';
 
 export type AppDeps = {
   config: Config;
   db: Kysely<DB>;
   /** Where the built client lives; defaults to client/dist. Tests point it elsewhere. */
   clientDist?: string;
+  /** How the server talks to other sites; tests pass a fake. */
+  req?: Requester;
 };
 
 const DEFAULT_CLIENT_DIST = fileURLToPath(new URL('../../client/dist', import.meta.url));
@@ -69,7 +76,11 @@ export function createApp(deps: AppDeps): Express {
     res.json({ ok: true, version: config.version });
   });
 
+  // One requester for the whole app, so each site's queue and spacing cover every request.
+  const req = deps.req ?? createRequester({ userAgent: userAgent(config) });
   app.use('/api', settingsRoutes(deps.db));
+  app.use('/api', accountRoutes({ db: deps.db, req, memory: createFreshnessMemory() }));
+  app.use('/api', iconRoutes(createIconStore(req, config.dataDir)));
 
   app.use('/api', (_req, _res, next) => {
     next(new HttpError(404, 'Not found'));

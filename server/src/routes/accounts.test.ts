@@ -1,0 +1,662 @@
+import type { Freshness } from '@wom/shared';
+import type { Kysely } from 'kysely';
+import { describe, expect, it } from 'vitest';
+import {
+  call,
+  type FakeAnswer,
+  fakeRequester,
+  fixture,
+  insertAccount,
+  notFound,
+  outage,
+  testConfig,
+  testDb,
+} from '../../test/helpers.ts';
+import { createApp } from '../app.ts';
+import type { DB } from '../db/schema.ts';
+import { getSource, saveSource } from '../store/sourceState.ts';
+
+const HISCORES = 'https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=';
+const WOM = 'https://api.wiseoldman.net/v2';
+
+/** An answer: the text, an error to throw, or a function giving the text later. */
+type Answer = FakeAnswer | (() => Promise<string>);
+
+/** A WOM player answer for `name`, of `type`, last updated by Wise Old Man at `updatedAt`. */
+const womPlayer = (name: string, type: string, updatedAt?: string) =>
+  JSON.stringify({
+    ...JSON.parse(fixture('wom/player-phil03.json')),
+    username: name.toLowerCase(),
+    displayName: name,
+    type,
+    ...(updatedAt && { updatedAt }),
+  });
+
+/**
+ * The app, with a requester answering by "METHOD url" (or just the url for a GET). Anything else
+ * throws a plain error, which the app turns into a 500, so an unexpected request fails the test.
+ */
+async function setup(answers: Record<string, Answer> = {}) {
+  const db = await testDb();
+  const fake = fakeRequester(({ method, url }) => {
+    const found = answers[`${method} ${url}`] ?? (method === 'GET' ? answers[url] : undefined);
+    if (found === undefined) return new Error(`No answer for ${method} ${url}`);
+    return typeof found === 'function' ? found() : found;
+  });
+  const app = createApp({ config: testConfig(), db, req: fake.req });
+  return { db, app, ...fake };
+}
+
+describe('GET /api/accounts/lookup', () => {
+  it('shows what the hiscores and Wise Old Man know about a name', async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lynx%20Titan`]: fixture('hiscores/lynx-titan.json'),
+      [`${WOM}/players/Lynx%20Titan`]: womPlayer('Lynx Titan', 'regular'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lynx%20Titan' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      name: 'Lynx Titan',
+      onHiscores: true,
+      combatLevel: 126,
+      totalLevel: 2278,
+      womType: 'regular',
+      womTracked: true,
+      characterExport: { found: false, lastWritten: null },
+      temple: { synced: false, lastChecked: null },
+      problems: [],
+    });
+  });
+
+  it('answers for a name neither the hiscores nor Wise Old Man know (Review Focus 2)', async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: notFound('Hiscores'),
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      name: 'Lumby Pete',
+      onHiscores: false,
+      combatLevel: null,
+      totalLevel: null,
+      womType: null,
+      womTracked: false,
+      problems: [],
+    });
+  });
+
+  it("says which source it couldn't check, rather than calling the name unknown", async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: outage('Hiscores'),
+      [`${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'unknown'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      onHiscores: null,
+      combatLevel: null,
+      womTracked: true,
+      womType: null,
+      problems: ['Hiscores: server error (500)'],
+    });
+  });
+
+  it('leaves Wise Old Man\'s answers unknown, not "untracked", while it\'s down', async () => {
+    const { app } = await setup({
+      [`${HISCORES}Lumby%20Pete`]: fixture('hiscores/lynx-titan.json'),
+      [`${WOM}/players/Lumby%20Pete`]: outage('Wise Old Man'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lumby%20Pete' });
+    expect(res.body).toMatchObject({
+      onHiscores: true,
+      womTracked: null,
+      womType: null,
+      problems: ['Wise Old Man: server error (500)'],
+    });
+  });
+
+  it('gives the total level when Overall is unranked (outside the top two million)', async () => {
+    const hiscores = JSON.parse(fixture('hiscores/lynx-titan.json'));
+    hiscores.skills[0].rank = -1;
+    const { app } = await setup({
+      [`${HISCORES}Lynx%20Titan`]: JSON.stringify(hiscores),
+      [`${WOM}/players/Lynx%20Titan`]: womPlayer('Lynx Titan', 'regular'),
+    });
+    const res = await call(app, { path: '/api/accounts/lookup?name=Lynx%20Titan' });
+    expect(res.body).toMatchObject({ onHiscores: true, totalLevel: 2278, combatLevel: 126 });
+  });
+
+  it('refuses something that cannot be an OSRS name', async () => {
+    const { app, requests } = await setup();
+    for (const name of ['', 'a name far too long', '..', 'Lumby/Pete', '___', ' - ']) {
+      const res = await call(app, {
+        path: `/api/accounts/lookup?name=${encodeURIComponent(name)}`,
+      });
+      expect(res.status, name).toBe(400);
+    }
+    expect(requests).toEqual([]);
+  });
+});
+
+describe('POST /api/accounts', () => {
+  const add = (body: object) => ({ method: 'POST' as const, path: '/api/accounts', body });
+
+  it('adds an account, taking the type from Wise Old Man when it matches', async () => {
+    const { app } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'ironman'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: false }));
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual({
+      account: {
+        id: 1,
+        name: 'Lumby Pete',
+        type: 'ironman',
+        typeSource: 'wom',
+        createdAt: expect.any(String),
+      },
+      problems: [],
+    });
+  });
+
+  it('marks a type the user picked as set by hand', async () => {
+    const { app } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'ironman'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'group', trackOnWom: false }));
+    expect(res.body).toMatchObject({ account: { type: 'group', typeSource: 'manual' } });
+  });
+
+  it("saves Wise Old Man's answer, so the new account's overview needn't ask for it again", async () => {
+    const { db, app, requests } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'ironman'),
+      [`${HISCORES}Lumby%20Pete`]: fixture('hiscores/lynx-titan.json'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: false }));
+    const { account } = res.body as { account: { id: number } };
+    expect((await getSource(db, account.id, 'wom_player'))?.data).toBe(
+      womPlayer('Lumby Pete', 'ironman'),
+    );
+    await call(app, { path: `/api/accounts/${account.id}/overview` });
+    expect(requests).toEqual([`GET ${WOM}/players/Lumby%20Pete`, `GET ${HISCORES}Lumby%20Pete`]);
+  });
+
+  it('saves the answer of the update that started tracking', async () => {
+    const { db, app } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+      [`POST ${WOM}/players/Lumby%20Pete`]: womPlayer(
+        'Lumby Pete',
+        'ironman',
+        '2026-10-28T08:00:00Z',
+      ),
+    });
+    await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: true }));
+    expect((await getSource(db, 1, 'wom_player'))?.data).toBe(
+      womPlayer('Lumby Pete', 'ironman', '2026-10-28T08:00:00Z'),
+    );
+  });
+
+  it("adds a name Wise Old Man doesn't track, without tracking it (Review Focus 2)", async () => {
+    const { app, requests } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: false }));
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ account: { typeSource: 'manual' }, problems: [] });
+    expect(requests).toEqual([`GET ${WOM}/players/Lumby%20Pete`]);
+  });
+
+  it("starts tracking a player Wise Old Man doesn't track, when asked to", async () => {
+    const { app, requests } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+      [`POST ${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'ironman'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: true }));
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ account: { typeSource: 'wom' }, problems: [] });
+    expect(requests).toEqual([
+      `GET ${WOM}/players/Lumby%20Pete`,
+      `POST ${WOM}/players/Lumby%20Pete`,
+    ]);
+  });
+
+  it('never asks Wise Old Man to update a player it already tracks', async () => {
+    const { app, requests } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: womPlayer('Lumby Pete', 'ironman'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: true }));
+    expect(res.status).toBe(201);
+    expect(requests).toEqual([`GET ${WOM}/players/Lumby%20Pete`]);
+  });
+
+  it("adds the account while Wise Old Man is down, saying tracking didn't start", async () => {
+    const { app, requests } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: outage('Wise Old Man'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: true }));
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      account: { name: 'Lumby Pete', typeSource: 'manual' },
+      problems: ["Tracking didn't start. Wise Old Man: server error (500)"],
+    });
+    expect(requests).toEqual([`GET ${WOM}/players/Lumby%20Pete`]);
+  });
+
+  it('adds the account when the request to start tracking fails, and says so', async () => {
+    const { app } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: notFound('Wise Old Man'),
+      [`POST ${WOM}/players/Lumby%20Pete`]: outage('Wise Old Man'),
+    });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: true }));
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      problems: ["Tracking didn't start. Wise Old Man: server error (500)"],
+    });
+  });
+
+  it("doesn't mention tracking when Wise Old Man is down and tracking wasn't asked for", async () => {
+    const { app } = await setup({ [`${WOM}/players/Lumby%20Pete`]: outage('Wise Old Man') });
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: false }));
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ problems: [] });
+  });
+
+  it('refuses a name that matches an account already added (Lumby_Pete and Lumby Pete)', async () => {
+    const { db, app } = await setup();
+    await insertAccount(db, { name: 'Lumby Pete' });
+    const res = await call(app, add({ name: 'Lumby_Pete', type: 'ironman', trackOnWom: false }));
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'Lumby Pete is already added.' });
+  });
+
+  it('adds a name once when two adds of it arrive together', async () => {
+    // Each add waits at Wise Old Man until both have asked, so both pass the name check first.
+    let asked = 0;
+    let release = () => {};
+    const bothAsked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const player = async () => {
+      asked += 1;
+      if (asked === 2) release();
+      await bothAsked;
+      return womPlayer('Lumby Pete', 'ironman');
+    };
+    const { db, app } = await setup({
+      [`${WOM}/players/Lumby%20Pete`]: player,
+      [`${WOM}/players/Lumby_Pete`]: player,
+    });
+    const results = await Promise.all([
+      call(app, add({ name: 'Lumby Pete', type: 'ironman', trackOnWom: false })),
+      call(app, add({ name: 'Lumby_Pete', type: 'ironman', trackOnWom: false })),
+    ]);
+    expect(results.map((res) => res.status).sort()).toEqual([201, 409]);
+    expect(await db.selectFrom('accounts').select('name').execute()).toHaveLength(1);
+  });
+
+  it('refuses a body without a valid name and type', async () => {
+    const { app } = await setup();
+    const res = await call(app, add({ name: 'Lumby Pete', type: 'pure', trackOnWom: false }));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET, PATCH and DELETE /api/accounts', () => {
+  it('lists the accounts by name', async () => {
+    const { db, app } = await setup();
+    await insertAccount(db, { name: 'Zezima', type: 'regular' });
+    await insertAccount(db, { name: 'Lumby Pete' });
+    const res = await call(app, { path: '/api/accounts' });
+    expect((res.body as { name: string }[]).map((account) => account.name)).toEqual([
+      'Lumby Pete',
+      'Zezima',
+    ]);
+  });
+
+  it('renames an account and changes its type by hand', async () => {
+    const { db, app } = await setup();
+    const account = await insertAccount(db);
+    const renamed = await call(app, {
+      method: 'PATCH',
+      path: `/api/accounts/${account.id}`,
+      body: { name: 'Lumby Peter', type: 'hardcore_group' },
+    });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body).toMatchObject({
+      name: 'Lumby Peter',
+      type: 'hardcore_group',
+      typeSource: 'manual',
+    });
+    expect(
+      (await db.selectFrom('accounts').select('name_key').executeTakeFirstOrThrow()).name_key,
+    ).toBe('lumby peter');
+  });
+
+  it('keeps a type from Wise Old Man when the change sends the same type', async () => {
+    const { db, app } = await setup();
+    const account = await insertAccount(db, { name: 'Lumby Pete', type: 'ironman' });
+    const res = await call(app, {
+      method: 'PATCH',
+      path: `/api/accounts/${account.id}`,
+      body: { type: 'ironman' },
+    });
+    expect(res.body).toMatchObject({ type: 'ironman', typeSource: 'wom' });
+  });
+
+  it("refuses a rename to another account's name", async () => {
+    const { db, app } = await setup();
+    const account = await insertAccount(db, { name: 'Lumby Pete' });
+    await insertAccount(db, { name: 'Iron Pete' });
+    const res = await call(app, {
+      method: 'PATCH',
+      path: `/api/accounts/${account.id}`,
+      body: { name: 'iron_pete' },
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('deletes an account with all its data', async () => {
+    const { db, app } = await setup();
+    const account = await insertAccount(db);
+    await saveSource(db, {
+      accountId: account.id,
+      kind: 'hiscores',
+      data: '{}',
+      fetchedAt: '2026-10-27T12:00:00.000Z',
+      timeZone: 'UTC',
+    });
+    const res = await call(app, { method: 'DELETE', path: `/api/accounts/${account.id}` });
+    expect(res.status).toBe(204);
+    expect(await db.selectFrom('accounts').selectAll().execute()).toEqual([]);
+    expect(await db.selectFrom('source_state').selectAll().execute()).toEqual([]);
+    expect(await db.selectFrom('snapshots').selectAll().execute()).toEqual([]);
+  });
+
+  it('answers 404 for an account that does not exist', async () => {
+    const { app } = await setup();
+    expect((await call(app, { method: 'DELETE', path: '/api/accounts/99' })).status).toBe(404);
+    expect(
+      (await call(app, { method: 'PATCH', path: '/api/accounts/99', body: { type: 'regular' } }))
+        .status,
+    ).toBe(404);
+    expect((await call(app, { method: 'POST', path: '/api/accounts/99/refresh' })).status).toBe(
+      404,
+    );
+    expect((await call(app, { method: 'DELETE', path: '/api/accounts/x' })).status).toBe(404);
+  });
+
+  it('only takes an id written as plain digits', async () => {
+    const { db, app } = await setup();
+    await insertAccount(db);
+    for (const id of ['0x1', '1e0', '+1', '%201', '1.0']) {
+      const res = await call(app, { method: 'PATCH', path: `/api/accounts/${id}`, body: {} });
+      expect(res.status, id).toBe(404);
+    }
+    expect((await call(app, { method: 'PATCH', path: '/api/accounts/1', body: {} })).status).toBe(
+      200,
+    );
+  });
+});
+
+describe('POST /api/accounts/:id/refresh', () => {
+  const lumbyPete = (answer: (site: string) => string | Error) => ({
+    [`${HISCORES}Lumby%20Pete`]: answer('Hiscores'),
+    [`${WOM}/players/Lumby%20Pete`]: answer('Wise Old Man'),
+    [`${WOM}/players/Lumby%20Pete/gained?period=week`]: answer('Wise Old Man'),
+    [`${WOM}/players/Lumby%20Pete/achievements`]: answer('Wise Old Man'),
+  });
+
+  it('answers 200 with every source stale when every source fails (Review Focus 4)', async () => {
+    const { db, app } = await setup(lumbyPete(outage));
+    const account = await insertAccount(db);
+    const res = await call(app, { method: 'POST', path: `/api/accounts/${account.id}/refresh` });
+    expect(res.status).toBe(200);
+    const { freshness, renameSuggestion } = res.body as {
+      freshness: { kind: string; stale: boolean }[];
+      renameSuggestion: string | null;
+    };
+    expect(freshness.map((f) => f.kind)).toEqual([
+      'hiscores',
+      'wom_player',
+      'wom_gains_week',
+      'wom_achievements',
+    ]);
+    expect(freshness.every((f) => f.stale)).toBe(true);
+    expect(renameSuggestion).toBeNull();
+  });
+
+  const names = (key: string) =>
+    `${WOM}/names?username=${encodeURIComponent(key)}&status=approved&limit=50`;
+  const change = (oldName: string, newName: string, resolvedAt: string) => ({
+    oldName,
+    newName,
+    status: 'approved',
+    resolvedAt,
+  });
+
+  /** Lumby Pete, added on 1 October and last found on the hiscores on 20 October. */
+  async function lumbyPeteFoundOn20th(db: Kysely<DB>) {
+    const account = await insertAccount(db, {
+      name: 'Lumby Pete',
+      type: 'ironman',
+      created_at: '2026-10-01T00:00:00.000Z',
+    });
+    await saveSource(db, {
+      accountId: account.id,
+      kind: 'hiscores',
+      data: fixture('hiscores/lynx-titan.json'),
+      fetchedAt: '2026-10-20T12:00:00.000Z',
+      timeZone: 'UTC',
+    });
+    return account;
+  }
+
+  const refresh = (id: number) => ({
+    method: 'POST' as const,
+    path: `/api/accounts/${id}/refresh`,
+  });
+  const suggestion = (res: { body: unknown }) =>
+    (res.body as { renameSuggestion: string | null }).renameSuggestion;
+
+  it("suggests the new name when the hiscores no longer know the account's name", async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby Pete', 'Lumby Peter', '2026-10-26T10:00:00.000Z'),
+      ]),
+    });
+    const account = await lumbyPeteFoundOn20th(db);
+    const res = await call(app, refresh(account.id));
+    expect(res.status).toBe(200);
+    expect(suggestion(res)).toBe('Lumby Peter');
+  });
+
+  it('suggests nothing when Wise Old Man only knows a change to this name', async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby P', 'Lumby Pete', '2026-10-26T10:00:00.000Z'),
+      ]),
+    });
+    const account = await lumbyPeteFoundOn20th(db);
+    expect(suggestion(await call(app, refresh(account.id)))).toBeNull();
+  });
+
+  it('goes by the newest change: a rename away and back again suggests nothing', async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby X', 'Lumby Pete', '2026-10-25T00:00:00.000Z'),
+        change('Lumby Pete', 'Lumby X', '2026-10-22T00:00:00.000Z'),
+      ]),
+    });
+    const account = await lumbyPeteFoundOn20th(db);
+    expect(suggestion(await call(app, refresh(account.id)))).toBeNull();
+  });
+
+  it("doesn't suggest a rename from before the hiscores last found the name", async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby Pete', 'Some Stranger', '2026-10-10T00:00:00.000Z'),
+      ]),
+    });
+    const account = await lumbyPeteFoundOn20th(db);
+    expect(suggestion(await call(app, refresh(account.id)))).toBeNull();
+  });
+
+  it("doesn't suggest a previous owner's rename of a name added later (Review Focus 2)", async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby Pete', 'Some Stranger', '2023-05-01T00:00:00.000Z'),
+      ]),
+    });
+    const account = await insertAccount(db, {
+      name: 'Lumby Pete',
+      type: 'ironman',
+      created_at: '2026-10-27T12:00:00.000Z',
+    });
+    expect(suggestion(await call(app, refresh(account.id)))).toBeNull();
+  });
+
+  it('suggests a rename made after an account the hiscores never found was added', async () => {
+    const { db, app } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby Pete', 'Lumby Peter', '2026-10-27T13:00:00.000Z'),
+      ]),
+    });
+    const account = await insertAccount(db, {
+      name: 'Lumby Pete',
+      type: 'ironman',
+      created_at: '2026-10-27T12:00:00.000Z',
+    });
+    expect(suggestion(await call(app, refresh(account.id)))).toBe('Lumby Peter');
+  });
+
+  it('asks for the name changes once a minute, however often Refresh is pressed', async () => {
+    const { db, app, requests } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby Pete', 'Lumby Peter', '2026-10-26T10:00:00.000Z'),
+      ]),
+    });
+    const account = await lumbyPeteFoundOn20th(db);
+    expect(suggestion(await call(app, refresh(account.id)))).toBe('Lumby Peter');
+    expect(suggestion(await call(app, refresh(account.id)))).toBe('Lumby Peter');
+    expect(requests.filter((request) => request.includes('/names?'))).toHaveLength(1);
+  });
+
+  it("forgets the old name's failures on a rename, so Refresh asks under the new name", async () => {
+    const now = new Date().toISOString();
+    const { db, app, requests } = await setup({
+      ...lumbyPete(notFound),
+      [names('lumby pete')]: JSON.stringify([
+        change('Lumby Pete', 'Lumby Peter', '2026-10-26T10:00:00.000Z'),
+      ]),
+      [`${HISCORES}Lumby%20Peter`]: fixture('hiscores/lynx-titan.json'),
+      [`${WOM}/players/Lumby%20Peter`]: womPlayer('Lumby Peter', 'ironman', now),
+      [`${WOM}/players/Lumby%20Peter/gained?period=week`]: fixture('wom/gained-week.json'),
+      [`${WOM}/players/Lumby%20Peter/achievements`]: '[]',
+    });
+    const account = await lumbyPeteFoundOn20th(db);
+    expect(suggestion(await call(app, refresh(account.id)))).toBe('Lumby Peter');
+
+    const renamed = await call(app, {
+      method: 'PATCH',
+      path: `/api/accounts/${account.id}`,
+      body: { name: 'Lumby Peter' },
+    });
+    expect(renamed.status).toBe(200);
+    const res = await call(app, refresh(account.id));
+    const { freshness } = res.body as { freshness: Freshness[] };
+    expect(freshness.map((entry) => [entry.kind, entry.stale, entry.error])).toEqual([
+      ['hiscores', false, null],
+      ['wom_player', false, null],
+      ['wom_gains_week', false, null],
+      ['wom_achievements', false, null],
+    ]);
+    expect(suggestion(res)).toBeNull();
+    expect(requests).toContain(`GET ${HISCORES}Lumby%20Peter`);
+  });
+});
+
+describe('GET /api/accounts/:id/overview', () => {
+  it('fetches what the overview needs on first open, then answers with it', async () => {
+    const { db, app, requests } = await setup({
+      [`${HISCORES}Lynx%20Titan`]: fixture('hiscores/lynx-titan.json'),
+      [`${WOM}/players/Lynx%20Titan`]: womPlayer('Lynx Titan', 'regular'),
+    });
+    const account = await insertAccount(db, { name: 'Lynx Titan', type: 'regular' });
+    const res = await call(app, { path: `/api/accounts/${account.id}/overview` });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      account: { id: account.id, name: 'Lynx Titan', type: 'regular' },
+      combatLevel: 126,
+      totalLevel: 2278,
+      topKills: [{ name: 'TzTok-Jad', kills: 186 }],
+    });
+    expect((res.body as { skills: unknown[] }).skills).toHaveLength(24);
+    expect(requests).toHaveLength(2);
+    expect(requests).toEqual(
+      expect.arrayContaining([`GET ${HISCORES}Lynx%20Titan`, `GET ${WOM}/players/Lynx%20Titan`]),
+    );
+
+    // Opened again within the freshness limits: nothing is fetched.
+    await call(app, { path: `/api/accounts/${account.id}/overview` });
+    expect(requests).toHaveLength(2);
+  });
+
+  it('answers with what it has, marked stale, when the sources are down', async () => {
+    const { db, app } = await setup({
+      [`${HISCORES}Lynx%20Titan`]: outage('Hiscores'),
+      [`${WOM}/players/Lynx%20Titan`]: outage('Wise Old Man'),
+    });
+    const account = await insertAccount(db, { name: 'Lynx Titan', type: 'regular' });
+    const res = await call(app, { path: `/api/accounts/${account.id}/overview` });
+    expect(res.status).toBe(200);
+    const { skills, freshness } = res.body as { skills: unknown[]; freshness: Freshness[] };
+    expect(skills).toEqual([]);
+    expect(freshness.map((entry) => [entry.kind, entry.stale, entry.error])).toEqual([
+      ['hiscores', true, 'Hiscores: server error (500)'],
+      ['wom_player', true, 'Wise Old Man: server error (500)'],
+    ]);
+  });
+
+  it('keeps showing the saved data, marked stale, when the sources are down (Review Focus 4)', async () => {
+    const { db, app } = await setup({
+      [`${HISCORES}Lynx%20Titan`]: outage('Hiscores'),
+      [`${WOM}/players/Lynx%20Titan`]: outage('Wise Old Man'),
+    });
+    const account = await insertAccount(db, { name: 'Lynx Titan', type: 'regular' });
+    const lastWeek = '2026-10-20T12:00:00.000Z';
+    for (const [kind, data] of [
+      ['hiscores', fixture('hiscores/lynx-titan.json')],
+      ['wom_player', womPlayer('Lynx Titan', 'regular')],
+    ] as const) {
+      await saveSource(db, {
+        accountId: account.id,
+        kind,
+        data,
+        fetchedAt: lastWeek,
+        timeZone: 'UTC',
+      });
+    }
+    const res = await call(app, { path: `/api/accounts/${account.id}/overview` });
+    expect(res.status).toBe(200);
+    const body = res.body as { totalLevel: number; topKills: unknown[]; freshness: Freshness[] };
+    expect(body.totalLevel).toBe(2278);
+    expect(body.topKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
+    expect(body.freshness.map((entry) => [entry.kind, entry.fetchedAt, entry.stale])).toEqual([
+      ['hiscores', lastWeek, true],
+      ['wom_player', lastWeek, true],
+    ]);
+  });
+
+  it('answers 404 for an account that does not exist', async () => {
+    const { app } = await setup();
+    expect((await call(app, { path: '/api/accounts/99/overview' })).status).toBe(404);
+  });
+});

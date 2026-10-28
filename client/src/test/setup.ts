@@ -17,6 +17,17 @@ if (typeof document !== 'undefined') {
     dispatchEvent: () => false,
   });
 
+  // jsdom has <dialog> and its open attribute (closed dialogs are hidden), but not showModal()
+  // or close(); these do what a browser does with them, minus the focus trap.
+  HTMLDialogElement.prototype.showModal ??= function showModal(this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close ??= function close(this: HTMLDialogElement) {
+    if (!this.open) return;
+    this.open = false;
+    this.dispatchEvent(new Event('close'));
+  };
+
   // Without Vitest globals, Testing Library can't register its own cleanup. The app also
   // leaves its theme on <html> and its theme hint in localStorage.
   afterEach(() => {

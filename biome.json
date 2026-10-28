@@ -6,7 +6,14 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!client/dist", "!.superpowers", "!**/*.md", "!**/package.json"]
+    "includes": [
+      "**",
+      "!client/dist",
+      "!.superpowers",
+      "!**/*.md",
+      "!**/package.json",
+      "!server/test/fixtures"
+    ]
   },
   "formatter": {
     "enabled": true,

@@ -1,17 +1,86 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { text } from 'node:stream/consumers';
-import { DEFAULT_PORT } from '@wom/shared';
+import { buffer } from 'node:stream/consumers';
+import { DEFAULT_PORT, nameKey } from '@wom/shared';
 import type { Express } from 'express';
-import type { Kysely } from 'kysely';
+import type { Insertable, Kysely } from 'kysely';
 import { onTestFinished } from 'vitest';
 import type { Config } from '../src/config.ts';
 import { type OpenOptions, openDatabase } from '../src/db/open.ts';
-import type { DB } from '../src/db/schema.ts';
+import type { AccountRow, AccountsTable, DB } from '../src/db/schema.ts';
 import { listenLocal } from '../src/http/listen.ts';
+import { NotFoundError, type Requester, SourceError } from '../src/http/requester.ts';
+
+/** A file from `server/test/fixtures` (say `wom/player-phil03.json`), as text. */
+export function fixture(file: string): string {
+  return readFileSync(new URL(`./fixtures/${file}`, import.meta.url), 'utf8');
+}
+
+/** What a fake site answers: text (JSON text, for `json()`), bytes, or an error to throw. */
+export type FakeAnswer = string | Uint8Array | Error;
+
+/**
+ * A requester whose every request is answered by `answer`. `requests` lists them in order as
+ * "METHOD url", and `urls` just the URLs.
+ */
+export function fakeRequester(
+  answer: (request: { method: string; url: string }) => FakeAnswer | Promise<FakeAnswer>,
+) {
+  const requests: string[] = [];
+  const urls: string[] = [];
+  async function respond(method: string, url: string): Promise<string | Uint8Array> {
+    requests.push(`${method} ${url}`);
+    urls.push(url);
+    const result = await answer({ method, url });
+    if (result instanceof Error) throw result;
+    return result;
+  }
+  async function respondText(method: string, url: string): Promise<string> {
+    const result = await respond(method, url);
+    if (typeof result !== 'string') throw new Error(`${method} ${url} was answered with bytes`);
+    return result;
+  }
+  const req: Requester = {
+    text: (url, init) => respondText(init?.method ?? 'GET', url),
+    json: async <T>(url: string, init?: { method?: 'GET' | 'POST' }) =>
+      JSON.parse(await respondText(init?.method ?? 'GET', url)) as T,
+    bytes: async (url) => {
+      const result = await respond('GET', url);
+      if (typeof result === 'string') throw new Error(`GET ${url} was answered with text`);
+      return result;
+    },
+  };
+  return { req, requests, urls };
+}
+
+/** The error the requester gives for a 404 from `site`. */
+export const notFound = (site: string) => new NotFoundError(site, 404, `${site}: not found (404)`);
+
+/** The error the requester gives for a 500 from `site`. */
+export const outage = (site: string) => new SourceError(site, 500, `${site}: server error (500)`);
+
+/** Adds an account (Lumby Pete, an ironman by Wise Old Man, unless `values` says otherwise). */
+export function insertAccount(
+  db: Kysely<DB>,
+  values: Partial<Insertable<AccountsTable>> = {},
+): Promise<AccountRow> {
+  const name = values.name ?? 'Lumby Pete';
+  return db
+    .insertInto('accounts')
+    .values({
+      name,
+      name_key: nameKey(name),
+      type: 'ironman',
+      type_source: 'wom',
+      created_at: '2026-10-27T12:00:00.000Z',
+      ...values,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
 
 /**
  * A fresh folder in the OS temp folder, deleted when the current test finishes (after its
@@ -56,6 +125,8 @@ export async function testDb(
 export type CallResult = {
   status: number;
   headers: http.IncomingHttpHeaders;
+  /** The body as sent, for binary answers like icons. */
+  bytes: Buffer;
   text: string;
   body: unknown;
 };
@@ -106,8 +177,15 @@ export async function call(
         .on('error', reject)
         .end(payload);
     });
-    const raw = await text(res);
-    return { status: res.statusCode ?? 0, headers: res.headers, text: raw, body: parseJson(raw) };
+    const bytes = await buffer(res);
+    const raw = bytes.toString('utf8');
+    return {
+      status: res.statusCode ?? 0,
+      headers: res.headers,
+      bytes,
+      text: raw,
+      body: parseJson(raw),
+    };
   } finally {
     server.close();
   }

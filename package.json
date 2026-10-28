@@ -14,7 +14,7 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,client \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "cross-env NODE_ENV=development node --watch --env-file-if-exists=.env server/src/main.ts",
+    "dev:server": "cross-env NODE_ENV=development node server/src/dev.ts",
     "dev:client": "npm run dev -w @wom/client",
     "build": "npm run build -w @wom/client",
     "start": "cross-env NODE_ENV=production node --env-file-if-exists=.env server/src/main.ts",

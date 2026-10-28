@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type Settings, SettingsAnswerSchema } from '@wom/shared';
+import { effectiveTimeZone, type Settings, SettingsAnswerSchema } from '@wom/shared';
 import { useEffect } from 'react';
 import { apiSend } from '../api/client.ts';
 import { apiQuery } from '../api/queryClient.ts';
@@ -11,6 +11,12 @@ export const THEME_HINT_KEY = 'wom-theme';
 
 export function useSettings() {
   return useQuery(settingsQuery);
+}
+
+/** The zone times are shown in, as the settings say (UTC until they've loaded). */
+export function useTimeZone(): string {
+  const { data } = useSettings();
+  return data ? effectiveTimeZone(data) : 'UTC';
 }
 
 export function useUpdateSettings() {

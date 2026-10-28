@@ -18,6 +18,9 @@ export default defineConfig({
   server: {
     port: VITE_DEV_PORT,
     strictPort: true,
+    // A WSL checkout on a Windows drive gets no file-change events, so files are checked once a
+    // second instead, on every OS so it works the same everywhere.
+    watch: { usePolling: true, interval: 1000, binaryInterval: 1000 },
     // changeOrigin: false keeps the browser's Host, which the server's local-only check needs
     // (Vite's string shorthand rewrites it). With cors off, pages on other localhost ports
     // can't read API answers through the proxy.

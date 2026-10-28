@@ -1,0 +1,58 @@
+.menu {
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  padding: 16px 12px;
+}
+
+.heading {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.links {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.links a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.links a:hover {
+  background: var(--raised);
+}
+
+.links a[aria-current="page"] {
+  background: var(--raised);
+  color: var(--accent);
+}
+
+.add {
+  width: 100%;
+  margin-top: 6px;
+  border-style: dashed;
+  background: none;
+  color: var(--muted);
+  text-align: left;
+}
+
+.add:hover {
+  color: var(--text);
+}
+
+.problem {
+  margin: 0 10px 6px;
+}

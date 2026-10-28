@@ -1,0 +1,96 @@
+.dialog {
+  width: min(34rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 20px 22px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.45);
+}
+
+.dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.dialog h2 {
+  margin: 0 0 14px;
+}
+
+.form,
+.lookUp,
+.details {
+  display: grid;
+  gap: 12px;
+}
+
+.lookUp {
+  gap: 6px;
+}
+
+.nameRow {
+  display: flex;
+  gap: 8px;
+}
+
+.nameRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.findings {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.findings dt {
+  color: var(--muted);
+}
+
+.findings dd {
+  margin: 0;
+}
+
+.track {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.typeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.typeSource {
+  color: var(--muted);
+}
+
+.problems {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--not-started);
+}
+
+.added {
+  margin: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}

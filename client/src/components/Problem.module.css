@@ -1,0 +1,5 @@
+/* No specificity, so the caller's class sets the spacing whichever stylesheet loads last. */
+:where(.problem) {
+  margin: 0;
+  color: var(--not-started);
+}

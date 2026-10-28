@@ -265,7 +265,7 @@ Spec: Data sources → Fetching and caching (the request handler).
   ```
 - Messages read like `Wise Old Man: server error (500)`, `Wise Old Man: too many requests (429)`, `Wise Old Man: no connection`. Site names by host: `secure.runescape.com` → Hiscores, `api.wiseoldman.net` → Wise Old Man, `templeosrs.com` → Temple, `oldschool.runescape.wiki` and `prices.runescape.wiki` → OSRS Wiki, `static.runelite.net` → RuneLite.
 
-- [ ] **Step 1: Write the failing tests** (fake `fetch`, fake clock and `sleep`):
+- [x] **Step 1: Write the failing tests** (fake `fetch`, fake clock and `sleep`):
   - sends exactly the given User-Agent header
   - two WOM requests start at least 3000 ms apart; two wiki requests at least 1000 ms apart; a WOM and a wiki request don't wait on each other
   - 429 with `Retry-After: 7` then 200 → slept 7000 ms, resolves
@@ -273,10 +273,10 @@ Spec: Data sources → Fetching and caching (the request handler).
   - 404 → `NotFoundError` after 1 call
   - fetch throwing twice, then 200 → resolves (waits 1000 ms, then 2000 ms)
   - a WOM response with `RateLimit-Remaining: 1` and `RateLimit-Reset: 30` makes the next WOM request wait 30000 ms
-- [ ] **Step 2: Run** the file. Expected: FAIL.
-- [ ] **Step 3: Implement** one promise queue per host. Retries: up to 3 for 429, 5xx and network errors, waiting `Retry-After` seconds when present, else 1 s, 2 s, 4 s. Pause WOM when `RateLimit-Remaining <= 2`.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run** the file. Expected: FAIL.
+- [x] **Step 3: Implement** one promise queue per host. Retries: up to 3 for 429, 5xx and network errors, waiting `Retry-After` seconds when present, else 1 s, 2 s, 4 s. Pause WOM when `RateLimit-Remaining <= 2`.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 8: Names, source state and snapshots
 
@@ -299,17 +299,17 @@ Spec: Database → source_state, snapshots, History retention, Conventions (Name
   ```
 - `every_change`: `hiscores`, `wom_player`, `temple_clog`, `ce_character`, `ce_quests`, `ce_diaries`, `ce_combat_achievements`. `daily`: `ce_bank`, `ce_seed_vault`. `latest`: `ce_inventory`, `ce_equipment`, `wom_gains_week`, `wom_achievements`. The hash is SHA-256 of `data`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `nameKey('Lumby_Pete') === nameKey('lumby-pete') === nameKey('Lumby\u00a0Pete') === 'lumby pete'`; `nameKey('  Iron  Pete ') === 'iron pete'`
   - identical data saved twice → second returns `{ changed: false }` and only 1 snapshot exists
   - an `every_change` kind saved with 3 different payloads → 3 snapshots
   - `daily` with `timeZone 'America/Chicago'`: changes at `2026-10-27T15:00Z` and `2026-10-28T03:00Z` (same Chicago day) → 1 snapshot holding the second payload; another change at `2026-10-28T15:00Z` → 2 snapshots
   - `latest` → never any snapshots; `source_state` holds the newest
   - `markSourceError` keeps `data` and sets `error`; the next successful `saveSource` clears `error`
-- [ ] **Step 2: Run** both files. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run** both files. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 9: Hiscores source
 
@@ -327,12 +327,12 @@ Spec: Data sources → What each API offers (Official hiscores).
   export async function fetchHiscores(req: Requester, rsn: string, table?: HiscoreTable): Promise<Hiscores | null>; // null on 404
   ```
 
-- [ ] **Step 1: Capture the fixture**: `curl -A "<UA>" "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=Lynx%20Titan" -o server/test/fixtures/hiscores/lynx-titan.json`
-- [ ] **Step 2: Write the failing tests**: the fixture parses to 25 skills, first `Overall` and last `Sailing`, and 92 activities including `Collections Logged`; a copy with an extra skill `Testing` keeps it; a fake requester throwing `NotFoundError` → `null`; the URL for `Lumby Pete` ends `player=Lumby%20Pete`.
-- [ ] **Step 3: Run** the file. Expected: FAIL.
-- [ ] **Step 4: Implement.**
-- [ ] **Step 5: Run**: PASS.
-- [ ] **Step 6: Checkpoint.**
+- [x] **Step 1: Capture the fixture**: `curl -A "<UA>" "https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=Lynx%20Titan" -o server/test/fixtures/hiscores/lynx-titan.json`
+- [x] **Step 2: Write the failing tests**: the fixture parses to 25 skills, first `Overall` and last `Sailing`, and 92 activities including `Collections Logged`; a copy with an extra skill `Testing` keeps it; a fake requester throwing `NotFoundError` → `null`; the URL for `Lumby Pete` ends `player=Lumby%20Pete`.
+- [x] **Step 3: Run** the file. Expected: FAIL.
+- [x] **Step 4: Implement.**
+- [x] **Step 5: Run**: PASS.
+- [x] **Step 6: Checkpoint.**
 
 ### Task 10: Wise Old Man source
 
@@ -360,12 +360,12 @@ Spec: Data sources → What each API offers (Wise Old Man); Tools → `calc_xp`.
   ```
 - Base URL `https://api.wiseoldman.net/v2`.
 
-- [ ] **Step 1: Capture the fixtures** with the commands in Files.
-- [ ] **Step 2: Write the failing tests**: the player fixture gives `type 'ironman'` and `displayName 'Phil03'`; `canRequestUpdate` is `false` at 30 min old, `true` at 2 h old and when `updatedAt` is `null`; `getGains` requests `/players/phil03/gained?period=week`, and the date-range form passes `startDate` and `endDate` as ISO strings; the week fixture maps `skills.attack.xpGained`; efficiency rates for `mining` start `{ startExp: 0, rate: 20000, description: 'Quests' }`; `efficiencyTypeFor('group') === 'ironman'`.
-- [ ] **Step 3: Run** the file. Expected: FAIL.
-- [ ] **Step 4: Implement** with Zod schemas over the captured shapes.
-- [ ] **Step 5: Run**: PASS.
-- [ ] **Step 6: Checkpoint.**
+- [x] **Step 1: Capture the fixtures** with the commands in Files.
+- [x] **Step 2: Write the failing tests**: the player fixture gives `type 'ironman'` and `displayName 'Phil03'`; `canRequestUpdate` is `false` at 30 min old, `true` at 2 h old and when `updatedAt` is `null`; `getGains` requests `/players/phil03/gained?period=week`, and the date-range form passes `startDate` and `endDate` as ISO strings; the week fixture maps `skills.attack.xpGained`; efficiency rates for `mining` start `{ startExp: 0, rate: 20000, description: 'Quests' }`; `efficiencyTypeFor('group') === 'ironman'`.
+- [x] **Step 3: Run** the file. Expected: FAIL.
+- [x] **Step 4: Implement** with Zod schemas over the captured shapes.
+- [x] **Step 5: Run**: PASS.
+- [x] **Step 6: Checkpoint.**
 
 ### Task 11: Freshness and refresh
 
@@ -386,11 +386,11 @@ Spec: Data sources → Fetching and caching; "When a source fails".
   ```
 - Never throws for source failures; on `SourceError` it calls `markSourceError` and returns `stale: true` with the error message. On a forced refresh, if `canRequestUpdate(currentWomPlayer, now)`, it calls `updatePlayer` before reading WOM.
 
-- [ ] **Step 1: Write the failing tests**: data fetched 5 min ago isn't refetched; `force` refetches data 2 min old but not 30 s old; a fetcher throwing `SourceError('Wise Old Man', 500, 'Wise Old Man: server error (500)')` → `stale: true`, that `error`, previous data unchanged; a forced refresh calls `updatePlayer` only when WOM's `updatedAt` is over 1 h old.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: data fetched 5 min ago isn't refetched; `force` refetches data 2 min old but not 30 s old; a fetcher throwing `SourceError('Wise Old Man', 500, 'Wise Old Man: server error (500)')` → `stale: true`, that `error`, previous data unchanged; a forced refresh calls `updatePlayer` only when WOM's `updatedAt` is over 1 h old.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 12: Accounts API and the add-account flow (server)
 
@@ -409,17 +409,17 @@ Spec: Frontend → Adding an account, Name changes; Database → accounts.
 - `characterExport` and `temple` in the lookup return `{ found: false, … }` until Tasks 17 and 18 fill them in.
 - Rename suggestion: when the hiscores 404 an existing account on refresh, take the newest WOM name change whose `oldName` has the same `nameKey`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `combatLevel({ attack: 90, strength: 94, defence: 85, hitpoints: 92, ranged: 92, magic: 71, prayer: 74 }) === 113`
   - lookup for a name the hiscores 404 and WOM doesn't know → `onHiscores: false`, `womTracked: false`, status 200 (Review Focus 2)
   - adding `Lumby_Pete` when `Lumby Pete` exists → 409
   - deleting an account removes its data (cascade)
   - refresh with every fetcher failing → 200 with all freshness entries `stale: true` (Review Focus 4)
   - refresh where the hiscores 404 and WOM lists `{ oldName: 'Lumby Pete', newName: 'Lumby Peter' }` → `renameSuggestion: 'Lumby Peter'`
-- [ ] **Step 2: Run** both test files. Expected: FAIL.
-- [ ] **Step 3: Implement.** Combat formula: `base = 0.25 × (defence + hitpoints + floor(prayer / 2))`; `melee = 0.325 × (attack + strength)`; `range = 0.325 × floor(1.5 × ranged)`; `mage = 0.325 × floor(1.5 × magic)`; `floor(base + max(melee, range, mage))`. The WOM type `'regular'` maps to `'regular'`; `'unknown'` maps to `null`.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run** both test files. Expected: FAIL.
+- [x] **Step 3: Implement.** Combat formula: `base = 0.25 × (defence + hitpoints + floor(prayer / 2))`; `melee = 0.325 × (attack + strength)`; `range = 0.325 × floor(1.5 × ranged)`; `mage = 0.325 × floor(1.5 × magic)`; `floor(base + max(melee, range, mage))`. The WOM type `'regular'` maps to `'regular'`; `'unknown'` maps to `null`.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 13: Game icons
 
@@ -432,11 +432,11 @@ Spec: Frontend → Game icons; Data sources → cache table (icons).
 - Sources: `https://oldschool.runescape.wiki/images/<file>` and `https://static.runelite.net/cache/item/icon/<id>.png`, fetched once through the requester and stored under `<dataDir>/icons/wiki/` and `<dataDir>/icons/item/`.
 - `:file` must match `^[A-Za-z0-9_().'%-]+\.png$` and `:id` must be an integer (no path traversal).
 
-- [ ] **Step 1: Write the failing tests**: the first request fetches and writes the file, the second reads from disk with no fetch; `../x.png` → 400; `wikiIconFile("K'ril Tsutsaroth", 'boss') === "K'ril_Tsutsaroth_icon.png"`; a missing remote icon (404) → 404, nothing written.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement**; `<Icon>` uses `image-rendering: pixelated` and an `alt` of the name.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: the first request fetches and writes the file, the second reads from disk with no fetch; `../x.png` → 400; `wikiIconFile("K'ril Tsutsaroth", 'boss') === "K'ril_Tsutsaroth_icon.png"`; a missing remote icon (404) → 404, nothing written.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement**; `<Icon>` uses `image-rendering: pixelated` and an `alt` of the name.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 14: Overview page, menu and add-account dialog
 
@@ -455,15 +455,15 @@ Spec: Frontend → Pages (Overview), Adding an account, Visual direction (stats 
 - `progress`, `worn` and `missing` stay `null` / empty until Tasks 17–19.
 - `topKills`: the 5 highest boss scores above 0, from hiscores activities classified with `isBoss` against WOM's boss metrics.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `orderSkills` of the Lynx Titan fixture puts `Attack`, `Hitpoints`, `Mining` first and `Sailing` last; with an extra `Testing` it comes last; `Overall` is dropped
   - `isBoss('Chambers of Xeric: Challenge Mode', ['chambers_of_xeric_challenge_mode'])` and `isBoss('TzKal-Zuk', ['tzkal_zuk'])` are true; `isBoss('Clue Scrolls (all)', [...])` is false
   - `topKills` has at most 5 entries, sorted by kills descending, none with kills ≤ 0
   - `StatsTiles` renders each skill's name next to its icon and level (`getByText('Attack')` and `getByText('90')` in the same tile)
-- [ ] **Step 2: Run** the test files. Expected: FAIL.
-- [ ] **Step 3: Implement** the service, the route, the stats tiles (dark: stone `#393227` tiles in a `#1f1c17` frame, names `#cfc3a8`, levels `#ffff00` in Silkscreen with a `1px 1px 0 #000` shadow; light: `#ebe2cb` tiles in a `#cdbd94` frame, names `#3d3122`, levels `#7a3a00` with a `1px 1px 0 #f7f0dd` shadow; 3 columns, total level under the grid), the Overview page (header with type, combat and total level; tiles; kill counts with boss icons, expandable; freshness and Refresh), the menu (accounts with Add account, then pages) and the add-account dialog (steps 1–5 of the spec).
+- [x] **Step 2: Run** the test files. Expected: FAIL.
+- [x] **Step 3: Implement** the service, the route, the stats tiles (dark: stone `#393227` tiles in a `#1f1c17` frame, names `#cfc3a8`, levels `#ffff00` in Silkscreen with a `1px 1px 0 #000` shadow; light: `#ebe2cb` tiles in a `#cdbd94` frame, names `#3d3122`, levels `#7a3a00` with a `1px 1px 0 #f7f0dd` shadow; 3 columns, total level under the grid), the Overview page (header with type, combat and total level; tiles; kill counts with boss icons, expandable; freshness and Refresh), the menu (accounts with Add account, then pages) and the add-account dialog (steps 1–5 of the spec).
 - [ ] **Step 4: Verify** the tests PASS; with `npm run dev`, add a real account and see its tiles, kills and freshness.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 5: Checkpoint.**
 
 ---
 

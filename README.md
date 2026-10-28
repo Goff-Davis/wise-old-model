@@ -27,7 +27,7 @@ It rebuilds, for personal use, the idea behind "Waise Old Man" (the Gielinor bot
 
 ## Status
 
-Being built in phases. Phase 1, the skeleton, is in place: the local server, its database and settings, and the empty three-column app in both themes. There are no accounts, data sources or chat yet. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
+Being built in phases. Phases 1 and 2 are in place: the local server, its database and settings, and the three-column app in both themes; adding an account by name (looked up on the hiscores and Wise Old Man); and the Overview page with the stats tiles, top boss kill counts, where the data came from and when, and Refresh. Character Export's game data, Temple's collection log, the wiki, the other pages and the chat are still to come. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Being built in phases. Phase 1, the skeleton, is in place: the local server, its
 
 ## Setup and running
 
-These steps run the skeleton that exists so far (see Status).
+These steps run what exists so far (see Status).
 
 1. `npm install` (again after switching between WSL and Windows on the same checkout).
 2. Copy `.env.example` to `.env` (git-ignored) and fill in `CONTACT`.
@@ -52,7 +52,7 @@ These steps run the skeleton that exists so far (see Status).
    | `RUNELITE_DIR` | No | `~/.runelite` | Where RuneLite keeps Character Export's files. On WSL with RuneLite on Windows: `/mnt/c/Users/<you>/.runelite` |
    | `ANTHROPIC_API_KEY` | No | (none) | Only used if you switch the chat's billing to an API key |
 
-3. `npm run dev` for development (open `http://localhost:5173`), or `npm run build` then `npm start` (open `http://127.0.0.1:4747`).
+3. `npm run dev` for development (open `http://localhost:5173`; it picks up code changes by itself, so reloading the page shows them), or `npm run build` then `npm start` (open `http://127.0.0.1:4747`).
 4. `npm run check` runs type checking, linting and tests.
 
 ## Documentation
@@ -62,4 +62,12 @@ These steps run the skeleton that exists so far (see Status).
 
 ## Data sources and attribution
 
-OSRS Hiscores (Jagex), [Wise Old Man](https://wiseoldman.net), [TempleOSRS](https://templeosrs.com) and the [OSRS Wiki](https://oldschool.runescape.wiki). Quests, diaries, bank and gear, which the hiscores don't include, come from the Character Export RuneLite plugin, which saves them to local JSON files and sends nothing anywhere. Wiki content is licensed CC BY-NC-SA 3.0, so answers always link back to the source page.
+OSRS Hiscores (Jagex), [Wise Old Man](https://wiseoldman.net), [TempleOSRS](https://templeosrs.com) and the [OSRS Wiki](https://oldschool.runescape.wiki), with item icons from [RuneLite](https://runelite.net)'s icon server. Quests, diaries, bank and gear, which the hiscores don't include, come from the Character Export RuneLite plugin, which saves them to local JSON files and sends nothing anywhere. Wiki content is licensed CC BY-NC-SA 3.0, so answers always link back to the source page.
+
+## License
+
+The code is under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): anyone may use, change and share it for noncommercial purposes (personal use, hobby projects, study, research, noncommercial organizations), but not commercially. That covers this project's own code only:
+
+- Wise Old Model is not affiliated with Jagex, Wise Old Man, TempleOSRS, the OSRS Wiki or RuneLite. Old School RuneScape is a trademark of Jagex Ltd., and game data and images are Jagex's. Game icons are downloaded when first used and never stored in this repository.
+- Test fixtures in `server/test/fixtures` are samples of the data the app reads, some trimmed: responses captured from the public APIs above and, once that phase is built, Character Export files renamed so they hold no real account's name. They remain their sources' data; anything taken from the OSRS Wiki stays under CC BY-NC-SA 3.0.
+- The fonts (Alegreya, Alegreya Sans and Silkscreen) are under the SIL Open Font License 1.1 and are installed from npm through Fontsource.

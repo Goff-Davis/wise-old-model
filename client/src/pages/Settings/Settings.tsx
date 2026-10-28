@@ -1,4 +1,5 @@
 import { type JSX, useId, useMemo } from 'react';
+import { Problem } from '../../components/Problem.tsx';
 import { useSettings, useUpdateSettings } from '../../settings/useSettings.ts';
 import styles from './Settings.module.css';
 
@@ -16,11 +17,7 @@ export function Settings(): JSX.Element {
 
   if (settings.isPending) return <p className={styles.note}>Loading settings…</p>;
   if (settings.isError) {
-    return (
-      <p role="alert" className={styles.problem}>
-        Couldn't load the settings. {settings.error.message}
-      </p>
-    );
+    return <Problem>Couldn't load the settings. {settings.error.message}</Problem>;
   }
 
   const s = settings.data;
@@ -67,11 +64,7 @@ export function Settings(): JSX.Element {
             ))}
           </select>
         </div>
-        {update.isError && (
-          <p role="alert" className={styles.problem}>
-            Couldn't save that change. {update.error.message}
-          </p>
-        )}
+        {update.isError && <Problem>Couldn't save that change. {update.error.message}</Problem>}
       </section>
     </div>
   );

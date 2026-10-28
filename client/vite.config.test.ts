@@ -13,6 +13,10 @@ async function devServer() {
 }
 
 describe('the Vite dev server', () => {
+  it('checks files for changes once a second, since a WSL checkout on a Windows drive gets no change events', async () => {
+    expect((await devServer())?.watch).toMatchObject({ usePolling: true, interval: 1000 });
+  });
+
   it("keeps the browser's Host on API calls, so the server's local-only check still sees it", async () => {
     expect((await devServer())?.proxy?.['/api']).toMatchObject({ changeOrigin: false });
   });

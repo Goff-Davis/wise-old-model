@@ -9,3 +9,8 @@ export const PAGES = [
 ] as const;
 
 export type PageId = (typeof PAGES)[number]['id'];
+
+/** An account page's URL. */
+export function pagePath(accountId: string | number, page: PageId): string {
+  return `/${accountId}/${page}`;
+}

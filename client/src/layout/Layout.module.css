@@ -49,11 +49,6 @@
   width: 36px;
   height: 36px;
   padding: 0;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--raised);
-  color: var(--text);
-  cursor: pointer;
 }
 
 .menuButton:hover,

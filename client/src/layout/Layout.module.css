@@ -1,0 +1,84 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 54fr) minmax(0, 46fr);
+  height: 100dvh;
+  background: var(--bg);
+}
+
+.chat {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--rule);
+}
+
+.side {
+  display: grid;
+  grid-template-columns: minmax(0, 30fr) minmax(0, 16fr);
+  min-height: 0;
+}
+
+.page {
+  min-height: 0;
+  overflow: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--rule);
+}
+
+.menu {
+  min-height: 0;
+  overflow: auto;
+}
+
+.side[hidden] {
+  display: none;
+}
+
+/* Narrow windows: a bar with the menu button (a hamburger) above the chat, and the page and
+   menu as a panel over the chat's right side. */
+.bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--panel);
+}
+
+.menuButton {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.menuButton:hover,
+.menuButton[aria-expanded="true"] {
+  color: var(--accent);
+}
+
+.layout[data-narrow] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.layout[data-narrow] .chat {
+  grid-row: 2;
+  grid-column: 1;
+  border-right: 0;
+}
+
+.layout[data-narrow] .side {
+  grid-row: 2;
+  grid-column: 1;
+  justify-self: end;
+  z-index: 1;
+  width: min(100%, 560px);
+  background: var(--bg);
+  border-left: 1px solid var(--rule);
+  box-shadow: -12px 0 24px rgb(0 0 0 / 0.35);
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Wise Old Model</title>
+    <script>
+      // Before anything paints: the theme saved last time (see useApplySettings), so a
+      // light-theme page doesn't flash dark while the app loads.
+      try {
+        if (localStorage.getItem('wom-theme') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+          document.querySelector('meta[name="color-scheme"]').content = 'light';
+        }
+      } catch {
+        // Storage can be turned off; the page then starts dark.
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

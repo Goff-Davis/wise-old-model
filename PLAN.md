@@ -15,7 +15,7 @@
 - Claude runs only read-only git commands and never commits, stages or switches branches. Every task ends with a **Checkpoint**: run `npm run check` (from Task 1 on) and expect exit 0; update `ARCHITECTURE.md` / `README.md` / `CLAUDE.md` wherever the code now differs from them or adds commands; then hand the user a commit message (brief, only the changes, no trailers) if commit messages are switched on. The user commits.
 - TDD for every code step (superpowers:test-driven-development): failing test, watch it fail, implement, watch it pass.
 - Run single test files with `npx vitest run <path>`.
-- Tests never call Claude or the live APIs. Fixtures are captured once with the commands given, using the header `-A "wise-old-model/dev (personal use; contact: <CONTACT>)"`.
+- Tests never call Claude or the live APIs. Fixtures are captured once with the commands given, using the header `-A "wise-old-model/dev (personal use; contact: davisparkergoff@gmail.com)"`.
 
 ## Global Constraints
 
@@ -23,7 +23,7 @@
 - Runs on Windows, macOS, Linux and WSL: no shell-specific npm scripts, environment variables in scripts via `cross-env`, paths via `node:path`, no node-gyp add-ons.
 - Server binds `127.0.0.1`, default port `4747`. `Host` must be `localhost:<port>` or `127.0.0.1:<port>` (also port `5173` when `NODE_ENV=development`); non-GET requests also need a matching `Origin`.
 - Server TypeScript: erasable syntax only (no enums, namespaces, parameter properties); relative imports end in `.ts`; TypeScript 7 with `noEmit`.
-- Every outbound request goes through the shared request handler, with User-Agent `wise-old-model/<version> (personal use; contact: <CONTACT>)`.
+- Every outbound request goes through the shared request handler, with User-Agent `wise-old-model/<version> (personal use; contact: davisparkergoff@gmail.com)`.
 - Wise Old Man: requests at least 3 s apart, obey `RateLimit-*` headers, never update automatically; Refresh may `POST /players/:username` only when WOM's `updatedAt` is over 1 hour old. Other sites at least 1 s apart.
 - Wiki prices: API v2 `https://prices.runescape.wiki/api/v2/osrs`, bulk endpoints only; prices stored as 64-bit integers.
 - Freshness limits: hiscores 15 min, WOM reads 15 min, Temple 1 h, prices `/latest` 5 min, `/mapping` 1 day, Bucket results 1 day, wiki search 1 day, wiki pages until their revision changes (checked after 1 day), icons forever. Refresh never refetches a source fetched under 60 s ago.
@@ -73,9 +73,9 @@ Ends with: `npm run dev` shows the empty three-column app in both themes, and `n
 **Interfaces:**
 - Produces: workspaces `@wom/shared`, `@wom/server`, `@wom/client`; root scripts `dev`, `dev:server`, `dev:client`, `build`, `start`, `test`, `typecheck`, `lint`, `check`.
 
-- [ ] **Step 1: Write the failing test** `shared/src/index.test.ts`: `it('names the app', () => expect(APP_NAME).toBe('wise-old-model'))`.
-- [ ] **Step 2: Run** `npx vitest run shared/src/index.test.ts`. Expected: FAIL (cannot find module).
-- [ ] **Step 3: Create the files**
+- [x] **Step 1: Write the failing test** `shared/src/index.test.ts`: `it('names the app', () => expect(APP_NAME).toBe('wise-old-model'))`.
+- [x] **Step 2: Run** `npx vitest run shared/src/index.test.ts`. Expected: FAIL (cannot find module).
+- [x] **Step 3: Create the files**
   - Root `package.json`: `"private": true`, `"type": "module"`, `"workspaces": ["shared", "server", "client"]`, `"engines": { "node": ">=26" }`. Scripts:
     - `dev`: `concurrently -k -n server,client "npm:dev:server" "npm:dev:client"`
     - `dev:server`: `cross-env NODE_ENV=development node --watch --env-file-if-exists=.env server/src/main.ts`
@@ -90,8 +90,8 @@ Ends with: `npm run dev` shows the empty three-column app in both themes, and `n
   - `.gitattributes`: `* text=auto eol=lf`. (`.gitignore` already exists; see `ARCHITECTURE.md` → Repo and tooling.)
   - `.env.example`: the five variables in `ARCHITECTURE.md` → Configuration, each with its default and a one-line comment; `CONTACT=` left empty.
   - `shared/src/index.ts`: `export const APP_NAME = 'wise-old-model';`
-- [ ] **Step 4: Verify** `npm install`, then `npx vitest run shared/src/index.test.ts`: PASS. `npm run check`: exit 0.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 4: Verify** `npm install`, then `npx vitest run shared/src/index.test.ts`: PASS. `npm run check`: exit 0.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 2: Config and paths
 
@@ -108,7 +108,7 @@ Spec: Configuration, Platforms.
   export function userAgent(config: Pick<Config, 'version' | 'contact'>): string;
   ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `requires CONTACT`: `expect(() => loadConfig({}, 'linux', '/home/u')).toThrow(/CONTACT/)`
   - `defaults on Linux`: `dataDir === '/home/u/.local/share/wise-old-model'`; with `XDG_DATA_HOME='/x'` it's `'/x/wise-old-model'`; `runeliteDir === '/home/u/.runelite'`; `port === 4747`
   - `defaults on macOS`: `dataDir === '/Users/u/Library/Application Support/wise-old-model'`
@@ -116,10 +116,10 @@ Spec: Configuration, Platforms.
   - `honours overrides`: `PORT='5000'`, `DATA_DIR='/d'`, `RUNELITE_DIR='/mnt/c/Users/u/.runelite'` come back as given
   - `rejects a bad PORT`: `PORT='abc'` throws `/PORT/`
   - `builds the User-Agent`: `userAgent({ version: '0.1.0', contact: 'me#1234' }) === 'wise-old-model/0.1.0 (personal use; contact: me#1234)'`
-- [ ] **Step 2: Run** `npx vitest run server/src/config.test.ts`. Expected: FAIL.
-- [ ] **Step 3: Implement** using `path.win32` when `platform === 'win32'`, else `path.posix`, so the tests pass on any OS. `version` comes from the root `package.json`; `isDev = env.NODE_ENV === 'development'`; empty `ANTHROPIC_API_KEY` means `null`.
-- [ ] **Step 4: Run** the test file. Expected: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run** `npx vitest run server/src/config.test.ts`. Expected: FAIL.
+- [x] **Step 3: Implement** using `path.win32` when `platform === 'win32'`, else `path.posix`, so the tests pass on any OS. `version` comes from the root `package.json`; `isDev = env.NODE_ENV === 'development'`; empty `ANTHROPIC_API_KEY` means `null`.
+- [x] **Step 4: Run** the test file. Expected: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 3: Server app with the local-only guard
 
@@ -138,14 +138,14 @@ Spec: Backend → Local-only server.
   ```
 - `main.ts`: `loadConfig(process.env, process.platform, os.homedir())`; on `ConfigError` print the message and exit 1; listen on `127.0.0.1:<port>`; print `Wise Old Model is running at http://127.0.0.1:<port>`.
 
-- [ ] **Step 1: Write the failing tests** for `checkLocalRequest` with `ports = [4747]` unless noted:
+- [x] **Step 1: Write the failing tests** for `checkLocalRequest` with `ports = [4747]` unless noted:
   - `GET` with host `localhost:4747` → `'ok'`; host `127.0.0.1:4747` → `'ok'`; host `evil.example:4747` → `'bad-host'`; host missing → `'bad-host'`
   - `POST` with host `localhost:4747`, origin `http://localhost:4747` → `'ok'`; origin `http://evil.example` → `'bad-origin'`; no origin → `'bad-origin'`
   - With `ports = [4747, 5173]`: `POST` host `localhost:5173`, origin `http://localhost:5173` → `'ok'`
-- [ ] **Step 2: Run** `npx vitest run server/src/http/localOnly.test.ts`. Expected: FAIL.
-- [ ] **Step 3: Implement** the three exports and `main.ts`. `ports` is `[config.port]`, plus `5173` when `config.isDev`.
-- [ ] **Step 4: Run** the tests: PASS. Then `CONTACT=test npm run dev:server` and `curl -s http://127.0.0.1:4747/api/health` → `{"ok":true,...}`.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run** `npx vitest run server/src/http/localOnly.test.ts`. Expected: FAIL.
+- [x] **Step 3: Implement** the three exports and `main.ts`. `ports` is `[config.port]`, plus `5173` when `config.isDev`.
+- [x] **Step 4: Run** the tests: PASS. Then `CONTACT=test npm run dev:server` and `curl -s http://127.0.0.1:4747/api/health` → `{"ok":true,...}`.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 4: Database, migrations and backups
 
@@ -172,11 +172,11 @@ Spec: Backend → Storage; Database.
   - `chat_messages`: `id` pk, `session_id` fk (cascade), `role` (`'user' | 'assistant'`), `content` (JSON), `usage` (JSON) null, `created_at`
   - `settings`: `key` pk, `value` (JSON)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `db.test.ts`: insert an account with `returning('id')` → `1`; select it back; after `openDatabase(':memory:', …)` the table names from `db.introspection.getTables()` are exactly the 8 above (plus Kysely's migration tables); deleting an account removes its `snapshots`, `goals`, `chat_sessions` and their `chat_messages` (foreign keys on); `PRAGMA journal_mode` is `wal` for a file database.
   - `backup.test.ts` (temp dir, fixed clock): `backupIfDue` creates `backups/wom-2026-10-27T120000Z.db` when none exist; returns `null` when the newest is 2 h old; after 9 `backupNow` calls one minute apart, 7 files remain and they're the newest; when a new migration is pending on an existing database file, a backup appears before it runs.
-- [ ] **Step 2: Run** `npx vitest run server/src/db`. Expected: FAIL.
-- [ ] **Step 3: Implement.** The dialect adapts `DatabaseSync` to Kysely's `SqliteDialect` interface:
+- [x] **Step 2: Run** `npx vitest run server/src/db`. Expected: FAIL.
+- [x] **Step 3: Implement.** The dialect adapts `DatabaseSync` to Kysely's `SqliteDialect` interface:
   ```ts
   prepare(sql) {
     const stmt = this.db.prepare(sql);
@@ -189,8 +189,8 @@ Spec: Backend → Storage; Database.
   }
   ```
   Migrations are an in-code `Record<string, Migration>` behind a custom `MigrationProvider` (`001_initial` creates all tables). `openDatabase` sets `PRAGMA foreign_keys = ON` and, for files, `PRAGMA journal_mode = WAL`, then backs up if migrations are pending and the file already existed, then migrates.
-- [ ] **Step 4: Run** the tests: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 4: Run** the tests: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 5: Client shell, layout and themes
 
@@ -207,13 +207,13 @@ Spec: Frontend → Layout, Stack, Styling, Themes, Visual direction.
   ```
 - Routes: `/` and `/:accountId/:page`, where `page` is `overview | this-week | goals | bank | collection-log | settings`.
 - `<html data-theme="dark|light">`; `tokens.css` defines both themes' variables with the exact hex values in `ARCHITECTURE.md` → Visual direction; dark is the default.
-- Vite: `server.port: 5173`, `strictPort: true`, `server.proxy['/api'] = 'http://127.0.0.1:4747'`; `build.outDir: 'dist'`.
+- Vite: `server.port: 5173`, `strictPort: true`, `server.proxy['/api'] = { target: 'http://127.0.0.1:<PORT, else 4747>', changeOrigin: false }`, `server.cors: false`; `build.outDir: 'dist'`.
 
-- [ ] **Step 1: Write the failing tests** (`Layout.test.tsx`): the three regions render in order with accessible names "Chat", "Page", "Menu"; the chat column is the first child; below 1000 px wide (mock `matchMedia`) the page and menu are hidden behind a button named "Pages".
-- [ ] **Step 2: Run** `npx vitest run client/src/layout`. Expected: FAIL.
-- [ ] **Step 3: Implement** the shell with placeholder content, the fonts (Alegreya for headings and answers, Alegreya Sans for the interface, Silkscreen only for skill levels) and both token sets. The chat column is about 54% of the width, the page 30%, the menu 16%.
-- [ ] **Step 4: Verify** the tests PASS; `npm run dev`, open `http://localhost:5173`, see three columns in the dark theme; set `data-theme="light"` in dev tools and see parchment.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests** (`Layout.test.tsx`): the three regions render in order with accessible names "Chat", "Page", "Menu"; the chat column is the first child; below 1000 px wide (mock `matchMedia`) the page and menu are hidden behind a menu button (a hamburger icon, named "Menu" for screen readers).
+- [x] **Step 2: Run** `npx vitest run client/src/layout`. Expected: FAIL.
+- [x] **Step 3: Implement** the shell with placeholder content, the fonts (Alegreya for headings and answers, Alegreya Sans for the interface, Silkscreen only for skill levels) and both token sets. The chat column is about 54% of the width, the page 30%, the menu 16%.
+- [x] **Step 4: Verify** the tests PASS; `npm run dev`, open `http://localhost:5173`, see three columns in the dark theme; set `data-theme="light"` in dev tools and see parchment.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 6: Settings and time helpers
 
@@ -234,13 +234,13 @@ Spec: Database → settings; Frontend → Settings page (Display); Database → 
   ```
 - Routes: `GET /api/settings`, `PATCH /api/settings` (400 with Zod's message on invalid input). The client sends `Intl.DateTimeFormat().resolvedOptions().timeZone` as `detectedTimeZone` on load, and applies `theme` to `<html data-theme>`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `time.test.ts`: `localDayKey('2026-10-28T03:00:00Z', 'America/Chicago') === '2026-10-27'`; `formatTime('2026-10-27T22:00:00Z', 'America/Chicago', 'datetime')` contains `5:00 PM`; `effectiveTimeZone({ ...defaultSettings, detectedTimeZone: 'Europe/London' }) === 'Europe/London'`; with neither set, `'UTC'`.
   - `settings.test.ts` (in-memory DB): `GET` returns `defaultSettings`; `PATCH { theme: 'light' }` then `GET` → `theme: 'light'`; `PATCH { pollSeconds: 1 }` → 400.
-- [ ] **Step 2: Run** both files. Expected: FAIL.
-- [ ] **Step 3: Implement**; the Display section has Theme (Dark, Light) and Time zone (Automatic, or a list from `Intl.supportedValuesOf('timeZone')`).
-- [ ] **Step 4: Verify** the tests PASS; switching the theme in Settings changes the app and survives a reload.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run** both files. Expected: FAIL.
+- [x] **Step 3: Implement**; the Display section has Theme (Dark, Light) and Time zone (Automatic, or a list from `Intl.supportedValuesOf('timeZone')`).
+- [x] **Step 4: Verify** the tests PASS; switching the theme in Settings changes the app and survives a reload.
+- [x] **Step 5: Checkpoint.**
 
 ---
 

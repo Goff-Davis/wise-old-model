@@ -1,0 +1,35 @@
+.placeholder {
+  margin: 0;
+  padding: 20px 24px;
+  color: var(--muted);
+}
+
+.placeholder h2 {
+  margin: 0;
+  color: var(--text);
+}
+
+.pageLinks {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 12px;
+  list-style: none;
+}
+
+.pageLinks a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.pageLinks a:hover {
+  background: var(--raised);
+}
+
+.pageLinks a[aria-current="page"] {
+  background: var(--raised);
+  color: var(--accent);
+}

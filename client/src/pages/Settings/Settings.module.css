@@ -1,0 +1,60 @@
+.settings {
+  padding: 20px 24px;
+}
+
+.settings h2 {
+  margin: 0 0 16px;
+}
+
+.section {
+  display: grid;
+  gap: 14px;
+  max-width: 32rem;
+}
+
+.section h3 {
+  margin: 0;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.field legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.field select {
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text);
+}
+
+.choices {
+  display: flex;
+  gap: 18px;
+}
+
+.choice {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.note {
+  margin: 0;
+  padding: 20px 24px;
+  color: var(--muted);
+}
+
+.problem {
+  margin: 0;
+  color: var(--not-started);
+}

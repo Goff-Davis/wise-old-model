@@ -1,0 +1,33 @@
+{
+  "name": "wise-old-model",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,client \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "cross-env NODE_ENV=development node --watch --env-file-if-exists=.env server/src/main.ts",
+    "dev:client": "npm run dev -w @wom/client",
+    "build": "npm run build -w @wom/client",
+    "start": "cross-env NODE_ENV=production node --env-file-if-exists=.env server/src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json && tsc -p shared && tsc -p server && tsc -p client",
+    "lint": "biome check .",
+    "check": "npm run typecheck && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
+    "@types/node": "^26.6.5",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

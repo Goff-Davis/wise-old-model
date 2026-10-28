@@ -1,0 +1,87 @@
+/*
+ * Theme tokens, "Stone and lantern" (ARCHITECTURE.md → Visual direction). Dark is the default;
+ * <html data-theme="light"> switches to parchment.
+ */
+:root {
+  color-scheme: dark;
+
+  --bg: #1f1c17;
+  --panel: #28231c;
+  --raised: #393227;
+  --rule: #4a4134;
+  --text: #ebe1ca;
+  --muted: #a89a80;
+  --accent: #ff981f;
+
+  /* Status, after the in-game quest list; each passes 4.5:1 on the background and panels. */
+  --not-started: #e5654f;
+  --in-progress: #e9d44b;
+  --done: #3fbf4f;
+
+  /* Stats tiles, after the in-game stats tab. */
+  --tile: #393227;
+  --tile-frame: #1f1c17;
+  --tile-name: #cfc3a8;
+  --tile-level: #ffff00;
+  --tile-level-shadow: #000000;
+
+  --font-serif: "Alegreya", Georgia, serif;
+  --font-sans: "Alegreya Sans", system-ui, sans-serif;
+  --font-pixel: "Silkscreen", monospace;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #e4d8b9;
+  --panel: #dacdab;
+  --raised: #cdbd94;
+  --rule: #a8956b;
+  --text: #2b2116;
+  --muted: #6b5a40;
+  --accent: #8f4300;
+
+  --not-started: #9e2f1c;
+  --in-progress: #6b5400;
+  --done: #25622a;
+
+  --tile: #ebe2cb;
+  --tile-frame: #cdbd94;
+  --tile-name: #3d3122;
+  --tile-level: #7a3a00;
+  --tile-level-shadow: #f7f0dd;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* Browsers give form controls their own font; the interface uses Alegreya Sans throughout. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}

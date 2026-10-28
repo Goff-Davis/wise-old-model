@@ -27,7 +27,7 @@ It rebuilds, for personal use, the idea behind "Waise Old Man" (the Gielinor bot
 
 ## Status
 
-Nothing is implemented yet. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
+Being built in phases. Phase 1, the skeleton, is in place: the local server, its database and settings, and the empty three-column app in both themes. There are no accounts, data sources or chat yet. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Nothing is implemented yet. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) 
 
 ## Setup and running
 
-Not available yet; this is the planned setup.
+These steps run the skeleton that exists so far (see Status).
 
 1. `npm install` (again after switching between WSL and Windows on the same checkout).
 2. Copy `.env.example` to `.env` (git-ignored) and fill in `CONTACT`.

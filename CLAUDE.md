@@ -11,11 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-No code yet. The design is settled in `ARCHITECTURE.md` (the source of truth, written as planned design; update it as code is built so it describes what exists), and the build steps live in `PLAN.md` (phased tasks; tick checkboxes as tasks complete). Goals, non-goals and the four questions that define "done" are in `README.md`. The scripts listed under Toolchain don't exist until the scaffold is built.
+Being built, phase by phase, from `PLAN.md` (ticked checkboxes mark finished tasks). The design lives in `ARCHITECTURE.md`, the source of truth; sections still describe planned design until their task is built, and get updated as code lands so they describe what exists. Goals, non-goals and the four questions that define "done" are in `README.md`.
 
 ## What this is
 
-A personal, single-user, locally-run OSRS account advisor: an Express + TypeScript backend aggregates data from OSRS Hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki (MediaWiki + prices APIs) and the JSON files written by the Character Export RuneLite plugin (Plugin Hub) into SQLite (Node's built-in `node:sqlite` through Kysely), and a React (Vite) frontend shows a per-account dashboard plus a chat panel backed by a remote LLM with tool calling. Planned top-level split: `/server` and `/client`.
+A personal, single-user, locally-run OSRS account advisor: an Express + TypeScript backend aggregates data from OSRS Hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki (MediaWiki + prices APIs) and the JSON files written by the Character Export RuneLite plugin (Plugin Hub) into SQLite (Node's built-in `node:sqlite` through Kysely), and a React (Vite) frontend shows a per-account dashboard plus a chat panel backed by a remote LLM with tool calling. Top-level split: `/server`, `/client` and `/shared` (npm workspaces).
 
 The backend exists for two reasons: Jagex hiscores send no CORS headers, and the LLM API key must never reach the browser.
 
@@ -40,7 +40,8 @@ The backend exists for two reasons: Jagex hiscores send no CORS headers, and the
 - npm workspaces `server/`, `client/`, `shared/`; `"engines": { "node": ">=26" }`.
 - The server's TypeScript runs directly on Node (type stripping, no build step): only erasable syntax (no enums, namespaces or parameter properties), and relative imports use `.ts` extensions. TypeScript 7 is for type checking only (`noEmit`).
 - Biome lints and formats (not ESLint/Prettier: typescript-eslint doesn't support TypeScript 7). Vitest 5 for tests; tests never call Claude.
-- Scripts: `npm run dev`, `npm run build`, `npm start`, `npm test`, `npm run check` (type check, lint, tests). Details in `ARCHITECTURE.md` → Repo and tooling.
+- Scripts (root): `npm run dev` (server and client together), `npm run dev:server`, `npm run dev:client`, `npm run build`, `npm start`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run check` (type check, lint, tests). One test file: `npx vitest run <path>`. Details in `ARCHITECTURE.md` → Repo and tooling.
+- `@wom/shared` exports only its `src/index.ts`; re-export every shared module from there.
 
 ## Conventions
 

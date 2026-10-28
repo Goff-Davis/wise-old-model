@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status:** planned design, nothing implemented yet. Update each section as it gets built so this file describes the code as it actually is.
+> **Status:** being built phase by phase from [PLAN.md](PLAN.md). Built so far (Phase 1): the server with its local-only guard, configuration, the database with migrations and backups, settings, and the client shell with both themes. Everything else here is still the planned design. Update each section as it gets built so this file describes the code as it actually is.
 
 ## Overview
 
@@ -26,19 +26,38 @@ The server exists because the Jagex hiscores send no CORS headers (the browser c
 
 ## Layout
 
-Planned; adjust as the code takes shape.
+Folders described only in general terms are still planned; adjust as the code takes shape.
 
 ```
 /server/src
   /sources   one module per data source (hiscores, wom, temple, wiki, prices, icons, character-export)
-  /http      the shared request handler (User-Agent, per-site queues, retries)
+  /http      inbound: the local-only guard (localOnly.ts), listenLocal and JSON errors (errors.ts);
+             outbound: the shared request handler (User-Agent, per-site queues, retries)
   /db        node:sqlite + Kysely adapter, migrations, queries
   /calc      XP, requirement checks, gear upgrades, goal progress
   /ai        provider interface, Claude (Agent SDK) provider, tools, instructions
   /routes    Express routes (accounts, account data, refresh, goals, chats, settings, icons)
-  main.ts
-/client/src  React app (chat, pages, components, theme)
-/shared/src  Zod schemas and types for the API, used by server and client
+  /settings  settingsRepo: settings read and saved one row each
+  app.ts     createApp: security headers, the guard, routes, and the built client in production
+  config.ts  loadConfig: .env values, per-OS defaults, validation
+  main.ts    entry point: loads the config, then startServer, and prints what went wrong if either fails
+  start.ts   startServer: claims the port on 127.0.0.1 first (so a second copy stops before it can
+             touch the database), opens the database (backed up at startup), then serves the app
+/server/test helpers for tests (tempDir, testConfig with a fresh temp data folder, testDb: a
+             migrated database closed after the test, call: one real HTTP request)
+/client/src  React app
+  main.tsx   entry point: fonts, theme tokens, then <App />
+  App.tsx    routes and the TanStack Query client
+  /api       fetch helpers that check each answer with a Zod schema (apiGet, apiSend), and the
+             TanStack Query client (createQueryClient, apiQuery)
+  /layout    the three-column shell
+  /pages     one folder per page; pageList.ts holds the menu order and URL ids
+  /settings  useSettings hooks: read and change settings, put the theme on <html>, report the
+             browser's time zone
+  /test      test setup (cleanup after each test)
+  /theme     tokens.css (both themes) and the bundled fonts
+/shared/src  Zod schemas and types for the API (settings, the error answer), the ports, and the
+             time helpers, used by server and client
 ```
 
 ## Platforms
@@ -46,8 +65,9 @@ Planned; adjust as the code takes shape.
 Runs on Windows, macOS, Linux and WSL. Developed on WSL; the finished app will likely run on Windows.
 
 - **Scripts:** npm scripts use only Node and cross-platform tools. Environment variables set in scripts go through `cross-env`, `.env` is loaded with Node's `--env-file-if-exists`, and paths are built with Node's `path`.
-- **App data** (SQLite database, caches) lives in the OS's app-data folder: `%LOCALAPPDATA%\wise-old-model` on Windows, `~/Library/Application Support/wise-old-model` on macOS, `~/.local/share/wise-old-model` on Linux and WSL. `DATA_DIR` overrides it. On WSL this keeps SQLite off the Windows drive, where its file locking isn't reliable.
+- **App data** (SQLite database, caches) lives in the OS's app-data folder: `%LOCALAPPDATA%\wise-old-model` on Windows (or `<home>\AppData\Local\wise-old-model` without `LOCALAPPDATA`), `~/Library/Application Support/wise-old-model` on macOS, `$XDG_DATA_HOME/wise-old-model` or `~/.local/share/wise-old-model` on Linux and WSL (a relative `XDG_DATA_HOME` is ignored, per the XDG spec). `DATA_DIR` overrides it. On WSL this keeps SQLite off the Windows drive, where its file locking isn't reliable.
 - **RuneLite folder** defaults to `~/.runelite`, where RuneLite keeps it on every OS. `RUNELITE_DIR` overrides it; on WSL with RuneLite on Windows it's `/mnt/c/Users/<user>/.runelite`.
+- **Folder settings** (`DATA_DIR`, `RUNELITE_DIR`): empty means the default; a leading `~` means the home folder; on Windows a WSL path such as `/mnt/c/Users/me/.runelite` becomes `C:\Users\me\.runelite`, so a `.env` shared with WSL keeps working. Anything else that wouldn't work on this OS (a Linux path on Windows, a Windows path on Linux or WSL, a relative path, a line break) stops the server with a message saying what to write instead.
 - **Dependencies:** no native Node add-ons that compile on install (node-gyp). Tools that ship prebuilt per-OS binaries through npm (Vite, Biome, TypeScript 7, the Agent SDK's Claude Code) are fine.
 - **No scheduled jobs:** the app only fetches data while you use it, so nothing depends on cron or Task Scheduler.
 - **Switching OS:** moving one checkout between WSL and Windows needs a fresh `npm install`, because build tools like Vite ship per-OS binaries.
@@ -56,9 +76,13 @@ Runs on Windows, macOS, Linux and WSL. Developed on WSL; the finished app will l
 
 - **Stack:** Node.js 26 (pinned in `mise.toml`), Express 5, TypeScript run directly by Node (see Repo and tooling).
 - **Data sources:** one module per source, all sending requests through the shared request handler (see Data sources → Fetching and caching).
-- **Local-only server:** binds to `127.0.0.1`. Every request must carry a `Host` of `localhost:<port>` or `127.0.0.1:<port>`, which blocks DNS-rebinding attacks from websites open in the same browser; requests that change data must also carry a matching `Origin`.
+- **Local-only server:** binds to `127.0.0.1`. Every request must carry a `Host` of `localhost:<port>` or `127.0.0.1:<port>` (bare names too on port 80, which browsers omit), which blocks DNS-rebinding attacks from websites open in the same browser; requests the browser marks as coming from another site (`Sec-Fetch-Site` of `cross-site` or `same-site`, which covers pages on other localhost ports) are refused unless they open a page (a GET top-level navigation), so an `<img>` or `fetch()` on another site can't make the server do anything, such as fetch an icon; any request other than GET or HEAD must also carry a matching `Origin`. In development the Vite dev server's port 5173 is accepted as well, because the Vite proxy passes the browser's Host and Origin through. Failures get a 403 with a plain explanation.
+- **Security headers** on every response: `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY` (no other site can frame the app and trick clicks onto its buttons), `X-Content-Type-Options: nosniff`, `Cross-Origin-Resource-Policy: same-origin`.
+- **Production serving:** files from `client/dist`; paths without a file extension get `index.html` (app pages); a missing asset gets 404; if the client isn't built, the server warns at startup and pages answer 503 with "run npm run build".
+- **Startup:** the server claims its port first, so a second copy stops with "port in use" before it can touch the database; then it opens the database (migrating and backing up as needed), answering 503 "starting" meanwhile, and hands the port to the app.
 - **Storage:** Node's built-in SQLite (`node:sqlite`, "release candidate" in Node 26), queried through [Kysely](https://kysely.dev) via a small adapter of our own (Kysely's SQLite dialect expects statements with a `reader` flag and array parameters; `node:sqlite` gives `columns()` and spread parameters). Schema changes are Kysely migrations. No compiled add-ons. Fetched data that changed is saved as a snapshot with the raw response, so parsers can be improved later without losing history.
-- **API:** REST routes under `/api` for accounts (look up, add, rename, delete), account data (overview, this week, bank and gear, collection log), refresh and file checks, goals, chats (list, send, approve or decline, stop), settings and icons. Chat answers stream over SSE.
+- **API:** REST routes under `/api` for accounts (look up, add, rename, delete), account data (overview, this week, bank and gear, collection log), refresh and file checks, goals, chats (list, send, approve or decline, stop), settings and icons. Chat answers stream over SSE. Built so far: `GET /api/health`, `GET /api/settings` and `PATCH /api/settings` (any subset of the settings; unknown keys and invalid values get a 400 with Zod's message, and nothing is saved).
+- **Errors** answer in JSON (`{ "error": "..." }`, `ErrorAnswerSchema` in shared) like everything else, and only one place writes them: the last middleware, `jsonErrors`. Routes and the guard throw or pass on an `HttpError(status, message)`, and `parseInput(schema, body)` turns a body that doesn't fit into a 400 with Zod's message. An error meant for the client (marked `expose`, as for a body that isn't JSON or is too large) keeps its 4xx status and message; anything else is a 500 that says to look at the server's console, where the details go, even when it carries a 4xx (a missing file's path, or another site's status, isn't the browser's business).
 
 ## Data sources
 
@@ -177,7 +201,7 @@ The hiscores don't include quests, achievement diaries, combat achievements, ban
 | `cache` | Shared data not tied to an account: wiki pages (with revision id), Bucket results, search results, GE prices, the item list |
 | `goals` | Account, title, kind, target (JSON), status (active, done, dropped), position in the user's order, created, completed and dropped times (details in Goals) |
 | `chat_sessions`, `chat_messages` | Conversations per account, stored in a provider-neutral format (details in AI layer) |
-| `settings` | Settings changed in the app (RuneLite update mode and interval, time zone, ...). Secrets and paths stay in `.env`. |
+| `settings` | Settings changed in the app (RuneLite update mode and interval, time zone, ...), one row per setting with its value as JSON; a saved value that's no longer valid, or a key that's gone, falls back to the default. Secrets and paths stay in `.env`. |
 
 **History retention:**
 - Stats and progress (hiscores, Wise Old Man player, Temple collection log, quests, diaries, combat achievements, skills): every change.
@@ -187,11 +211,12 @@ The hiscores don't include quests, achievement diaries, combat achievements, ban
 
 **Conventions:**
 - **Names** match ignoring case, with spaces, underscores, hyphens and non-breaking spaces treated as the same (Wise Old Man's rule). The matching key is also how the app finds each account's Character Export folder. A renamed account is updated in the app and keeps its history.
-- **Times** are stored as ISO 8601 text in UTC and always shown in the configured time zone. The time zone setting is either Automatic (the browser's time zone, which the page reports to the server) or a zone picked from a list. Day-based rules, such as one bank snapshot per day, use that zone, and the AI is given the current local date, time and zone.
+- **Times** are stored as ISO 8601 text in UTC and always shown in the configured time zone. The time zone setting is either Automatic (the browser's time zone, which the page reports to the server) or a zone picked from a list. Day-based rules, such as one bank snapshot per day, use that zone, and the AI is given the current local date, time and zone. A saved zone this browser or server doesn't know (picked in another browser, say) counts as UTC rather than breaking the settings. Times are written in US English, like the rest of the interface (Oct 27, 2026, 5:00 PM); recent ones read "just now", "5 minutes ago", "3 hours ago", then by calendar day "yesterday" and "3 days ago", and after a week the date.
 - **Deleting an account** deletes all its data, after confirmation. Foreign keys are on.
-- **Migrations** run automatically at startup.
-- **Write-ahead logging** is on (safe because the database lives on a local drive).
-- **Backups** are automatic: at startup when the newest backup is over a day old, and always right before a migration. Each is a full copy made with SQLite's `VACUUM INTO` (safe while the app runs) into `backups/` in the data folder; the newest 7 are kept.
+- **The file** is `wise-old-model.db` in the data folder. If it can't be opened (or migrated), the server stops with the reason.
+- **Migrations** run automatically at startup; they live in code (`server/src/db/migrations.ts`) and run in name order. All pending migrations run as one transaction (`BEGIN IMMEDIATE`, which also keeps a second process out), so one that fails partway leaves nothing behind. Foreign keys are off while they run, as SQLite's guide to changing a table requires (otherwise rebuilding a table deletes every row pointing at it), and a foreign key check runs before committing; a migration that would leave rows pointing at missing rows is undone. A clock that went backwards between migrations doesn't block startup.
+- **Write-ahead logging** is on (safe because the database lives on a local drive), and a write waits up to 5 seconds for a lock instead of failing at once.
+- **Backups** are automatic: at startup when the newest backup is over a day old, and always right before a migration runs on an existing database. Each is a full copy made with SQLite's `VACUUM INTO` (safe while the app runs) into `backups/` in the data folder, named by UTC time without colons so Windows accepts it (`wom-2026-10-27T120000Z.db`); the newest 7 are kept. A backup named in the future (made while the clock was ahead) doesn't count as the newest. If the daily backup can't be made, the server warns and starts anyway; an old backup that can't be deleted (Windows refuses while another program has it open) is tried again next time. The backup before a migration must succeed, or nothing is migrated.
 
 ## Goals
 
@@ -301,7 +326,8 @@ A chat-first React app for one account at a time, with data pages beside the cha
   2. **The selected page**: Overview by default (a compact stats summary), or This week, Goals, Bank and gear, Collection log, Settings.
   3. **The menu** on the right edge: accounts (plus Add account) and pages, next to the page it controls.
 
-  Picking an account switches both the chat and the page. On narrow windows, the page and menu collapse behind a button so the chat keeps the screen.
+  Picking an account switches both the chat and the page. The columns take about 54%, 30% and 16% of the width. Below 1000 px, the page and menu collapse behind a menu button (a hamburger, named "Menu" for screen readers) in a bar above the chat, so the chat keeps the screen; the panel opens over the chat's right side, closes with Escape, and keeps what's in it (scroll, searches, typing) while closed.
+- **URLs:** each page has its own, `/<account id>/<page>` (`overview`, `this-week`, `goals`, `bank`, `collection-log`, `settings`). An unknown page opens the account's overview, `/<account id>` opens the overview, and any other path goes to `/`, which asks for an account until one exists.
 - **Pages** (in the page panel):
   - **Overview:** name, type, combat and total level; the stats tiles; progress rows (quests, diary tiers, combat achievements, collection log) with icons; the top kill counts with boss icons, expandable to all of them; worn gear; data freshness and Refresh.
   - **This week:** period picker (Today, 7 days, 30 days, Custom); a one-line summary; XP per skill with level-ups; kills and clues; quests, diaries, combat achievements and goals completed, dated; new collection log items with icons.
@@ -312,7 +338,7 @@ A chat-first React app for one account at a time, with data pages beside the cha
   - **Accounts:** name; type (marked as from Wise Old Man or set by hand); whether the Character Export folder was found; whether Temple has the collection log; Rename; Delete (confirmed, removes all the account's data).
   - **Game data:** the RuneLite folder in use and whether it was found; update mode (Automatic or Manual) and checking interval (default 5 seconds).
   - **AI:** billing (plan or API key), model (default Claude Opus 5.5), effort (default medium), maximum tool rounds per question (default 20), optional spending cap per question (API key only).
-  - **Display:** theme (default dark), time zone (Automatic or picked).
+  - **Display:** theme (default dark), time zone (Automatic, showing the zone the browser reported, or picked from UTC and every zone the browser knows).
   - **About:** data folder location, last backup and Back up now, the `.env` settings read-only (the API key shows only set or not set), and credits: "Game images © Jagex Ltd.", the wiki's CC BY-NC-SA 3.0 license, and the data sources.
 - **Adding an account:**
   1. Type the name.
@@ -328,9 +354,9 @@ A chat-first React app for one account at a time, with data pages beside the cha
   - Under each answer: sources on the left; tokens used on the right ("on your plan", or a cost with an API key).
   - A new chat shows a short prompt and starter questions ("What should I work on next?", "What did I get done this week?", "Can I do a quest yet?", "Best gear upgrade for a boss").
   - Setup problems explain the fix in place, e.g. when Claude Code isn't signed in: run `claude`, then `/login`, or switch billing to an API key in Settings.
-- **Stack:** React 19 and Vite 8, TanStack Query for server data (and its browser-side cache), React Router for pages, Zod to validate API responses.
+- **Stack:** React 19 and Vite 8, TanStack Query for server data (and its browser-side cache), React Router for pages, Zod to validate API responses. Requests go out even while the browser reports being offline (the server is on the same machine), and a request the server refused (4xx) isn't retried; others are retried twice. `main.tsx` makes the router and the query client once, outside React. Each query is keyed by its API path's segments (`apiQuery('/api/accounts/1/overview', schema)` → `['api', 'accounts', '1', 'overview']`), so one prefix refreshes everything under it.
 - **Styling:** plain CSS with no component library. CSS Modules per component, plus global CSS custom properties as theme tokens. Native elements cover tables, dialogs (`<dialog>`) and form controls; charts are small hand-written SVG components.
-- **Themes:** light and dark, defaulting to dark; the choice is a setting.
+- **Themes:** light and dark, defaulting to dark; the choice is a setting, applied to `<html data-theme>`. The browser also keeps the last choice (localStorage), so `index.html` applies it before the app loads and a light page doesn't flash dark.
 - **Visual direction, "Stone and lantern":** the game's own interface, refined.
   - Dark theme (default): background `#1f1c17`, panel `#28231c`, raised `#393227`, rules `#4a4134`, text `#ebe1ca`, muted text `#a89a80`, accent `#ff981f` (the game's orange text).
   - Light theme (parchment): background `#e4d8b9`, panel `#dacdab`, raised `#cdbd94`, rules `#a8956b`, text `#2b2116`, muted text `#6b5a40`, accent `#8f4300` (a darker amber, so links pass contrast on parchment).
@@ -338,7 +364,7 @@ A chat-first React app for one account at a time, with data pages beside the cha
   - The one loud element: stats tiles styled like the in-game stats tab. Each tile shows the skill icon, the skill name and the level, in the in-game tab's order (Sailing last; a skill the layout doesn't know yet is appended, since the skill list comes from the hiscores response).
     - Dark: stone tiles (`#393227`, frame `#1f1c17`), names `#cfc3a8`, levels yellow `#ffff00` in the pixel font with a black shadow.
     - Light: parchment tiles (`#ebe2cb`, frame `#cdbd94`), names `#3d3122`, levels dark amber `#7a3a00` with a light shadow.
-  - Status colors follow the in-game quest list: red not started, yellow in progress, green done.
+  - Status colors follow the in-game quest list: red not started, yellow in progress, green done. Dark: `#e5654f`, `#e9d44b`, `#3fbf4f`; light: `#9e2f1c`, `#6b5400`, `#25622a`. Each passes 4.5:1 contrast on the background and panels, so status can color text.
   - Avoid generic template chrome: no all-caps labels, no middle-dot meta strings, no arrows appended to buttons.
 - **Game icons:** skill, boss, quest, diary, combat achievement and collection log icons come from OSRS Wiki images (`https://oldschool.runescape.wiki/images/<File>.png`, e.g. `Attack_icon.png`, `Vorkath_icon.png`); item icons come from RuneLite's icon server by item id (`https://static.runelite.net/cache/item/icon/<id>.png`), which also covers untradeable items. The server downloads each icon on first use and keeps it in the data folder. Icons are Jagex's copyright ("used with permission" on the wiki), so they are never committed to the repo, and Settings credits "Game images © Jagex Ltd."
 
@@ -348,7 +374,7 @@ Settings that rarely change, and secrets, live in `.env` in the repo root, which
 
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
-| `CONTACT` | Yes | (none) | Discord name or email, sent in the User-Agent (`wise-old-model/<version> (personal use; contact: <CONTACT>)`) so Wise Old Man, Temple and the wiki can reach the user |
+| `CONTACT` | Yes | (none) | Discord name or email, sent in the User-Agent (`wise-old-model/<version> (personal use; contact: davisparkergoff@gmail.com)`) so Wise Old Man, Temple and the wiki can reach the user. Plain ASCII only, since it goes in an HTTP header |
 | `PORT` | No | `4747` | Port the server listens on |
 | `DATA_DIR` | No | The OS's app-data folder | Database, backups, icons and the Agent SDK's working folder |
 | `RUNELITE_DIR` | No | `~/.runelite` | Where to find Character Export's files |
@@ -361,13 +387,16 @@ The server checks these at startup and stops with a clear message when one is mi
 - **npm workspaces:** `server/`, `client/` and `shared/` (the API's Zod schemas and types, used by both sides). `"engines": { "node": ">=26" }`.
 - **Server:** Node 26 runs its TypeScript directly (built-in type stripping, no build step and no extra runner): `node --watch --env-file-if-exists=.env server/src/main.ts` in development, the same without `--watch` in production. This allows only erasable TypeScript syntax (no enums, namespaces or parameter properties), so `tsconfig` sets `erasableSyntaxOnly` and `verbatimModuleSyntax`, and relative imports use `.ts` extensions.
 - **Type checking:** TypeScript 7 (the native compiler) with `noEmit`; it never produces output.
-- **Client:** in development the Vite dev server forwards `/api` to the server; in production `vite build` produces static files the server hosts, so the app is one process at one URL.
+- **Client:** in development the Vite dev server (port 5173) forwards `/api` to the server at `PORT` (read the way the server reads it: the environment, then the root `.env`). The proxy keeps the browser's `Host` (`changeOrigin: false`) so the local-only check still sees it, and Vite's CORS is off so pages on other localhost ports can't read API answers. In production `vite build` produces static files the server hosts, so the app is one process at one URL.
 - **Lint and format:** Biome, one tool for both. (ESLint's TypeScript plugin supports TypeScript only up to 6.0.)
-- **Scripts:** `npm run dev` (server and Vite together, via `concurrently`), `npm run build` (the client), `npm start` (the app), `npm test`, and `npm run check` (type check, lint and tests; run before committing).
+- **Scripts:** `npm run dev` (server and Vite together, via `concurrently`), `npm run dev:server` and `npm run dev:client` (each alone), `npm run build` (the client), `npm start` (the app), `npm test`, `npm run typecheck`, `npm run lint`, and `npm run check` (type check, lint and tests; run before committing). A single test file: `npx vitest run <path>`.
+- **Shared package:** `@wom/shared` exports only `shared/src/index.ts`, which re-exports every shared module.
 - **Tests (Vitest 5):**
   - Unit: each source's parser (hiscores, Wise Old Man, Temple, Character Export, the wiki's requirement tables); every calculation (XP, requirements, gear upgrades, goal progress); the request handler's queues, rate limits and retries, with fake timers.
-  - Integration: API routes against a temporary database; the chat flow with a fake AI provider. Tests never call Claude.
+  - Integration: API routes against a temporary database (`testDb()`: in memory unless a test passes a file, with every migration applied, closed when the test finishes); the chat flow with a fake AI provider. Tests never call Claude.
+  - Temporary folders: a test that needs one gets a fresh folder from `tempDir()` (`server/test/helpers.ts`), deleted when the test finishes, so tests never share leftovers and a full run leaves nothing behind.
   - Fixtures: real responses captured once from the public APIs. Character Export samples come from real files, trimmed and renamed so no real names or bank contents are committed.
-  - Frontend: component tests only where there's logic (stream rendering, approvals, goal progress); no browser end-to-end tests.
+  - Frontend: component tests only where there's logic (stream rendering, approvals, goal progress); no browser end-to-end tests. They fake the API with `client/src/test/fakeApi.ts`, where a request the fake doesn't serve fails the test, and use the app's own query client without retries. The test setup gives jsdom a `matchMedia` that reports a wide window. Tests with no DOM run in the node environment.
+  - Vitest puts spies, stubbed globals and stubbed environment variables back before every test (`restoreMocks`, `unstubGlobals`, `unstubEnvs`), so tests don't undo them by hand.
 - **Repo files:** `.gitignore` (`node_modules`, build output, coverage, `.env` and any `.env.*` except `.env.example`, `.superpowers/`, npm debug logs, `.DS_Store` and `Thumbs.db`); `.env.example`; `.gitattributes` forcing LF line endings so WSL and Windows agree.
 - No CI and no git hooks: the user commits by hand.

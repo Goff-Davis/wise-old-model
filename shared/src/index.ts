@@ -8,6 +8,7 @@ export * from './osrs/combat.ts';
 export * from './osrs/equipment.ts';
 export * from './osrs/icons.ts';
 export * from './osrs/statsLayout.ts';
+export * from './osrs/xp.ts';
 export * from './overview.ts';
 export * from './ports.ts';
 export * from './settings.ts';

@@ -669,11 +669,11 @@ Spec: Tools → `calc_xp`; Goals → Skill.
   export function hoursToTarget(rates: SkillRates, fromXp: number, toXp: number): { hours: number; methods: string[] }; // walks rate brackets
   ```
 
-- [ ] **Step 1: Write the failing tests**: `xpForLevel(2) === 83`, `xpForLevel(70) === 737627`, `xpForLevel(75) === 1210421`, `xpForLevel(99) === 13034431`; `levelForXp(850000) === 71`; with the mining rates fixture, 0 → 35,025 XP is `35025 / 20000` hours with methods `['Quests']`, and a range across the 35,025 boundary sums both brackets.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** the standard formula: `xpForLevel(L) = floor(Σ_{l=1}^{L-1} floor(l + 300 × 2^(l/7)) / 4)`.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: `xpForLevel(2) === 83`, `xpForLevel(70) === 737627`, `xpForLevel(75) === 1210421`, `xpForLevel(99) === 13034431`; `levelForXp(850000) === 71`; with the mining rates fixture, 0 → 35,025 XP is `35025 / 20000` hours with methods `['Quests']`, and a range across the 35,025 boundary sums both brackets.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** the standard formula: `xpForLevel(L) = floor(Σ_{l=1}^{L-1} floor(l + 300 × 2^(l/7)) / 4)`.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 23: Quest and diary requirement checks
 
@@ -699,14 +699,14 @@ Spec: Tools → `check_quest_requirements`, `check_diary_requirements`; Data sou
 - Diary parsing: per `data-diary-tier="<Tier>"` table, each row is a task cell (number and text) and a requirements cell; `{{SCP|<Skill>|<n>}}` gives skills (`{{SCP|Quest}}` marks quest lines), `[[Quest name]]` links on quest lines give quests, anything else goes to `other`.
 - Unparsed requirements are never dropped: they land in `other` / `unchecked`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - Dragon Slayer II: 9 skills including `{ skill: 'Magic', level: 75, boostable: false, toStart: true }`; `questPoints === 200`; top-level quests include Legends' Quest, Dream Mentor, A Tail of Two Cats, Animal Magnetism, Ghosts Ahoy, Bone Voyage and Client of Kourend; `other` contains the pyre ship (Barbarian Training) line, and `100 Kudos` appears somewhere in the tree's `other` or `unchecked`
   - `checkQuest` with Magic 71 and Dream Mentor not started → `met: false`; Magic shows `have: 71, met: false`; Dream Mentor `met: false`
   - Ardougne Easy task 1 requires the quest Rune Mysteries; `checkDiaryTier` for Easy with Rune Mysteries unfinished → task 1 `met: false`
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 24: Gear upgrades and item info
 
@@ -725,11 +725,11 @@ Spec: Tools → `find_gear_upgrades`, `get_item_info`, `get_prices`.
 - Tier strings: alternatives split on ` / `; item names from `[[Name|Text]]` links; strip `'"\`UNIQ--ref-…-QINU\`"'` markers. "Better" means a tier above the best tier containing an owned item. `canBuy` is false for every type except `regular`; then `buyable: false` and prices are shown for reference only.
 - Stats from `bucket('infobox_bonuses')`; drops from `bucket('dropsline').select('page_name','item_name','drop_json').where('item_name', <name>)` using `Dropped from`, `Rarity` and `Drop Quantity`.
 
-- [ ] **Step 1: Write the failing tests**: the Vorkath fixture's `head` slot first tier contains `Masori mask (f)` and `Void ranger helm`; owning `Crystal helm` → `head` upgrades are from the tiers above it, at most 3; a budget filters out items priced over it; with `canBuy: false` every upgrade is `buyable: false`; `getItemInfo(['Draconic visage'])` lists `King Black Dragon` at `1/5,000`; the whip's `slash_attack_bonus` is present.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: the Vorkath fixture's `head` slot first tier contains `Masori mask (f)` and `Void ranger helm`; owning `Crystal helm` → `head` upgrades are from the tiers above it, at most 3; a budget filters out items priced over it; with `canBuy: false` every upgrade is `buyable: false`; `getItemInfo(['Draconic visage'])` lists `King Black Dragon` at `1/5,000`; the whip's `slash_attack_bonus` is present.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ---
 

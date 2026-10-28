@@ -67,6 +67,16 @@ export async function orSourceFailure<T, F>(
   }
 }
 
+/** The value of JSON held in a field of an answer, or null when the field holds no JSON. */
+export function jsonOrNull(text: unknown): unknown {
+  if (typeof text !== 'string') return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Saved data read back with its source's parser, or null when it no longer reads (when it's
  * JSON, the parser logs why).

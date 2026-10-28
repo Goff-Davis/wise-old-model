@@ -5,7 +5,9 @@ import { NotFoundError, SourceError } from '../http/requester.ts';
 import { readCache } from '../store/cache.ts';
 import {
   bucketQuery,
+  bucketSelect,
   expandTemplates,
+  getPageWikitext,
   getSections,
   getSectionText,
   latestRevisions,
@@ -17,12 +19,22 @@ import {
 const wiki = (name: string) => fixture(`wiki/${name}.json`);
 const TRUNCATED = '… (truncated; ask for a narrower section)';
 
-type Call = 'search' | 'sections' | 'section' | 'revisions' | 'bucket' | 'expandtemplates';
+type Call =
+  | 'search'
+  | 'sections'
+  | 'section'
+  | 'wikitext'
+  | 'revisions'
+  | 'bucket'
+  | 'expandtemplates';
 
 /** Which API call a request is, by its parameters. */
 function callOf(params: URLSearchParams): Call | null {
   if (params.get('list') === 'search') return 'search';
-  if (params.get('action') === 'parse') return params.has('section') ? 'section' : 'sections';
+  if (params.get('action') === 'parse') {
+    if (params.has('section')) return 'section';
+    return params.get('prop')?.includes('wikitext') ? 'wikitext' : 'sections';
+  }
   if (params.get('prop') === 'revisions') return 'revisions';
   const action = params.get('action');
   return action === 'bucket' || action === 'expandtemplates' ? action : null;
@@ -73,6 +85,23 @@ describe('wikiUrl', () => {
     expect(wikiUrl('Money making guide/Killing Vorkath')).toBe(
       'https://oldschool.runescape.wiki/w/Money_making_guide/Killing_Vorkath',
     );
+  });
+});
+
+describe('getPageWikitext', () => {
+  it("gives a page's wikitext, kept until the page's revision changes", async () => {
+    const page = (wikitext: string) =>
+      JSON.stringify({ parse: { title: 'Ardougne Diary', revid: 7, wikitext } });
+    const { ctx, calls, later } = await setup({
+      wikitext: page('{| data-diary-tier="Easy"'),
+      revisions: revisions(7, ['Ardougne Diary']),
+    });
+    expect(await getPageWikitext(ctx, 'Ardougne_Diary')).toBe('{| data-diary-tier="Easy"');
+    expect(await getPageWikitext(ctx, 'Ardougne Diary')).toBe('{| data-diary-tier="Easy"');
+    // A day on, the revision is checked and, unchanged, nothing is downloaded again.
+    later(DAY_MS);
+    await getPageWikitext(ctx, 'Ardougne Diary');
+    expect(calls()).toEqual(['wikitext', 'revisions']);
   });
 });
 
@@ -451,6 +480,20 @@ describe('bucketQuery and expandTemplates', () => {
     later(DAY_MS - 1);
     await bucketQuery(ctx, QUERY);
     expect(calls()).toEqual(['bucket']);
+  });
+
+  it('writes a Bucket query, its strings quoted with apostrophes and backslashes escaped', () => {
+    expect(
+      bucketSelect('dropsline', ['page_name', 'drop_json'], {
+        where: ['item_name', "Karil's coif"],
+        limit: 5000,
+      }),
+    ).toBe(
+      String.raw`bucket('dropsline').select('page_name','drop_json').where('item_name','Karil\'s coif').limit(5000).run()`,
+    );
+    expect(bucketSelect('quest', [String.raw`a\b`])).toBe(
+      String.raw`bucket('quest').select('a\\b').run()`,
+    );
   });
 
   it('expands templates', async () => {

@@ -6,6 +6,11 @@ export function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Text with each run of whitespace as one space, and none at the ends. */
+export function squeeze(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 /** A count as the interface writes it: 2,278. */
 export function formatNumber(value: number): string {
   return numbers.format(value);

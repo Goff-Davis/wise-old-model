@@ -1,4 +1,4 @@
-import { capitalize, DAY_MS } from '@wom/shared';
+import { capitalize, DAY_MS, squeeze } from '@wom/shared';
 import type { Kysely } from 'kysely';
 import { HTMLElement, type Node, parse, TextNode } from 'node-html-parser';
 import { z } from 'zod';
@@ -57,11 +57,8 @@ const TRUNCATED = '… (truncated; ask for a narrower section)';
 // The API takes up to 50 titles per query.
 const TITLES_PER_REQUEST = 50;
 
-/** Text with each run of whitespace as one space, and none at the ends. */
-const squeeze = (text: string) => text.replace(/\s+/g, ' ').trim();
-
 /** A title as the wiki writes it: spaces rather than underscores, and a capital first letter. */
-function pageTitle(title: string): string {
+export function pageTitle(title: string): string {
   return capitalize(squeeze(title.replaceAll('_', ' ')));
 }
 
@@ -71,6 +68,33 @@ export function wikiUrl(title: string, section?: string): string {
     encodeURIComponent(text.replaceAll(' ', '_')).replaceAll('%2F', '/').replaceAll('%3A', ':');
   const anchor = section ? `#${part(section)}` : '';
   return `https://oldschool.runescape.wiki/w/${part(pageTitle(title))}${anchor}`;
+}
+
+/** A link's page, as the wiki names it: `[[Dragon_Slayer_I#Rewards|…]]` is Dragon Slayer I. */
+export const linkPage = (target: string) => target.split('#')[0].replaceAll('_', ' ').trim();
+
+/** Whether a link's target is a file (an icon), which is no page. */
+export const isFileLink = (target: string) => /^\s*(file|image):/i.test(target);
+
+// A link, `[[Target#Section|Text]]`, its target in the first group.
+const LINK_PATTERN = String.raw`\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]`;
+
+/** Every link in a piece of wikitext, for `matchAll` and `replace`. */
+export const LINK = new RegExp(LINK_PATTERN, 'g');
+
+const LONE_LINK = new RegExp(`^${LINK_PATTERN}\\s*$`);
+
+/** The pages a piece of wikitext links to, in order, leaving out files. */
+export const linkPages = (text: string) =>
+  [...text.matchAll(LINK)]
+    .map((link) => link[1])
+    .filter((target) => !isFileLink(target))
+    .map(linkPage);
+
+/** The page a line links to when it's that link (to a page, not a file) and nothing else. */
+export function loneLink(text: string): string | undefined {
+  const target = LONE_LINK.exec(text)?.[1];
+  return target !== undefined && !isFileLink(target) ? linkPage(target) : undefined;
 }
 
 /** The API's own refusal (`{ error: { code, info } }`), or Bucket's (`{ error: "…" }`). */
@@ -100,8 +124,8 @@ async function callApi<T>(
   return (await fetchChecked(ctx.req, url, { parse: parseAnswer })).value;
 }
 
-/** HTML (a search snippet, a section's name) as plain text. */
-function plainText(html: string): string {
+/** HTML (a search snippet, a section's name) as plain text, its entities written out. */
+export function plainText(html: string): string {
   return squeeze(parse(html).text);
 }
 
@@ -308,7 +332,7 @@ async function stillCurrent(ctx: WikiCtx, saved: CacheRow, now: Date): Promise<b
 }
 
 /**
- * Part of a page (its section list, or one section's HTML) from the cache, downloaded when it
+ * Part of a page (its section list, a section's HTML, its wikitext) from the cache, downloaded when it
  * isn't saved or is known to be out of date. Once a saved copy is a day old, the page's current
  * revision is checked, and the page is downloaded again only if it changed. While the wiki can't
  * be reached, the saved copy is served however old, with the failure. A fetch already under way
@@ -377,6 +401,22 @@ export async function getSections(
     index: section.index,
     line: plainText(section.line),
   }));
+}
+
+const WikitextSchema = z.object({ parse: z.object({ revid: z.number(), wikitext: z.string() }) });
+
+/** A page's wikitext, kept until the page's revision changes (checked once a day). */
+export async function getPageWikitext(ctx: WikiCtx, title: string): Promise<string> {
+  const page = pageTitle(title);
+  const entry = await pagePart(ctx, page, 'wikitext', async () => {
+    const answer = await callApi(
+      ctx,
+      { action: 'parse', page, prop: 'wikitext|revid', redirects: '1' },
+      WikitextSchema,
+    );
+    return { revision: answer.parse.revid, value: answer.parse.wikitext };
+  });
+  return noted(ctx, PAGE_KIND, entry);
 }
 
 const SectionTextSchema = z.object({
@@ -497,6 +537,23 @@ export async function bucketQuery<T>(ctx: WikiCtx, query: string): Promise<T[]> 
     const answer = await callApi(ctx, { action: 'bucket', query }, BucketSchema);
     return answer.bucket as T[];
   });
+}
+
+/** Text as a string in a Bucket query: `'Karil\'s coif'`. */
+const bucketString = (text: string) => `'${text.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`;
+
+/**
+ * A Bucket query, its names and values quoted:
+ * `bucket('dropsline').select('page_name','drop_json').where('item_name','Karil\'s coif').limit(5000).run()`.
+ */
+export function bucketSelect(
+  table: string,
+  fields: string[],
+  opts: { where?: [field: string, value: string]; limit?: number } = {},
+): string {
+  const where = opts.where ? `.where(${opts.where.map(bucketString).join(',')})` : '';
+  const limit = opts.limit ? `.limit(${opts.limit})` : '';
+  return `bucket(${bucketString(table)}).select(${fields.map(bucketString).join(',')})${where}${limit}.run()`;
 }
 
 const ExpandSchema = z.object({ expandtemplates: z.object({ wikitext: z.string() }) });

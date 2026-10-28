@@ -52,6 +52,15 @@ function bare(name: string): string {
     .replace(/mode$/, '');
 }
 
+/** Wise Old Man's names for skills, where they're more than the hiscores' in lowercase. */
+const WOM_SKILLS: Record<string, string> = { runecraft: 'runecrafting' };
+
+/** Wise Old Man's metric for a hiscores skill: its name in lowercase (Runecraft is `runecrafting`). */
+export function womSkill(hiscoresName: string): string {
+  const name = hiscoresName.toLowerCase();
+  return WOM_SKILLS[name] ?? name;
+}
+
 /**
  * Whether a hiscores activity is a boss: the hiscores mix bosses with clues, minigames and
  * points, and Wise Old Man's boss metrics tell them apart ("K'ril Tsutsaroth" is

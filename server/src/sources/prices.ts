@@ -75,6 +75,16 @@ type Price = {
   lowTime: string | null;
 };
 
+/**
+ * The price an item's latest trades give it: the instant-buy price, else the instant-sell price,
+ * with when that trade happened; null when it's had neither.
+ */
+export function latestTrade(trade: Price | undefined): { price: number; at: string | null } | null {
+  if (trade && trade.high !== null) return { price: trade.high, at: trade.highTime };
+  if (trade && trade.low !== null) return { price: trade.low, at: trade.lowTime };
+  return null;
+}
+
 // The API gives times in seconds since 1970.
 const isoTime = (seconds: number | null) =>
   seconds === null ? null : new Date(seconds * 1000).toISOString();

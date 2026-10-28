@@ -16,6 +16,7 @@ import { listenLocal } from '../src/http/listen.ts';
 import { NotFoundError, type Requester, SourceError } from '../src/http/requester.ts';
 import type { AccountDeps } from '../src/services/accounts.ts';
 import { createFreshnessMemory } from '../src/services/freshness.ts';
+import type { WikiCtx } from '../src/sources/wiki.ts';
 
 /** A file from `server/test/fixtures` (say `wom/player-phil03.json`), as text. */
 export function fixture(file: string): string {
@@ -160,6 +161,24 @@ export async function testDb(
   const db = await openDatabase(file, { backupDir: null, now: () => new Date(), ...opts });
   onTestFinished(() => db.destroy());
   return db;
+}
+
+/**
+ * A wiki context whose requests `answer` answers, its clock at 2026-10-28 12:00 UTC: `urls` lists
+ * the requests, and `later` moves the clock on.
+ */
+export async function testWikiCtx(answer: (url: URL) => FakeAnswer | Promise<FakeAnswer>) {
+  const db = await testDb();
+  let now = new Date('2026-10-28T12:00:00.000Z');
+  const fake = fakeRequester(({ url }) => answer(new URL(url)));
+  const ctx: WikiCtx = { req: fake.req, db, now: () => now };
+  return {
+    ctx,
+    urls: fake.urls,
+    later: (ms: number) => {
+      now = new Date(now.getTime() + ms);
+    },
+  };
 }
 
 export type CallResult = {

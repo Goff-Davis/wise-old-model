@@ -4,7 +4,7 @@ import { createItemIndex } from '../items/itemIndex.ts';
 import { orSourceFailure } from '../sources/answers.ts';
 import { type CeContainer, CeContainerSchema } from '../sources/characterExport.schemas.ts';
 import { exportFiles, readExportFile } from '../sources/characterExport.ts';
-import { getLatestPrices, getMapping, LATEST_PRICES_KIND } from '../sources/prices.ts';
+import { getLatestPrices, getMapping, LATEST_PRICES_KIND, latestTrade } from '../sources/prices.ts';
 import type { CacheRead } from '../sources/wiki.ts';
 import { type AccountDeps, toAccount, wikiCtx } from './accounts.ts';
 
@@ -46,10 +46,8 @@ async function loadPrices(deps: AccountDeps, now: Date): Promise<Prices> {
   if (!loaded.value) return { ...NO_PRICES, error: loaded.error };
   const [mapping, latest] = loaded.value;
   const values = new Map(mapping.map((item) => [item.id, item.value]));
-  const priceOf: PriceOf = (id) => {
-    const trade = latest.get(id);
-    return fixedPrice(id) ?? trade?.high ?? trade?.low ?? values.get(id) ?? null;
-  };
+  const priceOf: PriceOf = (id) =>
+    fixedPrice(id) ?? latestTrade(latest.get(id))?.price ?? values.get(id) ?? null;
   // The latest prices are what the values rest on, so their age is the one that counts.
   const read = reads.get(LATEST_PRICES_KIND);
   return { priceOf, known: true, asOf: read?.fetchedAt ?? null, error: read?.error ?? null };

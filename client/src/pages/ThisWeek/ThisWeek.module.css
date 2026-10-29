@@ -1,0 +1,129 @@
+.page {
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px 28px;
+}
+
+.page h2 {
+  margin: 0 0 10px;
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+/* The period chips: the picked one raised. */
+.periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.periods button {
+  padding: 4px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+}
+
+.periods button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--raised);
+  color: var(--text);
+}
+
+.custom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.custom label {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+}
+
+.gains {
+  display: grid;
+  gap: 18px;
+}
+
+.gains[aria-busy="true"] {
+  opacity: 0.6;
+}
+
+.summary {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.stale {
+  margin: 0;
+  color: var(--in-progress);
+}
+
+.section {
+  display: grid;
+  gap: 8px;
+  max-width: 34rem;
+}
+
+.section h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  min-height: 34px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.rows li:last-child {
+  border-bottom: 0;
+}
+
+.rows li > span:nth-of-type(2) {
+  flex: 1;
+}
+
+.count,
+.level,
+.levelUp,
+.date {
+  font-variant-numeric: tabular-nums;
+}
+
+.level,
+.date,
+.kind {
+  color: var(--muted);
+}
+
+.levelUp {
+  color: var(--done);
+}
+
+.kind {
+  min-width: 9.5rem;
+}

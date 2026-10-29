@@ -2,9 +2,12 @@ import {
   AccountChangesSchema,
   AccountNameSchema,
   BankSearchSchema,
+  type FileCheck,
+  GainsRangeSchema,
   NewAccountSchema,
 } from '@wom/shared';
 import { Router } from 'express';
+import { syncGoalCompletion } from '../goals/goalsService.ts';
 import { parseInput } from '../http/errors.ts';
 import {
   type AccountDeps,
@@ -19,6 +22,7 @@ import {
 } from '../services/accounts.ts';
 import { getBankView } from '../services/bank.ts';
 import { getCollectionLogView } from '../services/collectionLog.ts';
+import { buildGains } from '../services/gains.ts';
 import { getOverview } from '../services/overview.ts';
 
 export function accountRoutes(deps: AccountDeps): Router {
@@ -64,13 +68,28 @@ export function accountRoutes(deps: AccountDeps): Router {
     res.json(await getCollectionLogView(deps, row, new Date()));
   });
 
+  router.get('/accounts/:id/gains', async (req, res) => {
+    const row = await findAccount(db, req.params.id);
+    const range = parseInput(GainsRangeSchema, req.query);
+    res.json(await buildGains(deps, row, range, new Date()));
+  });
+
+  // Goals the new data shows reached are marked done, when a file changed.
   router.post('/accounts/:id/files/check', async (req, res) => {
-    res.json(await checkAccountFiles(deps, await findAccount(db, req.params.id)));
+    const row = await findAccount(db, req.params.id);
+    const found = await checkAccountFiles(deps, row);
+    const completed =
+      found.changed.length > 0 ? await syncGoalCompletion(deps, row, new Date()) : [];
+    const answer: FileCheck = { ...found, goalsCompleted: completed.length };
+    res.json(answer);
   });
 
   router.post('/accounts/:id/refresh', async (req, res) => {
     const row = await findAccount(db, req.params.id);
-    res.json(await refreshAccount(deps, row, new Date()));
+    const now = new Date();
+    const answer = await refreshAccount(deps, row, now);
+    await syncGoalCompletion(deps, row, now);
+    res.json(answer);
   });
 
   return router;

@@ -1,3 +1,4 @@
+import { DAY_MS } from '@wom/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
   type FakeAnswer,
@@ -5,6 +6,7 @@ import {
   notFound,
   outage,
   fixture as readFixture,
+  testDb,
 } from '../../test/helpers.ts';
 import { SourceError } from '../http/requester.ts';
 import {
@@ -12,6 +14,7 @@ import {
   efficiencyTypeFor,
   fetchPlayerText,
   getAchievements,
+  getCachedRates,
   getEfficiencyRates,
   getGains,
   getNameChanges,
@@ -319,6 +322,28 @@ describe('efficiency', () => {
       rate: 789944,
       realRate: 302000,
     });
+  });
+
+  it("keeps each type's rates a day, as they change only with Wise Old Man's releases", async () => {
+    const db = await testDb();
+    const { req, urls } = answering({
+      '/efficiency/rates': fixture('efficiency-rates-main.json'),
+    });
+    const now = new Date('2026-10-28T12:00:00.000Z');
+    const later = (ms: number) => new Date(now.getTime() + ms);
+    const rates = await getCachedRates(db, req, 'main', now);
+    expect(rates.value.find((rate) => rate.skill === 'mining')?.methods[0]?.description).toBe(
+      'Quests',
+    );
+    await getCachedRates(db, req, 'main', later(DAY_MS - 1));
+    expect(urls).toEqual([`${BASE}/efficiency/rates?metric=ehp&type=main`]);
+    await getCachedRates(db, req, 'ironman', later(DAY_MS - 1));
+    await getCachedRates(db, req, 'main', later(DAY_MS));
+    expect(urls).toEqual([
+      `${BASE}/efficiency/rates?metric=ehp&type=main`,
+      `${BASE}/efficiency/rates?metric=ehp&type=ironman`,
+      `${BASE}/efficiency/rates?metric=ehp&type=main`,
+    ]);
   });
 
   it('picks the rates that fit the account type', () => {

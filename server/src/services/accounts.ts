@@ -6,7 +6,6 @@ import {
   AccountTypeSchema,
   type AddedAccount,
   effectiveTimeZone,
-  type FileCheck,
   type Freshness,
   type NewAccount,
   nameKey,
@@ -18,7 +17,11 @@ import { HttpError } from '../http/errors.ts';
 import { type Requester, SourceError } from '../http/requester.ts';
 import { getSettings } from '../settings/settingsRepo.ts';
 import type { Checked } from '../sources/answers.ts';
-import { checkFiles, exportFolderStatus } from '../sources/characterExport.ts';
+import {
+  checkFiles,
+  exportFolderStatus,
+  type FileCheckResult,
+} from '../sources/characterExport.ts';
 import { fetchHiscores, fetchHiscoresText, hiscoresLevels } from '../sources/hiscores.ts';
 import { comparableLog, fetchCollectionLogText, getSyncStatus } from '../sources/temple.ts';
 import type { WikiCtx } from '../sources/wiki.ts';
@@ -39,6 +42,7 @@ import {
   type Fetchers,
   type FreshnessMemory,
   forgetFailures,
+  forgetRemembered,
   ONLINE_KINDS,
   type OnlineKind,
   REFRESH_FLOOR_MS,
@@ -294,12 +298,15 @@ export function wikiCtx(deps: AccountDeps, now: Date): WikiCtx {
 }
 
 /** The zone day-based history is kept in: the one the settings say. */
-async function settingsTimeZone(db: Kysely<DB>): Promise<string> {
+export async function settingsTimeZone(db: Kysely<DB>): Promise<string> {
   return effectiveTimeZone(await getSettings(db));
 }
 
 /** Reads the account's Character Export files that changed since they were last read. */
-export async function checkAccountFiles(deps: AccountDeps, row: AccountRow): Promise<FileCheck> {
+export async function checkAccountFiles(
+  deps: AccountDeps,
+  row: AccountRow,
+): Promise<FileCheckResult> {
   const timeZone = await settingsTimeZone(deps.db);
   return checkFiles({ db: deps.db, runeliteDir: deps.runeliteDir, timeZone }, row);
 }
@@ -330,6 +337,9 @@ export async function refreshAccount(
   row: AccountRow,
   now: Date,
 ): Promise<RefreshAnswer> {
+  // Its gains for Today, 30 days and ranges picked are asked for again when next shown,
+  // unless fetched (or failed) under a minute ago.
+  forgetRemembered(deps.memory, row.id, new Date(now.getTime() - REFRESH_FLOOR_MS));
   const [freshness] = await Promise.all([
     freshenAccount(deps, row, ONLINE_KINDS, { force: true, now }),
     checkAccountFiles(deps, row),

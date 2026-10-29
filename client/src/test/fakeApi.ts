@@ -5,6 +5,10 @@ import {
   type BankView,
   type CollectionLogView,
   defaultSettings,
+  type Gains,
+  type GoalOptions,
+  type GoalsView,
+  type GoalWithProgress,
   type Overview,
   type Settings,
 } from '@wom/shared';
@@ -53,7 +57,7 @@ export function fakeApi(
         return answer instanceof Response ? answer : Response.json(answer);
       }
       if (method === 'POST' && FILE_CHECK.test(url.pathname)) {
-        return Response.json({ changed: [], missing: [], errors: [] });
+        return Response.json({ changed: [], missing: [], errors: [], goalsCompleted: 0 });
       }
       if (url.pathname !== '/api/settings' || (method !== 'GET' && method !== 'PATCH')) {
         unexpected.push(`${method} ${String(input)}`);
@@ -170,6 +174,39 @@ const logItem = (id: number, name: string, count = 0, date: string | null = null
 });
 
 /**
+ * Lumby Pete's last 7 days, plus `changes`: XP in two skills (Fletching levelling up), Vorkath
+ * and hard clues, a quest and an achievement, and one new collection log item, all just
+ * fetched.
+ */
+export function testGains(changes: Partial<Gains> = {}): Gains {
+  const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  return {
+    start: '2026-10-21T12:00:00.000Z',
+    end: '2026-10-28T12:00:00.000Z',
+    summary: '21.85M XP, 52 boss kills and 1 new collection log item in the last 7 days.',
+    skills: [
+      { name: 'Firemaking', xpGained: 19_832_419, levelFrom: 99, levelTo: 99 },
+      { name: 'Fletching', xpGained: 1_216_938, levelFrom: 70, levelTo: 79 },
+    ],
+    kills: [
+      { name: 'Vorkath', gained: 52, icon: 'Vorkath_icon.png' },
+      { name: 'Clue Scrolls (hard)', gained: 3, icon: 'Clue_scroll_(hard).png' },
+    ],
+    progress: [
+      { kind: 'quest', title: 'Completed Monkey Madness II', at: '2026-10-26T18:00:00.000Z' },
+      { kind: 'achievement', title: '99 Slayer', at: '2026-10-25T18:00:00.000Z' },
+    ],
+    newCollectionLogItems: [{ id: 22106, name: 'Jar of Decay', at: '2026-10-24T20:18:50.000Z' }],
+    gainsSource: { fetchedAt, error: null, notFound: false },
+    freshness: [
+      { kind: 'wom_achievements', fetchedAt, stale: false, error: null, notFound: false },
+      { kind: 'temple_clog', fetchedAt, stale: false, error: null, notFound: false },
+    ],
+    ...changes,
+  };
+}
+
+/**
  * Lumby Pete's collection log on Temple, synced two hours ago, plus `changes`: Vorkath (4 of
  * 6, as in the Temple fixture) and Giant Mole (complete) in Bosses, Chambers of Xeric in Raids,
  * Castle Wars (complete, one item without a count) in Minigames.
@@ -233,6 +270,151 @@ export function testCollectionLogView(changes: Partial<CollectionLogView> = {}):
       error: null,
       notFound: false,
     },
+    ...changes,
+  };
+}
+
+/** A goal of Lumby Pete's: active, made a day ago, at `position`, plus `changes`. */
+export function testGoal(
+  id: number,
+  title: string,
+  target: GoalWithProgress['target'],
+  changes: Partial<GoalWithProgress> = {},
+): GoalWithProgress {
+  return {
+    id,
+    title,
+    target,
+    status: 'active',
+    position: id - 1,
+    createdAt: '2026-10-27T12:00:00.000Z',
+    completedAt: null,
+    progress: { done: false, fraction: null, detail: '', stillNeeded: [] },
+    ...changes,
+  };
+}
+
+/**
+ * Lumby Pete's goals, as in the approved mockup: five active ones in this order (Dragon Slayer
+ * II, 75 Magic, Vorki, Elite combat achievements, a custom one), two done, one dropped.
+ */
+export function testGoalsView(changes: Partial<GoalsView> = {}): GoalsView {
+  const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const progress = (more: Partial<NonNullable<GoalWithProgress['progress']>>) => ({
+    done: false,
+    fraction: null,
+    detail: '',
+    stillNeeded: [],
+    ...more,
+  });
+  return {
+    goals: [
+      testGoal(
+        1,
+        'Complete Dragon Slayer II',
+        { kind: 'quest', quest: 'Dragon Slayer II' },
+        {
+          progress: progress({
+            detail: 'Not started. 1 other requirement to check on the wiki.',
+            stillNeeded: [
+              { label: '75 Magic (you have 71)', status: 'red' },
+              { label: 'Dream Mentor', status: 'yellow' },
+            ],
+          }),
+        },
+      ),
+      testGoal(
+        2,
+        'Reach 75 Magic',
+        { kind: 'skill', skill: 'Magic', level: 75, startXp: 814_445 },
+        {
+          progress: progress({
+            fraction: 0.0898,
+            detail: 'Level 71. 360k XP to go, about 6 hours at efficient rates.',
+          }),
+        },
+      ),
+      testGoal(
+        3,
+        'Get Vorki',
+        { kind: 'collection_log', item: 'Vorki' },
+        {
+          progress: progress({ detail: 'Not yet. 412 Vorkath kills so far.' }),
+        },
+      ),
+      testGoal(
+        4,
+        'Elite combat achievements',
+        { kind: 'combat_achievement', tier: 'Elite' },
+        {
+          progress: progress({ fraction: 0.73, detail: '73% of the points needed.' }),
+        },
+      ),
+      testGoal(
+        5,
+        'Clear out the bank',
+        { kind: 'custom' },
+        {
+          progress: progress({ detail: 'Tick it off yourself.' }),
+        },
+      ),
+      testGoal(
+        6,
+        'Reach 87 Slayer',
+        { kind: 'skill', skill: 'Slayer', level: 87, startXp: 0 },
+        {
+          status: 'done',
+          completedAt: '2026-10-26T18:00:00.000Z',
+          progress: null,
+        },
+      ),
+      testGoal(
+        7,
+        'Complete Monkey Madness II',
+        { kind: 'quest', quest: 'Monkey Madness II' },
+        {
+          status: 'done',
+          completedAt: '2026-10-23T18:00:00.000Z',
+          progress: null,
+        },
+      ),
+      testGoal(
+        8,
+        'Kill the Corrupted Gauntlet',
+        { kind: 'custom' },
+        {
+          status: 'dropped',
+          progress: null,
+        },
+      ),
+    ],
+    freshness: [
+      { kind: 'hiscores', fetchedAt, stale: false, error: null, notFound: false },
+      { kind: 'temple_clog', fetchedAt, stale: false, error: null, notFound: false },
+    ],
+    ...changes,
+  };
+}
+
+/** What the Add goal dialog offers Lumby Pete, plus `changes`: a few of each, nothing missing. */
+export function testGoalOptions(changes: Partial<GoalOptions> = {}): GoalOptions {
+  const list = <T>(options: T[]) => ({ options, missing: null });
+  return {
+    skills: list(['Attack', 'Hitpoints', 'Agility', 'Magic', 'Slayer']),
+    quests: list(['Dragon Slayer II', 'Dream Mentor', 'Monkey Madness II']),
+    bosses: list(['Chambers of Xeric', 'Vorkath', 'Zulrah']),
+    tasks: list([
+      { name: 'Barrows Novice', tier: 'Easy' as const },
+      { name: 'Noxious Foe', tier: 'Easy' as const },
+    ]),
+    logItems: list([
+      { name: 'Draconic visage', entry: 'Vorkath' },
+      { name: 'Vorki', entry: 'Vorkath' },
+    ]),
+    logEntries: list([
+      { name: 'Chambers of Xeric', obtained: 0, total: 23 },
+      { name: 'Vorkath', obtained: 4, total: 6 },
+    ]),
     ...changes,
   };
 }

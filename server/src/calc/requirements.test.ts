@@ -1,19 +1,20 @@
-import { DAY_MS } from '@wom/shared';
+import { DAY_MS, DIARY_AREAS } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { fixture, testWikiCtx } from '../../test/helpers.ts';
+import { fakeRequester, fixture, testWikiCtx } from '../../test/helpers.ts';
 import {
   COMBAT_LEVEL,
   checkDiaryTier,
   checkQuest,
-  DIARY_AREAS,
   type DiaryTask,
   findQuestReqs,
   loadAllQuestRequirements,
   loadDiaryPage,
   loadDiaryPages,
+  loadQuestPoints,
   parseDiaryPage,
   parseQuestRequirements,
   type QuestReqs,
+  questPointsOf,
 } from './requirements.ts';
 
 /** Dragon Slayer II's requirements as the wiki's Quest bucket gives them (captured in Task 15). */
@@ -47,6 +48,9 @@ const levelsWith = (levels: Record<string, number> = {}): Record<string, number>
   [COMBAT_LEVEL]: 126,
   ...levels,
 });
+
+/** A requester answering the wiki's quest list (the fixture). */
+const questListReq = () => fakeRequester(() => fixture('wiki/parse-quests-list.json')).req;
 
 const span = (skill: string, level: number) =>
   `*<span class="scp" data-skill="${skill}" data-level="${level}">${level} [[${skill}]]</span>`;
@@ -434,6 +438,13 @@ describe('checkQuest', () => {
       'Client of Kourend',
     ]);
     expect(check.quests[1]).toMatchObject({ state: 'in_progress', met: false });
+  });
+
+  it("lists the quest points as unchecked when the account's aren't known", () => {
+    const check = checkQuest(ds2(), { ...ds2Account({}), questPoints: null });
+    expect(check.met).toBe(true);
+    expect(check.questPoints).toBeNull();
+    expect(check.unchecked).toContain("200 quest points (the account's quest points aren't known)");
   });
 
   it("is met when everything checkable is, and says what it couldn't check", () => {
@@ -963,6 +974,19 @@ describe('loadAllQuestRequirements', () => {
     );
   });
 
+  it('parses each copy kept once', async () => {
+    const { ctx, later } = await testWikiCtx(() => JSON.stringify({ bucket: SAMPLE }));
+    const first = await loadAllQuestRequirements(ctx);
+    expect(await loadAllQuestRequirements(ctx)).toBe(first);
+    // A day on, the query is asked again, and its answer parsed again.
+    later(DAY_MS);
+    const next = await loadAllQuestRequirements(ctx);
+    expect(next).not.toBe(first);
+    expect(next).toEqual(first);
+    const points = await loadQuestPoints({ ...ctx, req: questListReq() });
+    expect(await loadQuestPoints({ ...ctx, req: questListReq() })).toBe(points);
+  });
+
   it('finds a quest by its name as the account or the AI writes it', async () => {
     const { ctx } = await testWikiCtx(() => JSON.stringify({ bucket: SAMPLE }));
     const all = await loadAllQuestRequirements(ctx);
@@ -973,6 +997,76 @@ describe('loadAllQuestRequirements', () => {
     const part = 'Recipe for Disaster/Freeing Pirate Pete';
     const parts = new Map([[part, parseQuestRequirements(part, '')]]);
     expect(findQuestReqs(parts, 'Recipe for Disaster - Pirate Pete')?.quest).toBe(part);
+  });
+});
+
+describe('loadQuestPoints', () => {
+  it("reads each quest's points from the wiki's quest list, kept a day, a quest made of parts by its parts", async () => {
+    const { ctx, urls } = await testWikiCtx(() => fixture('wiki/parse-quests-list.json'));
+    const points = await loadQuestPoints(ctx);
+    expect(Object.fromEntries(points)).toEqual({
+      'Dragon Slayer I': 2,
+      "Cook's Assistant": 1,
+      'Dream Mentor': 2,
+      'Monkey Madness II': 4,
+      'Dragon Slayer II': 5,
+      "Recipe for Disaster/Another Cook's Quest": 1,
+      'Recipe for Disaster/Freeing Pirate Pete': 1,
+    });
+    await loadQuestPoints(ctx);
+    expect(urls).toHaveLength(1);
+    expect(new URL(urls[0] ?? '').searchParams.get('page')).toBe('Quests/List');
+  });
+
+  it('leaves out a row whose points cell is no number', async () => {
+    const header =
+      '<tr><th>Name</th><th><span class="scp" data-skill="Quest points"></span></th></tr>';
+    const rows =
+      '<tr data-rowid="Cook&#39;s Assistant"><td>Cook\'s Assistant</td><td>1</td></tr>' +
+      '<tr data-rowid="Future Quest"><td>Future Quest</td><td>TBA</td></tr>';
+    const page = JSON.stringify({
+      parse: { title: 'Quests/List', text: `<table>${header}${rows}</table>` },
+    });
+    const { ctx } = await testWikiCtx(() => page);
+    expect(Object.fromEntries(await loadQuestPoints(ctx))).toEqual({ "Cook's Assistant": 1 });
+  });
+
+  it("is a SourceError when the list's quest points can't be read", async () => {
+    const page = JSON.stringify({
+      parse: { title: 'Quests/List', text: '<table><tr><th>Name</th></tr></table>' },
+    });
+    const { ctx } = await testWikiCtx(() => page);
+    await expect(loadQuestPoints(ctx)).rejects.toMatchObject({
+      name: 'SourceError',
+      message: "OSRS Wiki: the quest points couldn't be read from Quests/List",
+    });
+  });
+});
+
+describe('questPointsOf', () => {
+  it('adds up the points of the quests finished, Recipe for Disaster by its parts', () => {
+    const points = new Map([
+      ['Dragon Slayer I', 2],
+      ["Cook's Assistant", 1],
+      ['Dragon Slayer II', 5],
+      ['Recipe for Disaster/Freeing Pirate Pete', 1],
+      ["Recipe for Disaster/Another Cook's Quest", 1],
+    ]);
+    expect(
+      questPointsOf(
+        {
+          'Dragon Slayer I': 'FINISHED',
+          'Cook’s Assistant': 'FINISHED',
+          'Dragon Slayer II': 'IN_PROGRESS',
+          'Recipe for Disaster': 'FINISHED',
+          'Recipe for Disaster - Pirate Pete': 'FINISHED',
+          "Recipe for Disaster - Another Cook's Quest": 'NOT_STARTED',
+          // A miniquest has none.
+          'Barbarian Training': 'FINISHED',
+        },
+        points,
+      ),
+    ).toBe(4);
   });
 });
 

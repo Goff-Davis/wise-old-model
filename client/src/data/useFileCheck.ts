@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { checkAccountFiles, reloadPagesReading } from '../api/accounts.ts';
+import { reloadGoals } from '../api/goals.ts';
 import { useSettings } from '../settings/useSettings.ts';
 
 /**
@@ -25,6 +26,8 @@ export function useFileCheck(accountId: string | null): void {
       try {
         const found = await checkAccountFiles(accountId);
         await reloadPagesReading(queryClient, accountId, found.changed);
+        // Goals the new data completed show on the Goals page and in This week.
+        if (found.goalsCompleted > 0) await reloadGoals(queryClient, accountId);
       } catch {
         // The next check tries again; a file that can't be read shows with the data it holds.
       } finally {

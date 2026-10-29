@@ -1,5 +1,9 @@
+import type { SourceKind } from '@wom/shared';
+import type { Kysely } from 'kysely';
 import { z } from 'zod';
+import type { DB } from '../db/schema.ts';
 import { NotFoundError, type Requester, SourceError, siteOf } from '../http/requester.ts';
+import { getSource } from '../store/sourceState.ts';
 
 /** An answer exactly as received, which is what gets stored, and what it parses to. */
 export type Checked<T> = { text: string; value: T };
@@ -65,6 +69,20 @@ export async function orSourceFailure<T, F>(
     if (!(error instanceof SourceError)) throw error;
     return { value: fallback, error: error.message };
   }
+}
+
+/**
+ * An account's saved data of a kind read back with its source's parser; null when there's none
+ * or it no longer reads.
+ */
+export async function readSavedSource<T>(
+  db: Kysely<DB>,
+  accountId: number,
+  kind: SourceKind,
+  parse: (json: unknown) => T,
+): Promise<T | null> {
+  const saved = await getSource(db, accountId, kind);
+  return saved ? readSaved(saved.data, parse) : null;
 }
 
 /** The value of JSON held in a field of an answer, or null when the field holds no JSON. */

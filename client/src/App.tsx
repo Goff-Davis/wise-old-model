@@ -23,9 +23,11 @@ import { useFileCheck } from './data/useFileCheck.ts';
 import { Layout } from './layout/Layout.tsx';
 import { BankGear } from './pages/BankGear/BankGear.tsx';
 import { CollectionLog } from './pages/CollectionLog/CollectionLog.tsx';
+import { Goals } from './pages/Goals/Goals.tsx';
 import { Overview } from './pages/Overview/Overview.tsx';
 import { PAGES, type PageId, pagePath } from './pages/pageList.ts';
 import { Settings } from './pages/Settings/Settings.tsx';
+import { ThisWeek } from './pages/ThisWeek/ThisWeek.tsx';
 import { useApplySettings } from './settings/useSettings.ts';
 
 // A placeholder until the chat arrives in a later task.
@@ -62,9 +64,11 @@ function Home(): JSX.Element {
   return <Layout chat={<ChatPlaceholder />} page={page} menu={<Menu />} />;
 }
 
-/** The pages built so far; the others show their title until their tasks arrive. */
-const BUILT: Partial<Record<PageId, () => JSX.Element>> = {
+/** Each page beside the chat, by its URL id. */
+const PAGE_VIEWS: Record<PageId, () => JSX.Element> = {
   overview: Overview,
+  'this-week': ThisWeek,
+  goals: Goals,
   bank: BankGear,
   'collection-log': CollectionLog,
   settings: Settings,
@@ -83,16 +87,8 @@ function AccountPage(): JSX.Element {
   // The page waits for the account list, so it never asks about an account that isn't there. A
   // failed reload keeps what was loaded (the menu says it failed). Each account gets a fresh
   // page, so nothing shown for one (a rename suggestion, say) carries over to the next.
-  const Page = BUILT[current.id];
-  const content =
-    accountsNotReady(accounts) ??
-    (Page ? (
-      <Page key={accountId} />
-    ) : (
-      <div className={styles.placeholder}>
-        <h2>{current.label}</h2>
-      </div>
-    ));
+  const Page = PAGE_VIEWS[current.id];
+  const content = accountsNotReady(accounts) ?? <Page key={accountId} />;
   return (
     <Layout
       chat={<ChatPlaceholder />}

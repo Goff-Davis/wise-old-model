@@ -22,6 +22,10 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   hardcore_group: 'Hardcore group ironman',
 };
 
+/** How to get Wise Old Man to track a name. */
+export const WOM_TRACKING_STEPS =
+  'Look the name up on wiseoldman.net to start tracking it, then Refresh.';
+
 /** Whether accounts of this type have a bank: ultimate ironmen can't use one. */
 export const hasBank = (type: AccountType): boolean => type !== 'ultimate';
 
@@ -144,12 +148,14 @@ export type RefreshAnswer = z.infer<typeof RefreshAnswerSchema>;
 
 /**
  * What a check of an account's Character Export files found: the kinds whose data changed,
- * those with no file yet, and those whose file couldn't be read (the data from before stays).
+ * those with no file yet, and those whose file couldn't be read (the data from before stays);
+ * and how many goals the changed data showed reached, which were marked done.
  */
 export const FileCheckSchema = z.object({
   changed: z.array(SourceKindSchema),
   missing: z.array(SourceKindSchema),
   errors: z.array(z.object({ kind: SourceKindSchema, message: z.string() })),
+  goalsCompleted: z.number(),
 });
 
 export type FileCheck = z.infer<typeof FileCheckSchema>;

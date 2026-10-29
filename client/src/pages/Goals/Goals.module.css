@@ -1,0 +1,231 @@
+.page {
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px 28px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+.actions,
+.formActions {
+  display: flex;
+  gap: 8px;
+}
+
+.formActions {
+  justify-content: flex-end;
+}
+
+.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* A button waiting for the chat: it says why on hover, and does nothing. */
+.page [aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.stale {
+  margin: 0;
+  color: var(--in-progress);
+}
+
+.section {
+  display: grid;
+  gap: 6px;
+  max-width: 36rem;
+}
+
+.section h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.goals,
+.done {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A goal: its handle, icon, what it says, and Drop. */
+.goal {
+  display: grid;
+  grid-template-columns: 16px 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.grip {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  line-height: 20px;
+  cursor: grab;
+}
+
+.noIcon {
+  width: 20px;
+}
+
+.body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.title {
+  flex: 1;
+}
+
+.kind,
+.detail,
+.date {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.detail {
+  margin: 0;
+}
+
+.bar {
+  height: 5px;
+  margin-top: 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--raised);
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.needed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  font-size: 0.92rem;
+}
+
+.needed ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dotRed,
+.dotYellow {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.dotRed {
+  background: var(--not-started);
+}
+
+.dotYellow {
+  background: var(--in-progress);
+}
+
+.ask,
+.drop,
+.reopen,
+.undo {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.92rem;
+}
+
+.drop,
+.reopen {
+  color: var(--muted);
+}
+
+.done li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 6px;
+}
+
+.doneTitle {
+  flex: 1;
+  color: var(--done);
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  color: var(--text);
+}
+
+.choice {
+  display: flex;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}

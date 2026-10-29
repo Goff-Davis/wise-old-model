@@ -50,30 +50,117 @@ export type Fetchers = Record<OnlineKind, (account: AccountRow, opts: Options) =
 
 type Failure = { at: number; error: string; notFound: boolean };
 
+/** A fetch kept in memory (see remembered): its last answer and when, and its last failure. */
+type Remembered = {
+  value?: unknown;
+  fetchedAt?: number;
+  failedAt?: number;
+  error?: SourceError;
+};
+
 /**
  * What ensureFresh remembers while the server runs: fetches under way, so two callers (two tabs,
  * a page load during Refresh) share one, and failures, so a source that failed, even one never
  * fetched and so without a row, isn't asked again inside its limit and a 404 stays known as one.
  * Refresh also keeps its last rename check per account and name here, so pressing Refresh again
- * within a minute doesn't ask Wise Old Man's name changes again.
+ * within a minute doesn't ask Wise Old Man's name changes again; and short-lived fetches for an
+ * account that aren't saved with its data are kept here too (remembered).
  */
 export type FreshnessMemory = {
   inFlight: Map<string, Promise<Freshness>>;
   failures: Map<string, Failure>;
   renameChecks: Map<string, { at: number; suggestion: string | null }>;
+  remembered: Map<string, Remembered>;
+  rememberedInFlight: Map<string, Promise<unknown>>;
 };
 
 export function createFreshnessMemory(): FreshnessMemory {
-  return { inFlight: new Map(), failures: new Map(), renameChecks: new Map() };
+  return {
+    inFlight: new Map(),
+    failures: new Map(),
+    renameChecks: new Map(),
+    remembered: new Map(),
+    rememberedInFlight: new Map(),
+  };
 }
 
 const memoryKey = (accountId: number, kind: OnlineKind) => `${accountId}:${kind}`;
 
-/** Forgets an account's remembered failures: after a rename they were the old name's. */
+/**
+ * Forgets an account's remembered failures and fetches: after a rename they were the old
+ * name's.
+ */
 export function forgetFailures(memory: FreshnessMemory, accountId: number): void {
   for (const kind of ONLINE_KINDS) {
     memory.failures.delete(memoryKey(accountId, kind));
   }
+  forgetRemembered(memory, accountId, null);
+}
+
+/**
+ * Forgets an account's remembered fetches (answers and failures) last tried before `before`
+ * (Refresh's floor), or all of them when it's null.
+ */
+export function forgetRemembered(
+  memory: FreshnessMemory,
+  accountId: number,
+  before: Date | null,
+): void {
+  const prefix = `${accountId}:`;
+  for (const [key, entry] of memory.remembered) {
+    const tried = Math.max(entry.fetchedAt ?? 0, entry.failedAt ?? 0);
+    if (key.startsWith(prefix) && (before === null || tried < before.getTime())) {
+      memory.remembered.delete(key);
+    }
+  }
+}
+
+/**
+ * A fetch for an account that isn't saved with its data (This week's gains for a range other
+ * than the week), kept in memory while the server runs: its answer is served while younger
+ * than `ttlMs`, and a failure stands as long, as a source's does in ensureFresh. A failure
+ * gives the last answer with why it's old, or, with none, is passed on. A fetch already under
+ * way is shared. Forgotten on Refresh (forgetRemembered) and rename (forgetFailures); an
+ * account's id is never reused, so a deleted account's are never asked for again.
+ */
+export function remembered<T>(
+  memory: FreshnessMemory,
+  accountId: number,
+  key: string,
+  ttlMs: number,
+  now: Date,
+  fetch: () => Promise<T>,
+): Promise<{ value: T; fetchedAt: string; error: string | null }> {
+  const id = `${accountId}:${key}`;
+  const time = now.getTime();
+  const answer = (entry: Remembered, error: SourceError | null) => {
+    if (entry.fetchedAt === undefined) throw error;
+    return {
+      value: entry.value as T,
+      fetchedAt: new Date(entry.fetchedAt).toISOString(),
+      error: error?.message ?? null,
+    };
+  };
+  const entry = memory.remembered.get(id) ?? {};
+  if (entry.fetchedAt !== undefined && withinLimit(time - entry.fetchedAt, ttlMs)) {
+    return Promise.resolve(answer(entry, null));
+  }
+  if (entry.error && entry.failedAt !== undefined && withinLimit(time - entry.failedAt, ttlMs)) {
+    const failure = entry.error;
+    return new Promise((resolve) => resolve(answer(entry, failure)));
+  }
+  return shareIn(memory.rememberedInFlight, id, async () => {
+    try {
+      const value = await fetch();
+      memory.remembered.set(id, { value, fetchedAt: time });
+      return answer({ value, fetchedAt: time }, null);
+    } catch (error) {
+      if (!(error instanceof SourceError)) throw error;
+      const failed = { ...entry, failedAt: time, error };
+      memory.remembered.set(id, failed);
+      return answer(failed, error);
+    }
+  }) as Promise<{ value: T; fetchedAt: string; error: string | null }>;
 }
 
 type Deps = { db: Kysely<DB>; fetchers: Fetchers; timeZone: string; memory: FreshnessMemory };

@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { buffer } from 'node:stream/consumers';
-import { DEFAULT_PORT, nameKey } from '@wom/shared';
+import { DEFAULT_PORT, nameKey, type SourceKind } from '@wom/shared';
 import type { Express } from 'express';
 import type { Insertable, Kysely } from 'kysely';
 import { onTestFinished } from 'vitest';
@@ -17,6 +17,7 @@ import { NotFoundError, type Requester, SourceError } from '../src/http/requeste
 import type { AccountDeps } from '../src/services/accounts.ts';
 import { createFreshnessMemory } from '../src/services/freshness.ts';
 import type { WikiCtx } from '../src/sources/wiki.ts';
+import { saveSource } from '../src/store/sourceState.ts';
 
 /** A file from `server/test/fixtures` (say `wom/player-phil03.json`), as text. */
 export function fixture(file: string): string {
@@ -54,6 +55,50 @@ export const FIXTURE_CA_THRESHOLDS: CaThresholds = {
   Master: { pointsPerTask: 5, pointsRequired: 1965 },
   Grandmaster: { pointsPerTask: 6, pointsRequired: 2697 },
 };
+
+type HiscoresAnswer = {
+  skills: { name: string; rank: number; level: number; xp: number }[];
+  activities: { name: string; rank: number; score: number }[];
+};
+
+/**
+ * The hiscores fixture (lynx-titan.json) with these skills at `[level, xp]` and these activities
+ * ranked with `score`, as text.
+ */
+export function hiscoresWith(
+  changes: { skills?: Record<string, [number, number]>; activities?: Record<string, number> } = {},
+): string {
+  const answer = JSON.parse(fixture('hiscores/lynx-titan.json')) as HiscoresAnswer;
+  for (const skill of answer.skills) {
+    const changed = changes.skills?.[skill.name];
+    if (changed) [skill.level, skill.xp] = changed;
+  }
+  for (const activity of answer.activities) {
+    const score = changes.activities?.[activity.name];
+    if (score !== undefined) Object.assign(activity, { rank: 1000, score });
+  }
+  return JSON.stringify(answer);
+}
+
+/**
+ * Saves an account's data of a kind as if fetched (or, for a Character Export file, read and
+ * dated) at `at`, by default when `at` says (now, unless given).
+ */
+export function saveFor(
+  db: Kysely<DB>,
+  accountId: number,
+  defaultAt: () => string = () => new Date().toISOString(),
+) {
+  return (kind: SourceKind, data: string, at = defaultAt()) =>
+    saveSource(db, {
+      accountId,
+      kind,
+      data,
+      fetchedAt: at,
+      fileMtime: kind.startsWith('ce_') ? at : undefined,
+      timeZone: 'UTC',
+    });
+}
 
 /** The services' deps: this database and requester, a fresh memory and an empty RuneLite folder. */
 export function testAccountDeps(db: Kysely<DB>, req: Requester): AccountDeps {

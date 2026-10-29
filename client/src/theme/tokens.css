@@ -126,8 +126,14 @@ button:disabled {
   opacity: 0.65;
 }
 
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+}
+
 input:not([type]),
 input[type="text"],
+input[type="number"],
 select {
   padding: 6px 8px;
   border: 1px solid var(--rule);

@@ -4,7 +4,15 @@ import { insertAccount, testDb } from '../../test/helpers.ts';
 import type { AccountRow, DB } from '../db/schema.ts';
 import { NotFoundError, SourceError } from '../http/requester.ts';
 import { getSource, listSnapshots, saveSource } from '../store/sourceState.ts';
-import { createFreshnessMemory, ensureFresh, type Fetchers, type OnlineKind } from './freshness.ts';
+import {
+  createFreshnessMemory,
+  ensureFresh,
+  type Fetchers,
+  forgetFailures,
+  forgetRemembered,
+  type OnlineKind,
+  remembered,
+} from './freshness.ts';
 
 const NOW = new Date('2026-10-27T15:00:00.000Z');
 const at = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000);
@@ -308,5 +316,87 @@ describe('ensureFresh on Refresh', () => {
     const { account, calls, deps } = await setup();
     await ensureFresh(deps, account, ['wom_achievements'], { force: true, now: NOW });
     expect(calls).toEqual(['wom_achievements']);
+  });
+});
+
+describe('remembered', () => {
+  const T0 = new Date('2026-10-28T12:00:00.000Z');
+  const at = (minutes: number) => new Date(T0.getTime() + minutes * 60_000);
+  const TTL = 15 * 60_000;
+  const down = new SourceError('Wise Old Man', 500, 'Wise Old Man: server error (500)');
+
+  /** A fetch answering `answers` in turn (an Error is thrown), counting its calls. */
+  function fetcher(...answers: (string | Error)[]) {
+    let calls = 0;
+    const fetch = async () => {
+      const answer = answers[Math.min(calls, answers.length - 1)];
+      calls += 1;
+      if (answer instanceof Error) throw answer;
+      return answer as string;
+    };
+    return { fetch, calls: () => calls };
+  }
+
+  it('keeps an answer for one account and key while it is younger than the limit', async () => {
+    const memory = createFreshnessMemory();
+    const { fetch, calls } = fetcher('first', 'second');
+    expect(await remembered(memory, 1, 'day', TTL, T0, fetch)).toEqual({
+      value: 'first',
+      fetchedAt: T0.toISOString(),
+      error: null,
+    });
+    expect((await remembered(memory, 1, 'day', TTL, at(14.9), fetch)).value).toBe('first');
+    expect((await remembered(memory, 2, 'day', TTL, at(1), fetch)).value).toBe('second');
+    expect(calls()).toBe(2);
+    expect((await remembered(memory, 1, 'day', TTL, at(15), fetch)).value).toBe('second');
+  });
+
+  it('lets a failure stand as long, giving the last answer with it when there is one', async () => {
+    const memory = createFreshnessMemory();
+    const { fetch, calls } = fetcher('first', down, 'second');
+    await remembered(memory, 1, 'day', TTL, T0, fetch);
+    expect(await remembered(memory, 1, 'day', TTL, at(20), fetch)).toEqual({
+      value: 'first',
+      fetchedAt: T0.toISOString(),
+      error: 'Wise Old Man: server error (500)',
+    });
+    expect((await remembered(memory, 1, 'day', TTL, at(34.9), fetch)).error).toBe(
+      'Wise Old Man: server error (500)',
+    );
+    expect(calls()).toBe(2);
+    expect((await remembered(memory, 1, 'day', TTL, at(35), fetch)).value).toBe('second');
+    // With nothing answered before, the failure is passed on, and stands as long.
+    const failing = fetcher(down, 'later');
+    await expect(remembered(memory, 1, 'month', TTL, T0, failing.fetch)).rejects.toBe(down);
+    await expect(remembered(memory, 1, 'month', TTL, at(14), failing.fetch)).rejects.toBe(down);
+    expect(failing.calls()).toBe(1);
+  });
+
+  it('shares a fetch already under way', async () => {
+    const memory = createFreshnessMemory();
+    const { fetch, calls } = fetcher('first');
+    await Promise.all([
+      remembered(memory, 1, 'day', TTL, T0, fetch),
+      remembered(memory, 1, 'day', TTL, T0, fetch),
+    ]);
+    expect(calls()).toBe(1);
+  });
+
+  it("forgets an account's answers and failures from before a time, or all of them on a rename", async () => {
+    const memory = createFreshnessMemory();
+    const day = fetcher('day');
+    const month = fetcher(down);
+    const other = fetcher('other');
+    await remembered(memory, 1, 'day', TTL, T0, day.fetch);
+    await expect(remembered(memory, 1, 'month', TTL, at(5), month.fetch)).rejects.toBe(down);
+    await remembered(memory, 2, 'day', TTL, T0, other.fetch);
+    forgetRemembered(memory, 1, at(1));
+    await remembered(memory, 1, 'day', TTL, at(6), day.fetch);
+    await expect(remembered(memory, 1, 'month', TTL, at(6), month.fetch)).rejects.toBe(down);
+    await remembered(memory, 2, 'day', TTL, at(6), other.fetch);
+    expect([day.calls(), month.calls(), other.calls()]).toEqual([2, 1, 1]);
+    forgetFailures(memory, 1);
+    await expect(remembered(memory, 1, 'month', TTL, at(7), month.fetch)).rejects.toBe(down);
+    expect(month.calls()).toBe(2);
   });
 });

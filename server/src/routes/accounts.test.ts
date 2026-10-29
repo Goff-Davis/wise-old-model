@@ -513,6 +513,7 @@ describe('POST /api/accounts/:id/files/check', () => {
         'ce_equipment',
       ],
       errors: [],
+      goalsCompleted: 0,
     });
     expect((await call(app, check(account.id))).body).toMatchObject({ changed: [] });
   });
@@ -593,6 +594,54 @@ describe('GET /api/accounts/:id/collection-log', () => {
   it("answers 404 for an account that doesn't exist", async () => {
     const { app } = await setup();
     expect((await call(app, { path: '/api/accounts/9/collection-log' })).status).toBe(404);
+  });
+});
+
+describe('GET /api/accounts/:id/gains', () => {
+  const TEMPLE_LOG = '&categories=all&includenames=1&includemissingitems=1';
+
+  it("answers with what the account gained in Wise Old Man's week", async () => {
+    const { db, app } = await setup({
+      [`${WOM}/players/Lumby%20Pete/gained?period=week`]: fixture('wom/gained-week.json'),
+      [`${WOM}/players/Lumby%20Pete/achievements`]: '[]',
+      [`${TEMPLE}Lumby%20Pete${TEMPLE_LOG}`]: fixture('temple/clog-mikael.json'),
+    });
+    const account = await insertAccount(db);
+    const res = await call(app, { path: `/api/accounts/${account.id}/gains?period=week` });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      summary: '21.85M XP, 895 boss kills and 0 new collection log items in the last 7 days.',
+      skills: [{ name: 'Firemaking' }, {}, {}, {}],
+    });
+  });
+
+  it('answers for a range picked', async () => {
+    const start = '2025-08-24T00:00:00.000Z';
+    const end = '2025-09-06T00:00:00.000Z';
+    const { db, app } = await setup({
+      [`${WOM}/players/Lumby%20Pete/gained?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`]:
+        fixture('wom/gained-week.json'),
+      [`${WOM}/players/Lumby%20Pete/achievements`]: '[]',
+      [`${TEMPLE}Lumby%20Pete${TEMPLE_LOG}`]: fixture('temple/clog-mikael.json'),
+    });
+    const account = await insertAccount(db);
+    const query = `start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+    const res = await call(app, { path: `/api/accounts/${account.id}/gains?${query}` });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ start, end, newCollectionLogItems: [{}, {}, {}] });
+  });
+
+  it('answers 400 for a period it has no such range for, or no range at all', async () => {
+    const { db, app } = await setup();
+    const account = await insertAccount(db);
+    for (const query of [
+      'period=year',
+      '',
+      'start=2026-10-02T00:00:00.000Z&end=2026-10-01T00:00:00.000Z',
+    ]) {
+      const res = await call(app, { path: `/api/accounts/${account.id}/gains?${query}` });
+      expect(res.status, query).toBe(400);
+    }
   });
 });
 

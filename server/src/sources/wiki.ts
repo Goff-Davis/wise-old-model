@@ -11,6 +11,7 @@ import {
   cacheRowsBefore,
   isFresh,
   markCacheOutdated,
+  perDatabase,
   readCache,
   savedEntry,
   shareLoad,
@@ -47,6 +48,35 @@ export async function cachedFor<T>(
 function noted<T>(ctx: WikiCtx, kind: string, entry: CacheEntry<T>): T {
   ctx.noteRead?.({ kind, fetchedAt: entry.fetchedAt, error: entry.error });
   return entry.value;
+}
+
+const parsedCopies = perDatabase(() => new Map<string, { fetchedAt: string; value: unknown }>());
+
+/**
+ * `parse`'s result for the copy of a cached answer that `read` gives (under `key`), worked out
+ * once per copy (by when it was fetched) while the server runs: parsing a whole table costs more
+ * than reading it, and the Goals page reloads as you play.
+ */
+export async function parsedOnce<R, T>(
+  ctx: WikiCtx,
+  key: string,
+  read: (ctx: WikiCtx) => Promise<R>,
+  parse: (raw: R) => T,
+): Promise<T> {
+  let fetchedAt: string | null = null;
+  const raw = await read({
+    ...ctx,
+    noteRead: (cacheRead) => {
+      fetchedAt = cacheRead.fetchedAt;
+      ctx.noteRead?.(cacheRead);
+    },
+  });
+  const copies = parsedCopies(ctx.db);
+  const kept = copies.get(key);
+  if (kept && kept.fetchedAt === fetchedAt) return kept.value as T;
+  const value = parse(raw);
+  if (fetchedAt !== null) copies.set(key, { fetchedAt, value });
+  return value;
 }
 
 const API = 'https://oldschool.runescape.wiki/api.php';
@@ -417,6 +447,33 @@ export async function getPageWikitext(ctx: WikiCtx, title: string): Promise<stri
     return { revision: answer.parse.revid, value: answer.parse.wikitext };
   });
   return noted(ctx, PAGE_KIND, entry);
+}
+
+const RenderedSchema = z.object({ parse: z.object({ text: z.string() }) });
+
+/**
+ * A whole page's HTML as the wiki renders it, asked once a day: for a page built from other
+ * pages (a list the wiki makes with DPL, such as Quests/List), which changes without a revision
+ * of its own, so it can't be kept by revision as other pages are.
+ */
+export async function getRenderedPage(ctx: WikiCtx, title: string): Promise<string> {
+  const page = pageTitle(title);
+  return cachedFor(ctx, `rendered:${page}`, 'wiki_rendered', DAY_MS, async () => {
+    const answer = await callApi(
+      ctx,
+      {
+        action: 'parse',
+        page,
+        prop: 'text',
+        disableeditsection: '1',
+        disablelimitreport: '1',
+        disabletoc: '1',
+        redirects: '1',
+      },
+      RenderedSchema,
+    );
+    return answer.parse.text;
+  });
 }
 
 const SectionTextSchema = z.object({

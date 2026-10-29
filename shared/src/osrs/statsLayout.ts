@@ -1,3 +1,5 @@
+import { capitalize } from '../format.ts';
+
 /** The skills in the in-game stats tab's order: three columns, read across. */
 export const IN_GAME_ORDER = [
   'Attack',
@@ -59,6 +61,22 @@ const WOM_SKILLS: Record<string, string> = { runecraft: 'runecrafting' };
 export function womSkill(hiscoresName: string): string {
   const name = hiscoresName.toLowerCase();
   return WOM_SKILLS[name] ?? name;
+}
+
+/** The hiscores' name for one of Wise Old Man's skills: capitalized (`runecrafting` is Runecraft). */
+export function hiscoresSkill(metric: string): string {
+  const hiscores = Object.entries(WOM_SKILLS).find(([, wom]) => wom === metric)?.[0];
+  return capitalize(hiscores ?? metric);
+}
+
+/**
+ * The hiscores' name for one of Wise Old Man's boss or activity metrics (`kril_tsutsaroth` is
+ * "K'ril Tsutsaroth"), from the hiscores' `names`; in words when they have none for it.
+ */
+export function metricName(metric: string, names: string[]): string {
+  return (
+    names.find((name) => bare(name) === bare(metric)) ?? capitalize(metric.replaceAll('_', ' '))
+  );
 }
 
 /**

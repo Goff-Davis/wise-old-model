@@ -751,11 +751,11 @@ Spec: Frontend → Pages (This week); Data sources → where This week's data co
   ```
 - XP and kills come from WOM gains (`day`, `week` and `month` map to WOM periods; custom ranges use `startDate`/`endDate`). Progress items come from diffing the first and last `every_change` snapshots of `ce_quests`, `ce_diaries` and `ce_combat_achievements` inside the range, Wise Old Man achievements created inside it (kind `achievement`, e.g. "99 Slayer"), and goals completed in it. New log items: Temple items whose `date` falls inside the range. Summary: `"<XP> XP, <kills> boss kills and <n> new collection log items in the last 7 days."` with compact numbers (`1.24M`).
 
-- [ ] **Step 1: Write the failing tests**: with two quest snapshots where Monkey Madness II goes `in_progress` → `finished`, `progress` contains `{ kind: 'quest', title: 'Completed Monkey Madness II' }` dated at the later snapshot; a WOM achievement created inside the range appears with kind `achievement`, one outside it doesn't; skills with 0 XP gained are omitted and the rest sorted by XP descending; the summary formats `1240000` as `1.24M`; Temple items outside the range are excluded.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** the service and the page (period chips Today, 7 days, 30 days, Custom; sections Experience, Kills and clues, Progress, New collection log items).
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: with two quest snapshots where Monkey Madness II goes `in_progress` → `finished`, `progress` contains `{ kind: 'quest', title: 'Completed Monkey Madness II' }` dated at the later snapshot; a WOM achievement created inside the range appears with kind `achievement`, one outside it doesn't; skills with 0 XP gained are omitted and the rest sorted by XP descending; the summary formats `1240000` as `1.24M`; Temple items outside the range are excluded.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** the service and the page (period chips Today, 7 days, 30 days, Custom; sections Experience, Kills and clues, Progress, New collection log items).
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 26: Goals model, progress and API
 
@@ -786,11 +786,11 @@ Spec: Goals.
 - `syncGoalCompletion` runs after every refresh and file check. Custom goals only complete by hand.
 - Skill detail text: `Level 71. 360k XP to go, about 6 hours at efficient rates.` (hours from Task 22, rounded; omitted without rates).
 
-- [ ] **Step 1: Write the failing tests**: skill goal 75 Magic with `startXp 814445`, current XP 850000 → `fraction ≈ 0.0898`, detail starts `Level 71. 360k XP to go`; a quest goal for Dragon Slayer II lists Magic 75 and Dream Mentor in `stillNeeded`; reaching a boss-kill target marks the goal done on sync with `completedAt` set; a custom goal never auto-completes; reorder persists positions; a dropped goal disappears from active but is still returned with `status 'dropped'`.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: skill goal 75 Magic with `startXp 814445`, current XP 850000 → `fraction ≈ 0.0898`, detail starts `Level 71. 360k XP to go`; a quest goal for Dragon Slayer II lists Magic 75 and Dream Mentor in `stillNeeded`; reaching a boss-kill target marks the goal done on sync with `completedAt` set; a custom goal never auto-completes; reorder persists positions; a dropped goal disappears from active but is still returned with `status 'dropped'`.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 27: Goals page
 
@@ -801,11 +801,11 @@ Spec: Goals → Page; the approved mockup.
 **Interfaces:**
 - Consumes: Task 26's routes. "Suggest goals" calls `onSuggestGoals()`, which Task 32 wires to the chat; until then the button is present but disabled with the tooltip "Available once the chat is set up".
 
-- [ ] **Step 1: Write the failing tests**: active goals render in `position` order with their progress text; dragging (keyboard: select, then Alt+↑) calls reorder with the new order; Done lists title and date; the Add goal dialog's kind picker offers the 8 kinds.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** as in the approved mockup (drag handle, kind label, progress bar for skill and combat achievement goals, "Still needed" with status dots, "Ask the AI for a plan" link, custom checkbox, Done list).
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: active goals render in `position` order with their progress text; dragging (keyboard: select, then Alt+↑) calls reorder with the new order; Done lists title and date; the Add goal dialog's kind picker offers the 8 kinds.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** as in the approved mockup (drag handle, kind label, progress bar for skill and combat achievement goals, "Still needed" with status dots, "Ask the AI for a plan" link, custom checkbox, Done list).
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ---
 

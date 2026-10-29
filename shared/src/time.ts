@@ -8,6 +8,15 @@ export const DAY_MS = 24 * HOUR_MS;
 
 const FORMATS = {
   day: { year: 'numeric', month: '2-digit', day: '2-digit' },
+  wall: {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  },
   date: { dateStyle: 'medium' },
   datetime: { dateStyle: 'medium', timeStyle: 'short' },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
@@ -52,6 +61,43 @@ export function localDayKey(iso: string, timeZone: string): string {
   const parts = formatter('day', timeZone).formatToParts(new Date(iso));
   const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value;
   return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+/** How far a zone's clocks are ahead of UTC at an instant, in milliseconds. */
+function zoneOffset(ms: number, timeZone: string): number {
+  const parts = formatter('wall', timeZone).formatToParts(new Date(ms));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value);
+  const wall = Date.UTC(
+    part('year'),
+    part('month') - 1,
+    part('day'),
+    part('hour'),
+    part('minute'),
+    part('second'),
+  );
+  return wall - Math.floor(ms / 1000) * 1000;
+}
+
+/**
+ * When a calendar day ('YYYY-MM-DD') began in a zone (its midnight), as an ISO time. The offset
+ * is taken at that midnight, so a day the clocks change on begins by the offset it had. A day
+ * whose clocks jump forward at midnight has none: it begins when they land (1 AM).
+ */
+export function dayStart(dayKey: string, timeZone: string): string {
+  const wallMidnight = Date.parse(`${dayKey}T00:00:00Z`);
+  const guess = wallMidnight - zoneOffset(wallMidnight, timeZone);
+  const start = wallMidnight - zoneOffset(guess, timeZone);
+  // Midnight by the offset after the jump is still the day before, by the offset before it.
+  if (localDayKey(new Date(start).toISOString(), timeZone) === dayKey) {
+    return new Date(start).toISOString();
+  }
+  return new Date(wallMidnight - zoneOffset(start, timeZone)).toISOString();
+}
+
+/** When the zone's calendar day that `now` falls on began, as an ISO time. */
+export function startOfLocalDay(now: Date, timeZone: string): string {
+  return dayStart(localDayKey(now.toISOString(), timeZone), timeZone);
 }
 
 /** Days since 1970 of the instant's calendar day in the zone. */

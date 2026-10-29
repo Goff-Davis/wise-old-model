@@ -17,4 +17,10 @@ describe('formatCompact', () => {
     expect(formatCompact(2_500_000_000)).toBe('2.5B');
     expect(formatCompact(999)).toBe('999');
   });
+
+  it('writes to two decimal places when asked', () => {
+    expect(formatCompact(1_240_000, 2)).toBe('1.24M');
+    expect(formatCompact(1_200_000, 2)).toBe('1.2M');
+    expect(formatCompact(52, 2)).toBe('52');
+  });
 });

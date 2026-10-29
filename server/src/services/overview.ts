@@ -6,16 +6,16 @@ import {
   OVERVIEW_FILES,
   type Overview,
   orderSkills,
+  WOM_TRACKING_STEPS,
 } from '@wom/shared';
-import type { Kysely } from 'kysely';
 import {
   type CaThresholds,
   caProgress,
   completedTasks,
   getCaThresholds,
 } from '../calc/combatAchievements.ts';
-import type { AccountRow, DB } from '../db/schema.ts';
-import { orSourceFailure, readSaved } from '../sources/answers.ts';
+import type { AccountRow } from '../db/schema.ts';
+import { orSourceFailure, readSavedSource } from '../sources/answers.ts';
 import {
   type CeCombatAchievements,
   CeCombatAchievementsSchema,
@@ -33,13 +33,13 @@ import {
   exportFiles,
   fileMissing,
   MISSING_FIX,
-  mergeDiaryNames,
   readExportFile,
+  savedDiaries,
+  tierDone,
 } from '../sources/characterExport.ts';
 import { type Hiscores, hiscoresLevels, parseHiscores } from '../sources/hiscores.ts';
-import { parseCollectionLog } from '../sources/temple.ts';
-import { parsePlayer } from '../sources/wom.ts';
-import { getSource, listSnapshots, listSources } from '../store/sourceState.ts';
+import { readSavedLog } from '../sources/temple.ts';
+import { savedBossMetrics } from '../sources/wom.ts';
 import { type AccountDeps, freshenAccount, toAccount, wikiCtx } from './accounts.ts';
 import { freshnessOf, type OnlineKind } from './freshness.ts';
 
@@ -52,18 +52,7 @@ const OVERVIEW_KINDS: OnlineKind[] = ['hiscores', 'wom_player', 'temple_clog'];
 const TOP_KILLS = 5;
 
 /** What to do when Wise Old Man's boss list isn't saved for any account. */
-const BOSS_LIST_FIX =
-  "Boss kill counts need Wise Old Man's list of bosses, which comes with any account it tracks. Look the name up on wiseoldman.net to start tracking it, then Refresh.";
-
-/**
- * Whether a diary tier is done: by its task names while they still match the tier's count (the
- * plugin's own flag is wrong for some tiers, Karamja's among them), else by the flag.
- */
-function tierDone(tier: DiaryTierData): boolean {
-  return tier.tasks !== null && !tier.namesStale
-    ? tier.tasks.every((task) => task.complete)
-    : tier.complete;
-}
+const BOSS_LIST_FIX = `Boss kill counts need Wise Old Man's list of bosses, which comes with any account it tracks. ${WOM_TRACKING_STEPS}`;
 
 /** The Character Export data the Overview shows, as read from the account's files. */
 export type OverviewFiles = {
@@ -159,21 +148,6 @@ export function buildOverview(input: {
 }
 
 /**
- * Wise Old Man's boss metrics, which are the same for every player: from this account's saved
- * player answer or, when Wise Old Man doesn't track it, from another account's, newest first.
- */
-async function womBossMetrics(db: Kysely<DB>, accountId: number): Promise<string[]> {
-  const rows = await listSources(db, 'wom_player');
-  // A stable sort, so the other accounts stay newest first.
-  rows.sort((a, b) => Number(b.accountId === accountId) - Number(a.accountId === accountId));
-  for (const row of rows) {
-    const metrics = Object.keys(readSaved(row.data, parsePlayer)?.bosses ?? {});
-    if (metrics.length > 0) return metrics;
-  }
-  return [];
-}
-
-/**
  * When Character Export saved a file (its modified time), and why its last read failed; a file
  * that has never read is shown as failed, not missing.
  */
@@ -197,13 +171,11 @@ export async function getOverview(
   const files = await exportFiles(db, row, OVERVIEW_FILES);
   const saved = (kind: CeKind) => files.find((file) => file.kind === kind)?.saved?.data;
 
-  const latestDiaries = readExportFile(saved('ce_diaries'), CeDiariesSchema);
-  const earlierDiaries = latestDiaries
-    ? (await listSnapshots(db, row.id, 'ce_diaries')).flatMap((snapshot) => {
-        const data = readExportFile(snapshot.data, CeDiariesSchema);
-        return data ? [{ data, takenAt: snapshot.takenAt }] : [];
-      })
-    : [];
+  const diaries = await savedDiaries(
+    db,
+    row.id,
+    readExportFile(saved('ce_diaries'), CeDiariesSchema),
+  );
   const combatAchievements = readExportFile(
     saved('ce_combat_achievements'),
     CeCombatAchievementsSchema,
@@ -213,20 +185,16 @@ export async function getOverview(
   const thresholds = combatAchievements
     ? await orSourceFailure(getCaThresholds(wikiCtx(deps, now)), null)
     : { value: null, error: null };
-  const templeRow = await getSource(db, row.id, 'temple_clog');
-  const temple = templeRow
-    ? readSaved(templeRow.data, (json) => parseCollectionLog(json, {}))
-    : null;
-  const hiscores = await getSource(db, row.id, 'hiscores');
+  const temple = await readSavedLog(db, row.id);
 
   return buildOverview({
     account: toAccount(row),
-    hiscores: hiscores ? readSaved(hiscores.data, parseHiscores) : null,
-    bossMetrics: await womBossMetrics(db, row.id),
+    hiscores: await readSavedSource(db, row.id, 'hiscores', parseHiscores),
+    bossMetrics: await savedBossMetrics(db, row.id),
     freshness: [...freshness, ...files.flatMap(fileFreshness)],
     files: {
       quests: readExportFile(saved('ce_quests'), CeQuestsSchema),
-      diaries: latestDiaries ? mergeDiaryNames(latestDiaries, earlierDiaries) : null,
+      diaries,
       combatAchievements,
       equipment: readExportFile(saved('ce_equipment'), CeContainerSchema),
     },

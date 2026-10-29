@@ -1,10 +1,16 @@
 import { act, waitFor, within } from '@testing-library/react';
 import type { FileCheck, Settings } from '@wom/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LUMBY_PETE, testBankView, testOverview } from '../test/fakeApi.ts';
+import {
+  LUMBY_PETE,
+  testBankView,
+  testGains,
+  testGoalsView,
+  testOverview,
+} from '../test/fakeApi.ts';
 import { renderApp } from '../test/renderApp.tsx';
 
-const nothing: FileCheck = { changed: [], missing: [], errors: [] };
+const nothing: FileCheck = { changed: [], missing: [], errors: [], goalsCompleted: 0 };
 
 /**
  * Lumby Pete's overview with these settings, on a fake clock; the file check answers
@@ -48,7 +54,7 @@ describe('useFileCheck', () => {
   it("reloads the account's data when a file changed, and only then", async () => {
     const { page, checks, overviews } = open({ runeliteMode: 'automatic', pollSeconds: 3 }, [
       nothing,
-      { changed: ['ce_quests'], missing: [], errors: [] },
+      { changed: ['ce_quests'], missing: [], errors: [], goalsCompleted: 0 },
       nothing,
     ]);
     await within(page).findByRole('heading', { name: 'Lumby Pete' });
@@ -64,10 +70,10 @@ describe('useFileCheck', () => {
   it('reloads only the pages that read a changed file', async () => {
     const { page, checks, overviews } = open({ runeliteMode: 'automatic', pollSeconds: 3 }, [
       nothing,
-      // No page reads character.json, and the Overview doesn't show the inventory.
-      { changed: ['ce_character'], missing: [], errors: [] },
-      { changed: ['ce_inventory'], missing: [], errors: [] },
-      { changed: ['ce_equipment'], missing: [], errors: [] },
+      // The Overview reads neither character.json nor the inventory.
+      { changed: ['ce_character'], missing: [], errors: [], goalsCompleted: 0 },
+      { changed: ['ce_inventory'], missing: [], errors: [], goalsCompleted: 0 },
+      { changed: ['ce_equipment'], missing: [], errors: [], goalsCompleted: 0 },
     ]);
     await within(page).findByRole('heading', { name: 'Lumby Pete' });
     await waitFor(() => expect(checks()).toBe(1));
@@ -83,7 +89,10 @@ describe('useFileCheck', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let banks = 0;
     let checks = 0;
-    const answers: FileCheck[] = [nothing, { changed: ['ce_inventory'], missing: [], errors: [] }];
+    const answers: FileCheck[] = [
+      nothing,
+      { changed: ['ce_inventory'], missing: [], errors: [], goalsCompleted: 0 },
+    ];
     const { page } = renderApp('/1/bank', {
       settings: { runeliteMode: 'automatic', pollSeconds: 3 },
       routes: {
@@ -100,6 +109,66 @@ describe('useFileCheck', () => {
     expect(banks).toBe(1);
     await seconds(3);
     await waitFor(() => expect(banks).toBe(2));
+  });
+
+  it('reloads the Goals page when the character file or a bank file changed', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let goals = 0;
+    let checks = 0;
+    const answers: FileCheck[] = [
+      nothing,
+      { changed: ['ce_character'], missing: [], errors: [], goalsCompleted: 0 },
+      { changed: ['ce_bank'], missing: [], errors: [], goalsCompleted: 0 },
+    ];
+    const { page } = renderApp('/1/goals', {
+      settings: { runeliteMode: 'automatic', pollSeconds: 3 },
+      routes: {
+        'GET /api/accounts': () => [LUMBY_PETE],
+        'GET /api/accounts/1/goals': () => {
+          goals += 1;
+          return testGoalsView();
+        },
+        'POST /api/accounts/1/files/check': () => answers[Math.min(checks++, answers.length - 1)],
+      },
+    });
+    await within(page).findByRole('heading', { name: 'Goals' });
+    await waitFor(() => expect(checks).toBe(1));
+    expect(goals).toBe(1);
+    await seconds(3);
+    await waitFor(() => expect(goals).toBe(2));
+    // And when what's owned changed.
+    await seconds(3);
+    await waitFor(() => expect(goals).toBe(3));
+  });
+
+  it('reloads This week when the files it read completed a goal', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let weeks = 0;
+    let checks = 0;
+    const answers: FileCheck[] = [
+      nothing,
+      // The character file isn't one This week reads, but a goal it completed shows there.
+      { changed: ['ce_character'], missing: [], errors: [], goalsCompleted: 0 },
+      { changed: ['ce_character'], missing: [], errors: [], goalsCompleted: 1 },
+    ];
+    const { page } = renderApp('/1/this-week', {
+      settings: { runeliteMode: 'automatic', pollSeconds: 3 },
+      routes: {
+        'GET /api/accounts': () => [LUMBY_PETE],
+        'GET /api/accounts/1/gains': () => {
+          weeks += 1;
+          return testGains();
+        },
+        'POST /api/accounts/1/files/check': () => answers[Math.min(checks++, answers.length - 1)],
+      },
+    });
+    await within(page).findByRole('heading', { name: 'This week' });
+    await waitFor(() => expect(checks).toBe(1));
+    await seconds(3);
+    await waitFor(() => expect(checks).toBe(2));
+    expect(weeks).toBe(1);
+    await seconds(3);
+    await waitFor(() => expect(weeks).toBe(2));
   });
 
   it("doesn't check while the page is hidden, and checks as soon as it's shown again", async () => {

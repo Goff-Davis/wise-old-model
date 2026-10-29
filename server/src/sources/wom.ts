@@ -1,7 +1,11 @@
-import { type AccountType, HOUR_MS, nameKey } from '@wom/shared';
+import { type AccountType, DAY_MS, HOUR_MS, nameKey } from '@wom/shared';
+import type { Kysely } from 'kysely';
 import { z } from 'zod';
+import type { DB } from '../db/schema.ts';
 import { NotFoundError, type Requester, SourceError } from '../http/requester.ts';
-import { type Checked, fetchChecked, parseWith } from './answers.ts';
+import { type CacheEntry, cachedEntry } from '../store/cache.ts';
+import { listSources } from '../store/sourceState.ts';
+import { type Checked, fetchChecked, parseWith, readSaved } from './answers.ts';
 
 const BASE = 'https://api.wiseoldman.net/v2';
 const SITE = 'Wise Old Man';
@@ -288,6 +292,38 @@ export async function getEfficiencyRates(
   const url = `${BASE}/efficiency/rates?metric=ehp&type=${type}`;
   return (await fetchChecked(req, url, { parse: (json) => parseWith(SITE, RatesSchema, json) }))
     .value;
+}
+
+/**
+ * The efficiency rates for a type, kept a day in the cache: they're the same for every account
+ * of the type and change only with Wise Old Man's releases. While Wise Old Man can't be reached,
+ * the copy kept before comes with why it's old.
+ */
+export function getCachedRates(
+  db: Kysely<DB>,
+  req: Requester,
+  type: EfficiencyType,
+  now: Date,
+): Promise<CacheEntry<SkillRates[]>> {
+  return cachedEntry(db, `wom-rates:${type}`, 'wom_rates', DAY_MS, now, () =>
+    getEfficiencyRates(req, type),
+  );
+}
+
+/**
+ * Wise Old Man's boss metrics, which are the same for every player: from this account's saved
+ * player answer or, when Wise Old Man doesn't track it, from another account's, newest first;
+ * none when no account's answer is saved.
+ */
+export async function savedBossMetrics(db: Kysely<DB>, accountId: number): Promise<string[]> {
+  const rows = await listSources(db, 'wom_player');
+  // A stable sort, so the other accounts stay newest first.
+  rows.sort((a, b) => Number(b.accountId === accountId) - Number(a.accountId === accountId));
+  for (const row of rows) {
+    const metrics = Object.keys(readSaved(row.data, parsePlayer)?.bosses ?? {});
+    if (metrics.length > 0) return metrics;
+  }
+  return [];
 }
 
 /**

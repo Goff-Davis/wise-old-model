@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSettings } from './settings.ts';
-import { effectiveTimeZone, formatTime, localDayKey } from './time.ts';
+import { dayStart, effectiveTimeZone, formatTime, localDayKey, startOfLocalDay } from './time.ts';
 
 describe('effectiveTimeZone', () => {
   it('uses the zone the browser reported when set to Automatic', () => {
@@ -36,6 +36,55 @@ describe('localDayKey', () => {
     expect(localDayKey('2026-10-28T03:00:00Z', 'America/Chicago')).toBe('2026-10-27');
     expect(localDayKey('2026-10-28T03:00:00Z', 'UTC')).toBe('2026-10-28');
     expect(localDayKey('2026-10-27T16:00:00Z', 'Asia/Tokyo')).toBe('2026-10-28');
+  });
+});
+
+describe('startOfLocalDay', () => {
+  it("gives the instant the zone's calendar day began", () => {
+    // 10 PM on Oct 27 in Chicago (CDT, 5 hours behind UTC).
+    expect(startOfLocalDay(new Date('2026-10-28T03:00:00Z'), 'America/Chicago')).toBe(
+      '2026-10-27T05:00:00.000Z',
+    );
+    expect(startOfLocalDay(new Date('2026-10-28T03:00:00Z'), 'UTC')).toBe(
+      '2026-10-28T00:00:00.000Z',
+    );
+    // 1 AM on Oct 28 in Tokyo, 9 hours ahead.
+    expect(startOfLocalDay(new Date('2026-10-27T16:00:00Z'), 'Asia/Tokyo')).toBe(
+      '2026-10-27T15:00:00.000Z',
+    );
+  });
+
+  it('counts the day the clocks change from the offset it began with', () => {
+    // Chicago's clocks go back at 2 AM on Nov 1, 2026: that day began at midnight CDT.
+    expect(startOfLocalDay(new Date('2026-11-01T18:00:00Z'), 'America/Chicago')).toBe(
+      '2026-11-01T05:00:00.000Z',
+    );
+    expect(startOfLocalDay(new Date('2026-11-02T18:00:00Z'), 'America/Chicago')).toBe(
+      '2026-11-02T06:00:00.000Z',
+    );
+  });
+});
+
+describe('dayStart', () => {
+  it('gives when a calendar day began in a zone, even one far from UTC', () => {
+    expect(dayStart('2026-10-01', 'America/Denver')).toBe('2026-10-01T06:00:00.000Z');
+    // 14 hours ahead of UTC: noon UTC there is already the next day.
+    expect(dayStart('2026-10-01', 'Pacific/Kiritimati')).toBe('2026-09-30T10:00:00.000Z');
+    expect(dayStart('2026-11-02', 'America/Chicago')).toBe('2026-11-02T06:00:00.000Z');
+    // New Zealand's clocks go forward at 2 AM on Sep 27, 2026, between its midnight (still
+    // 12 hours ahead) and UTC's.
+    expect(dayStart('2026-09-27', 'Pacific/Auckland')).toBe('2026-09-26T12:00:00.000Z');
+  });
+
+  it('gives when the clocks land on a day they jump forward at midnight, which has no midnight', () => {
+    // Chile's clocks go from midnight to 1 AM on Sep 6, 2026 (4 hours behind UTC, then 3).
+    expect(dayStart('2026-09-06', 'America/Santiago')).toBe('2026-09-06T04:00:00.000Z');
+    expect(dayStart('2026-09-07', 'America/Santiago')).toBe('2026-09-07T03:00:00.000Z');
+    // Cuba's go from midnight to 1 AM on Mar 8, 2026 (5 hours behind UTC, then 4).
+    expect(dayStart('2026-03-08', 'America/Havana')).toBe('2026-03-08T05:00:00.000Z');
+    expect(startOfLocalDay(new Date('2026-03-08T15:00:00Z'), 'America/Havana')).toBe(
+      '2026-03-08T05:00:00.000Z',
+    );
   });
 });
 

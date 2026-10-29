@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { IN_GAME_ORDER, isBoss, orderSkills } from './statsLayout.ts';
+import {
+  hiscoresSkill,
+  IN_GAME_ORDER,
+  isBoss,
+  metricName,
+  orderSkills,
+  womSkill,
+} from './statsLayout.ts';
 
 function fixture<T>(path: string): T {
   return JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf8')) as T;
@@ -64,5 +71,29 @@ describe('isBoss', () => {
     expect(others).toContain('Collections Logged');
     expect(others).toContain('Colosseum Glory');
     expect(others).not.toContain('Tombs of Amascut: Expert Mode');
+  });
+});
+
+describe('womSkill and hiscoresSkill', () => {
+  it("turn the hiscores' skill names into Wise Old Man's metrics and back", () => {
+    expect(womSkill('Runecraft')).toBe('runecrafting');
+    expect(hiscoresSkill('runecrafting')).toBe('Runecraft');
+    expect(hiscoresSkill('attack')).toBe('Attack');
+    const skills = hiscores.skills.map((skill) => skill.name).filter((name) => name !== 'Overall');
+    expect(skills.map((name) => hiscoresSkill(womSkill(name)))).toEqual(skills);
+  });
+});
+
+describe('metricName', () => {
+  const names = hiscores.activities.map((activity) => activity.name);
+
+  it("finds the hiscores' name for one of Wise Old Man's metrics", () => {
+    expect(metricName('kril_tsutsaroth', names)).toBe("K'ril Tsutsaroth");
+    expect(metricName('clue_scrolls_hard', names)).toBe('Clue Scrolls (hard)');
+    expect(metricName('tombs_of_amascut_expert', names)).toBe('Tombs of Amascut: Expert Mode');
+  });
+
+  it('writes a metric the hiscores have no name for in words', () => {
+    expect(metricName('the_new_boss', names)).toBe('The new boss');
   });
 });

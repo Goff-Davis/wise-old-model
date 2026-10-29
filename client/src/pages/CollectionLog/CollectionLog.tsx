@@ -10,7 +10,7 @@ import {
 } from '@wom/shared';
 import { type JSX, type KeyboardEvent, useId, useState } from 'react';
 import { useParams } from 'react-router';
-import { accountsQuery, collectionLogQuery, useRefreshAccount } from '../../api/accounts.ts';
+import { collectionLogQuery, useAccountName, useRefreshAccount } from '../../api/accounts.ts';
 import { Icon } from '../../components/Icon.tsx';
 import { pageStates } from '../../components/PageStates.tsx';
 import { RefreshButton } from '../../components/RefreshButton.tsx';
@@ -175,10 +175,10 @@ function noLog(view: CollectionLogView, name: string): string {
 export function CollectionLog(): JSX.Element {
   const { accountId = '' } = useParams();
   const zone = useTimeZone();
-  const accounts = useQuery(accountsQuery);
   const query = useQuery(collectionLogQuery(accountId));
   // Refresh: Temple's log again (at most once a minute), with the account's other online data.
   const refresh = useRefreshAccount(accountId);
+  const name = useAccountName(accountId);
   const [open, setOpen] = useState<TempleTab>('bosses');
   const baseId = useId();
   const tabId = (tab: TempleTab) => `${baseId}-${tab}`;
@@ -188,8 +188,6 @@ export function CollectionLog(): JSX.Element {
   if ('show' in state) return state.show;
   const { data, reloadFailed } = state;
   const { log, freshness } = data;
-  const name =
-    accounts.data?.find((account) => String(account.id) === accountId)?.name ?? 'this account';
   return (
     <div className={styles.page}>
       {reloadFailed}

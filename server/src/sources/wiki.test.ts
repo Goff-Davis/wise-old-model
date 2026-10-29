@@ -8,6 +8,7 @@ import {
   bucketSelect,
   expandTemplates,
   getPageWikitext,
+  getRenderedPage,
   getSections,
   getSectionText,
   latestRevisions,
@@ -20,6 +21,7 @@ const wiki = (name: string) => fixture(`wiki/${name}.json`);
 const TRUNCATED = '… (truncated; ask for a narrower section)';
 
 type Call =
+  | 'page'
   | 'search'
   | 'sections'
   | 'section'
@@ -33,6 +35,7 @@ function callOf(params: URLSearchParams): Call | null {
   if (params.get('list') === 'search') return 'search';
   if (params.get('action') === 'parse') {
     if (params.has('section')) return 'section';
+    if (params.get('prop') === 'text') return 'page';
     return params.get('prop')?.includes('wikitext') ? 'wikitext' : 'sections';
   }
   if (params.get('prop') === 'revisions') return 'revisions';
@@ -464,6 +467,26 @@ describe('latestRevisions', () => {
     expect(urls.map((url) => new URL(url).searchParams.get('titles')?.split('|').length)).toEqual([
       50, 50, 20,
     ]);
+  });
+});
+
+describe('getRenderedPage', () => {
+  it("gives a whole page's HTML as the wiki renders it, asking once a day", async () => {
+    const { ctx, calls, later, urls } = await setup({ page: wiki('parse-quests-list') });
+    const html = await getRenderedPage(ctx, 'quests/List');
+    expect(html).toContain('data-rowid="Dragon Slayer II"');
+    expect(Object.fromEntries(new URL(urls[0] ?? '').searchParams)).toMatchObject({
+      action: 'parse',
+      page: 'Quests/List',
+      prop: 'text',
+    });
+    later(DAY_MS - 1);
+    await getRenderedPage(ctx, 'Quests/List');
+    expect(calls()).toEqual(['page']);
+    // A list built from other pages changes without a revision of its own, so it's asked again.
+    later(1);
+    await getRenderedPage(ctx, 'Quests/List');
+    expect(calls()).toEqual(['page', 'page']);
   });
 });
 

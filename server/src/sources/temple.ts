@@ -1,7 +1,9 @@
 import { type CollectionLog, DAY_MS, TEMPLE_TABS, type TempleTab } from '@wom/shared';
+import type { Kysely } from 'kysely';
 import { z } from 'zod';
+import type { DB } from '../db/schema.ts';
 import { NotFoundError, type Requester, SourceError } from '../http/requester.ts';
-import { fetchChecked, parseWith } from './answers.ts';
+import { fetchChecked, parseWith, readSavedSource } from './answers.ts';
 import { cachedFor, type WikiCtx } from './wiki.ts';
 
 const BASE = 'https://templeosrs.com/api/collection-log';
@@ -128,6 +130,11 @@ export function parseCollectionLog(
 ): CollectionLog | null {
   const answer = readAnswer(json, LogSchema);
   return answer === NOT_SYNCED ? null : toCollectionLog(answer, tabs);
+}
+
+/** An account's saved collection log, without Temple's tabs (every entry under Other). */
+export function readSavedLog(db: Kysely<DB>, accountId: number): Promise<CollectionLog | null> {
+  return readSavedSource(db, accountId, 'temple_clog', (json) => parseCollectionLog(json, {}));
 }
 
 /** Every category, with item names and the items still missing. */

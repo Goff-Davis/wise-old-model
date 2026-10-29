@@ -3,6 +3,20 @@ import { squeeze } from '@wom/shared';
 /** An item's name as items are told apart: by every character but case, apostrophes and spaces. */
 export const itemKey = (name: string) => name.toLowerCase().replace(/['\u2019\s]/g, '');
 
+/**
+ * The name among `names` that is `name` as `key` tells names apart (by default itemKey: but for
+ * case, apostrophes and spaces): a skill, boss, task or entry as the account's data writes it.
+ */
+export function findName(
+  names: Iterable<string>,
+  name: string,
+  key: (name: string) => string = itemKey,
+): string | undefined {
+  const wanted = key(name);
+  for (const each of names) if (key(each) === wanted) return each;
+  return undefined;
+}
+
 // How an item's name says what state it's in (uncharged, its charges, poisoned) or that it's
 // ornamented, locked, trimmed or heraldic: owning one of these is owning the item. An imbued
 // (i), enchanted (e) or fortified (f) version is another item.

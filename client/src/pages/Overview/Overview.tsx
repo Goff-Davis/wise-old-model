@@ -7,6 +7,7 @@ import {
   formatNumber,
   formatTime,
   type Overview as OverviewData,
+  PROGRESS_ICONS,
   type SourceKind,
 } from '@wom/shared';
 import { type JSX, useId, useState } from 'react';
@@ -62,22 +63,22 @@ function Progress(props: { progress: OverviewData['progress'] }) {
   const rows = [
     {
       label: 'Quests',
-      icon: 'Quest_point_icon.png',
+      icon: PROGRESS_ICONS.quests,
       value: quests && `${formatNumber(quests.done)} of ${formatNumber(quests.total)}`,
     },
     {
       label: 'Achievement diaries',
-      icon: 'Achievement_Diaries_icon.png',
+      icon: PROGRESS_ICONS.diaries,
       value: diaryTiers && `${diaryTiers.done} of ${diaryTiers.total} tiers`,
     },
     {
       label: 'Combat achievements',
-      icon: 'Combat_achievements_icon.png',
+      icon: PROGRESS_ICONS.combatAchievements,
       value: combatAchievements && caText(combatAchievements),
     },
     {
       label: 'Collection log',
-      icon: 'Collection_log.png',
+      icon: PROGRESS_ICONS.collectionLog,
       value:
         collectionLog &&
         (collectionLog.total === null

@@ -110,6 +110,39 @@ export async function listSnapshots(
   return rows.map((row) => ({ takenAt: row.taken_at, data: row.data }));
 }
 
+/**
+ * An account's snapshots of a kind taken from `start` to `end` (ISO times), oldest first, after
+ * the last one taken before `start` (what the account had when the range began) when there is
+ * one: each one's changes are what it shows that the one before it doesn't.
+ */
+export async function snapshotsFrom(
+  db: Kysely<DB>,
+  accountId: number,
+  kind: SourceKind,
+  start: string,
+  end: string,
+): Promise<{ takenAt: string; data: string }[]> {
+  const ofKind = db
+    .selectFrom('snapshots')
+    .select(['taken_at', 'data'])
+    .where('account_id', '=', accountId)
+    .where('kind', '=', kind);
+  const before = await ofKind
+    .where('taken_at', '<', start)
+    .orderBy('taken_at', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  const during = await ofKind
+    .where('taken_at', '>=', start)
+    .where('taken_at', '<=', end)
+    .orderBy('taken_at')
+    .execute();
+  return [...(before ? [before] : []), ...during].map((row) => ({
+    takenAt: row.taken_at,
+    data: row.data,
+  }));
+}
+
 type SaveInput = {
   accountId: number;
   kind: SourceKind;

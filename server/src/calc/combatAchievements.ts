@@ -1,11 +1,7 @@
+import { CA_TIERS, type CaTier } from '@wom/shared';
 import { SourceError } from '../http/requester.ts';
 import type { CeCombatAchievements } from '../sources/characterExport.schemas.ts';
 import { expandTemplates, type WikiCtx } from '../sources/wiki.ts';
-
-export type CaTier = 'Easy' | 'Medium' | 'Hard' | 'Elite' | 'Master' | 'Grandmaster';
-
-/** The tiers, lowest first. */
-export const CA_TIERS: CaTier[] = ['Easy', 'Medium', 'Hard', 'Elite', 'Master', 'Grandmaster'];
 
 /** Each tier's points to reach it, and what each of its tasks is worth. */
 export type CaThresholds = Record<CaTier, { pointsPerTask: number; pointsRequired: number }>;
@@ -52,11 +48,17 @@ export async function getCaThresholds(ctx: WikiCtx): Promise<CaThresholds> {
   return thresholds;
 }
 
-/** Each tier's completed tasks, from Character Export's tiers (which are in lowercase). */
+/** A record with something for each tier. */
+export function perTier<T>(make: (tier: CaTier) => T): Record<CaTier, T> {
+  return Object.fromEntries(CA_TIERS.map((tier) => [tier, make(tier)])) as Record<CaTier, T>;
+}
+
+/** A tier as Character Export keys it: in lowercase. */
+export const ceTier = (tier: CaTier) => tier.toLowerCase() as Lowercase<CaTier>;
+
+/** Each tier's completed tasks, from Character Export's tiers. */
 export function completedTasks(tiers: CeCombatAchievements['tiers']): Record<CaTier, number> {
-  return Object.fromEntries(
-    CA_TIERS.map((tier) => [tier, tiers[tier.toLowerCase() as Lowercase<CaTier>].tasks_completed]),
-  ) as Record<CaTier, number>;
+  return perTier((tier) => tiers[ceTier(tier)].tasks_completed);
 }
 
 /**

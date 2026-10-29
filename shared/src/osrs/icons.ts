@@ -5,6 +5,14 @@
  */
 export const WIKI_ICON_FILE = /^[A-Za-z0-9_().'%-]+\.png$/;
 
+/** The wiki's icons for quests, diaries, combat achievements and the collection log. */
+export const PROGRESS_ICONS = {
+  quests: 'Quest_point_icon.png',
+  diaries: 'Achievement_Diaries_icon.png',
+  combatAchievements: 'Combat_achievements_icon.png',
+  collectionLog: 'Collection_log.png',
+} as const;
+
 /**
  * The wiki's names for icons whose files aren't named after the hiscores entry (each checked on
  * the wiki on 2026-10-27). Some entries have no icon on the wiki at all; those show a blank.

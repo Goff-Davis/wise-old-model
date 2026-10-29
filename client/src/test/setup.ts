@@ -28,6 +28,9 @@ if (typeof document !== 'undefined') {
     this.dispatchEvent(new Event('close'));
   };
 
+  // jsdom lays nothing out, so it has no scrollIntoView; this one does nothing.
+  Element.prototype.scrollIntoView ??= () => {};
+
   // Without Vitest globals, Testing Library can't register its own cleanup. The app also
   // leaves its theme on <html> and its theme hint in localStorage.
   afterEach(() => {

@@ -1,4 +1,4 @@
-import { combatLevel } from '@wom/shared';
+import { combatLevelOf } from '@wom/shared';
 import { z } from 'zod';
 import { NotFoundError, type Requester } from '../http/requester.ts';
 import { fetchChecked, parseWith } from './answers.ts';
@@ -57,16 +57,7 @@ export function skillLevel(hiscores: Hiscores, skill: string): number | null {
 
 /** The combat level, counting a skill without a level at its lowest (1, or 10 for Hitpoints). */
 export function hiscoresCombatLevel(hiscores: Hiscores): number {
-  const level = (skill: string) => skillLevel(hiscores, skill) ?? (skill === 'Hitpoints' ? 10 : 1);
-  return combatLevel({
-    attack: level('Attack'),
-    strength: level('Strength'),
-    defence: level('Defence'),
-    hitpoints: level('Hitpoints'),
-    ranged: level('Ranged'),
-    magic: level('Magic'),
-    prayer: level('Prayer'),
-  });
+  return combatLevelOf((skill) => skillLevel(hiscores, skill) ?? (skill === 'Hitpoints' ? 10 : 1));
 }
 
 /** The combat and total level, or null for each without hiscores (or an Overall without XP). */

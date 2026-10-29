@@ -20,6 +20,7 @@ import {
   exportFolderStatus,
   findAccountFolder,
   MISSING_FIX,
+  mergeDiaryHistory,
   mergeDiaryNames,
 } from './characterExport.ts';
 
@@ -269,6 +270,28 @@ describe('mergeDiaryNames', () => {
     easy.tasks_done = 9;
     return { data, takenAt };
   };
+
+  it("gives a history's files merged as each would be as the latest, in one pass", () => {
+    const first = earlier('2026-10-20T10:00:00.000Z');
+    const second = { data: structuredClone(latest), takenAt: '2026-10-21T10:00:00.000Z' };
+    const third = earlier('2026-10-22T10:00:00.000Z');
+    const history = [first, second, third];
+    const merged = mergeDiaryHistory(history);
+    expect(merged).toHaveLength(3);
+    history.forEach((snapshot, i) => {
+      const expected = mergeDiaryNames(snapshot.data, history.slice(0, i));
+      // As the latest, a file's own names are dated by its export time; in a history, by when
+      // it was taken.
+      for (const tiers of Object.values(expected)) {
+        for (const tier of Object.values(tiers)) {
+          if (tier.namesAsOf === exportedAt(snapshot.data)) tier.namesAsOf = snapshot.takenAt;
+        }
+      }
+      expect(merged[i], `snapshot ${i}`).toEqual(expected);
+    });
+    // The second dropped the names, so it keeps the first's.
+    expect(merged[1]?.Ardougne?.easy.namesAsOf).toBe('2026-10-20T10:00:00.000Z');
+  });
 
   it('takes an empty task list as no names, so the tier goes by its flag', () => {
     const data: CeDiaries = structuredClone(latest);

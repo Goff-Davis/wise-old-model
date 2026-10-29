@@ -8,13 +8,20 @@ import { SourceError } from '../http/requester.ts';
 import { perDatabase, shareLoad } from '../store/cache.ts';
 import {
   getSource,
+  listSnapshots,
   markSourceError,
   type SourceRow,
   savedFileTimes,
   saveSource,
 } from '../store/sourceState.ts';
 import { parseWith, readSaved } from './answers.ts';
-import { CE_SCHEMAS, type CeDiaries, DIARY_TIERS, exportedAt } from './characterExport.schemas.ts';
+import {
+  CE_SCHEMAS,
+  type CeDiaries,
+  CeDiariesSchema,
+  DIARY_TIERS,
+  exportedAt,
+} from './characterExport.schemas.ts';
 
 /** The file each kind of Character Export data is in, inside the account's export folder. */
 export const CE_FILES = {
@@ -347,6 +354,58 @@ export type DiaryTierData = {
 };
 
 /**
+ * Whether a diary tier is done: by its task names while they still match the tier's count (the
+ * plugin's own flag is wrong for some tiers, Karamja's among them), else by the flag.
+ */
+export function tierDone(tier: DiaryTierData): boolean {
+  return tier.tasks !== null && !tier.namesStale
+    ? tier.tasks.every((task) => task.complete)
+    : tier.complete;
+}
+
+type DiaryTask = NonNullable<CeDiaries['diaries'][string][DiaryTier]['tasks']>[number];
+
+/**
+ * The task names of diaries files seen so far, oldest first: per area and tier, the latest that
+ * has any (an empty list names nothing). `merge` gives a file's areas and tiers with them (see
+ * mergeDiaryNames).
+ */
+function diaryNames() {
+  const latest = new Map<string, { tasks: DiaryTask[]; asOf: string }>();
+  return {
+    see(file: CeDiaries, asOf: string) {
+      for (const [area, tiers] of Object.entries(file.diaries)) {
+        for (const tier of DIARY_TIERS) {
+          const tasks = tiers[tier].tasks;
+          if (tasks?.length) latest.set(`${area}:${tier}`, { tasks, asOf });
+        }
+      }
+    },
+    merge(file: CeDiaries): Record<string, Record<DiaryTier, DiaryTierData>> {
+      const merged: Record<string, Record<DiaryTier, DiaryTierData>> = {};
+      for (const [area, tiers] of Object.entries(file.diaries)) {
+        const byTier = {} as Record<DiaryTier, DiaryTierData>;
+        for (const tier of DIARY_TIERS) {
+          const now = tiers[tier];
+          const named = latest.get(`${area}:${tier}`);
+          const tasks = named?.tasks.map(({ name, complete }) => ({ name, complete })) ?? null;
+          byTier[tier] = {
+            complete: now.complete,
+            tasksDone: now.tasks_done,
+            tasks,
+            namesAsOf: named?.asOf ?? null,
+            namesStale:
+              tasks !== null && tasks.filter((task) => task.complete).length !== now.tasks_done,
+          };
+        }
+        merged[area] = byTier;
+      }
+      return merged;
+    },
+  };
+}
+
+/**
  * Each area and tier of the latest diaries file, with task names: the latest file's when it has
  * them, else the most recent earlier snapshot's that has them (a later export can drop them),
  * else none. Names whose completed count no longer matches the tier's are flagged as stale;
@@ -356,33 +415,48 @@ export function mergeDiaryNames(
   latest: CeDiaries,
   earlier: { data: CeDiaries; takenAt: string }[],
 ): Record<string, Record<DiaryTier, DiaryTierData>> {
-  const latestAt = exportedAt(latest);
-  const newestFirst = [...earlier].sort((a, b) => Date.parse(b.takenAt) - Date.parse(a.takenAt));
-  const merged: Record<string, Record<DiaryTier, DiaryTierData>> = {};
-  for (const [area, tiers] of Object.entries(latest.diaries)) {
-    const byTier = {} as Record<DiaryTier, DiaryTierData>;
-    for (const tier of DIARY_TIERS) {
-      const now = tiers[tier];
-      // An empty list names nothing, so it's no names at all.
-      const named = now.tasks?.length
-        ? { tasks: now.tasks, asOf: latestAt }
-        : newestFirst
-            .map((snapshot) => ({
-              tasks: snapshot.data.diaries[area]?.[tier]?.tasks,
-              asOf: snapshot.takenAt,
-            }))
-            .find((snapshot) => snapshot.tasks?.length);
-      const tasks = named?.tasks?.map(({ name, complete }) => ({ name, complete })) ?? null;
-      byTier[tier] = {
-        complete: now.complete,
-        tasksDone: now.tasks_done,
-        tasks,
-        namesAsOf: named?.asOf ?? null,
-        namesStale:
-          tasks !== null && tasks.filter((task) => task.complete).length !== now.tasks_done,
-      };
-    }
-    merged[area] = byTier;
-  }
-  return merged;
+  const names = diaryNames();
+  const oldestFirst = [...earlier].sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt));
+  for (const snapshot of oldestFirst) names.see(snapshot.data, snapshot.takenAt);
+  names.see(latest, exportedAt(latest));
+  return names.merge(latest);
+}
+
+/**
+ * Each diaries file of a history (oldest first) with task names as mergeDiaryNames would give it
+ * that file as the latest, in one pass.
+ */
+export function mergeDiaryHistory(
+  history: { data: CeDiaries; takenAt: string }[],
+): Record<string, Record<DiaryTier, DiaryTierData>>[] {
+  const names = diaryNames();
+  return history.map(({ data, takenAt }) => {
+    names.see(data, takenAt);
+    return names.merge(data);
+  });
+}
+
+/** Snapshots (or saved copies) that read with `schema`, each with when it was taken, in order. */
+export function readSnapshots<T>(
+  rows: { data: string; takenAt: string }[],
+  schema: z.ZodType<T>,
+): { data: T; takenAt: string }[] {
+  return rows.flatMap((row) => {
+    const data = readExportFile(row.data, schema);
+    return data ? [{ data, takenAt: row.takenAt }] : [];
+  });
+}
+
+/**
+ * The account's diaries: the latest file (`latest`, read by the caller) with task names from its
+ * earlier snapshots, by mergeDiaryNames; null without the file.
+ */
+export async function savedDiaries(
+  db: Kysely<DB>,
+  accountId: number,
+  latest: CeDiaries | null,
+): Promise<Record<string, Record<DiaryTier, DiaryTierData>> | null> {
+  if (!latest) return null;
+  const earlier = readSnapshots(await listSnapshots(db, accountId, 'ce_diaries'), CeDiariesSchema);
+  return mergeDiaryNames(latest, earlier);
 }

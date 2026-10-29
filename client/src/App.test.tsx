@@ -1,12 +1,18 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { Account } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { type FakeRoute, LUMBY_PETE, testLookup, testOverview } from './test/fakeApi.ts';
+import {
+  type FakeRoute,
+  LUMBY_PETE,
+  testGoalsView,
+  testLookup,
+  testOverview,
+} from './test/fakeApi.ts';
 import { renderApp } from './test/renderApp.tsx';
 
 const IRON_PETE: Account = { ...LUMBY_PETE, id: 2, name: 'Iron Pete' };
 
-/** The app at `path`, with these accounts and their overviews, plus `extra` routes. */
+/** The app at `path`, with these accounts and their overviews and goals, plus `extra` routes. */
 function renderAt(
   path: string,
   accounts: Account[] = [LUMBY_PETE, IRON_PETE],
@@ -16,9 +22,9 @@ function renderAt(
     routes: {
       'GET /api/accounts': () => accounts,
       ...Object.fromEntries(
-        accounts.map((account) => [
-          `GET /api/accounts/${account.id}/overview`,
-          () => testOverview(account),
+        accounts.flatMap((account) => [
+          [`GET /api/accounts/${account.id}/overview`, () => testOverview(account)],
+          [`GET /api/accounts/${account.id}/goals`, () => testGoalsView()],
         ]),
       ),
       ...extra,
@@ -135,6 +141,7 @@ describe('routes', () => {
             ? [LUMBY_PETE]
             : Response.json({ error: 'The server is restarting.' }, { status: 503 });
         },
+        'GET /api/accounts/1/goals': () => testGoalsView(),
       },
     });
     const page = screen.getByRole('region', { name: 'Page' });

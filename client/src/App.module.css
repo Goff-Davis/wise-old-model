@@ -4,11 +4,6 @@
   color: var(--muted);
 }
 
-.placeholder h2 {
-  margin: 0;
-  color: var(--text);
-}
-
 .problem {
   padding: 20px 24px;
 }

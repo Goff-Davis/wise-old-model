@@ -1,0 +1,57 @@
+.search {
+  display: grid;
+}
+
+/*
+ * Floating over the page, placed by the code, so opening it leaves the page (or dialog) as it
+ * was. On the page's own background, where the grey detail text reads clearly in both themes.
+ */
+.popup {
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.35);
+}
+
+.list {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+
+.list:empty {
+  display: none;
+}
+
+.list [role="option"] {
+  padding: 4px 8px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.list [role="option"]:hover {
+  outline: 1px solid var(--rule);
+  outline-offset: -1px;
+}
+
+.list [aria-selected="true"],
+.list [aria-selected="true"]:hover {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.detail,
+.note {
+  color: var(--muted);
+}
+
+.note {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 0.92rem;
+}

@@ -20,7 +20,7 @@ export function exportedAt(file: { exported_at: string }): string {
   return new Date(file.exported_at).toISOString();
 }
 
-const CeCharacterSchema = z.looseObject({
+export const CeCharacterSchema = z.looseObject({
   ...header,
   account_name: z.string(),
   world: z.number().nullable(),
@@ -93,6 +93,7 @@ export const CeContainerSchema = z.looseObject({
   ),
 });
 
+export type CeCharacter = z.infer<typeof CeCharacterSchema>;
 export type CeQuests = z.infer<typeof CeQuestsSchema>;
 export type CeDiaries = z.infer<typeof CeDiariesSchema>;
 export type CeCombatAchievements = z.infer<typeof CeCombatAchievementsSchema>;

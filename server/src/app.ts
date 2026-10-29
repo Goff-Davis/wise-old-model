@@ -10,6 +10,7 @@ import { HttpError, jsonErrors } from './http/errors.ts';
 import { localOnly } from './http/localOnly.ts';
 import { createRequester, type Requester } from './http/requester.ts';
 import { accountRoutes } from './routes/accounts.ts';
+import { goalRoutes } from './routes/goals.ts';
 import { iconRoutes } from './routes/icons.ts';
 import { settingsRoutes } from './routes/settings.ts';
 import { createFreshnessMemory } from './services/freshness.ts';
@@ -79,15 +80,14 @@ export function createApp(deps: AppDeps): Express {
   // One requester for the whole app, so each site's queue and spacing cover every request.
   const req = deps.req ?? createRequester({ userAgent: userAgent(config) });
   app.use('/api', settingsRoutes(deps.db));
-  app.use(
-    '/api',
-    accountRoutes({
-      db: deps.db,
-      req,
-      memory: createFreshnessMemory(),
-      runeliteDir: config.runeliteDir,
-    }),
-  );
+  const accountDeps = {
+    db: deps.db,
+    req,
+    memory: createFreshnessMemory(),
+    runeliteDir: config.runeliteDir,
+  };
+  app.use('/api', accountRoutes(accountDeps));
+  app.use('/api', goalRoutes(accountDeps));
   app.use('/api', iconRoutes(createIconStore(req, config.dataDir)));
 
   app.use('/api', (_req, _res, next) => {

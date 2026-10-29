@@ -2,7 +2,7 @@
 export const MAX_XP = 200_000_000;
 
 /** The highest virtual level: 200M XP is in it. */
-const MAX_LEVEL = 126;
+export const MAX_LEVEL = 126;
 
 /**
  * The XP each level starts at, index 0 being level 1, by the game's formula: level L starts at

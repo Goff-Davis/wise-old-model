@@ -1,13 +1,16 @@
-import { squeeze } from '@wom/shared';
+import { DIARY_AREAS, type DiaryTierName, squeeze } from '@wom/shared';
+import { parse } from 'node-html-parser';
 import { SourceError } from '../http/requester.ts';
 import {
   bucketQuery,
   bucketSelect,
   getPageWikitext,
+  getRenderedPage,
   LINK,
   linkPage,
   linkPages,
   loneLink,
+  parsedOnce,
   plainText,
   type WikiCtx,
   wikiUrl,
@@ -44,7 +47,7 @@ export type QuestNeed = 'finished' | 'started' | 'partial';
 
 export type DiaryTask = {
   area: string;
-  tier: 'Easy' | 'Medium' | 'Hard' | 'Elite';
+  tier: DiaryTierName;
   number: number;
   task: string;
   skills: SkillReq[];
@@ -67,22 +70,6 @@ export type Check = {
   unchecked: string[];
   url: string;
 };
-
-/** The 12 achievement diaries, by the area each is for (the wiki's pages are "<area> Diary"). */
-export const DIARY_AREAS = [
-  'Ardougne',
-  'Desert',
-  'Falador',
-  'Fremennik',
-  'Kandarin',
-  'Karamja',
-  'Kourend & Kebos',
-  'Lumbridge & Draynor',
-  'Morytania',
-  'Varrock',
-  'Western Provinces',
-  'Wilderness',
-];
 
 /**
  * A combat level's name among an account's levels, which are otherwise its skills by the
@@ -456,7 +443,7 @@ const SAME_QUESTS = new Map(
  * or "(miniquest)" after a name it shares with something else don't count, and a part of
  * Recipe for Disaster matches by the wiki's name for it or the game's.
  */
-const questKey = (name: string) => {
+export const questKey = (name: string) => {
   const key = plainName(name);
   return SAME_QUESTS.get(key) ?? key;
 };
@@ -497,11 +484,15 @@ function checkLevel(req: SkillReq, levels: Record<string, number>): Check['skill
  * Whether an account meets a quest's requirements. `levels` are its skills by the hiscores'
  * names, and its combat level as COMBAT_LEVEL. A quest needed is listed once, however many
  * quests need it, and with its own needs only while it isn't finished (a finished one has had
- * them met).
+ * them met). Quest points the account's data can't give (null) are listed as unchecked.
  */
 export function checkQuest(
   reqs: QuestReqs,
-  account: { levels: Record<string, number>; quests: Record<string, string>; questPoints: number },
+  account: {
+    levels: Record<string, number>;
+    quests: Record<string, string>;
+    questPoints: number | null;
+  },
 ): Check {
   const stateOf = questStates(account.quests);
   const unchecked: string[] = [];
@@ -531,13 +522,17 @@ export function checkQuest(
   };
   walk(reqs.quests);
   for (const text of reqs.other) cantCheck(text);
+  const have = account.questPoints;
+  if (reqs.questPoints && have === null) {
+    cantCheck(`${reqs.questPoints.need} quest points (the account's quest points aren't known)`);
+  }
   const questPoints =
-    reqs.questPoints === null
+    reqs.questPoints === null || have === null
       ? null
       : {
           need: reqs.questPoints.need,
-          have: account.questPoints,
-          met: account.questPoints >= reqs.questPoints.need,
+          have,
+          met: have >= reqs.questPoints.need,
           note: reqs.questPoints.note,
         };
   return {
@@ -618,19 +613,82 @@ const QUEST_QUERY = bucketSelect('quest', ['page_name', 'requirements'], { limit
  * Every quest's requirements, by its page name, from one Bucket query kept a day; findQuestReqs
  * looks one up by the name it's asked for.
  */
-export async function loadAllQuestRequirements(ctx: WikiCtx): Promise<Map<string, QuestReqs>> {
-  const rows = await bucketQuery<{ page_name?: unknown; requirements?: unknown }>(ctx, QUEST_QUERY);
-  const all = new Map<string, QuestReqs>();
-  for (const row of rows) {
-    if (typeof row.page_name !== 'string') continue;
-    const text = Array.isArray(row.requirements)
-      ? row.requirements.join('\n')
-      : typeof row.requirements === 'string'
-        ? row.requirements
-        : '';
-    all.set(row.page_name, parseQuestRequirements(row.page_name, text));
+export function loadAllQuestRequirements(ctx: WikiCtx): Promise<Map<string, QuestReqs>> {
+  type Row = { page_name?: unknown; requirements?: unknown };
+  return parsedOnce(
+    ctx,
+    QUEST_QUERY,
+    (read) => bucketQuery<Row>(read, QUEST_QUERY),
+    (rows) => {
+      const all = new Map<string, QuestReqs>();
+      for (const row of rows) {
+        if (typeof row.page_name !== 'string') continue;
+        const text = Array.isArray(row.requirements)
+          ? row.requirements.join('\n')
+          : typeof row.requirements === 'string'
+            ? row.requirements
+            : '';
+        all.set(row.page_name, parseQuestRequirements(row.page_name, text));
+      }
+      return all;
+    },
+  );
+}
+
+const QUEST_LIST = 'Quests/List';
+
+/**
+ * Each quest's quest points, by its page name, from the wiki's list of quests (Quests/List,
+ * rendered and kept a day): the column headed by the quest point icon in each of its tables (the
+ * miniquests' table has none, as they give none). A quest whose parts are listed as quests of
+ * their own (Recipe for Disaster/…) is left out, its points being its parts'. A list with no
+ * quest points read is a SourceError rather than none.
+ */
+export function loadQuestPoints(ctx: WikiCtx): Promise<Map<string, number>> {
+  return parsedOnce(ctx, QUEST_LIST, (read) => getRenderedPage(read, QUEST_LIST), questPointsIn);
+}
+
+/** Each quest's points in the quest list's HTML (see loadQuestPoints). */
+function questPointsIn(html: string): Map<string, number> {
+  const root = parse(html);
+  const points = new Map<string, number>();
+  // A table without the column (the miniquests') has no cell there, so no number.
+  for (const table of root.querySelectorAll('table')) {
+    const column = table
+      .querySelectorAll('th')
+      .findIndex((th) => th.querySelector('[data-skill="Quest points"]'));
+    for (const row of table.querySelectorAll('tr[data-rowid]')) {
+      const value = squeeze(row.querySelectorAll('td')[column]?.text ?? '');
+      const quest = row.getAttribute('data-rowid');
+      if (quest && /^\d+$/.test(value)) points.set(quest, Number(value));
+    }
   }
-  return all;
+  // A quest whose parts are listed too counts by its parts.
+  for (const quest of [...points.keys()]) {
+    const slash = quest.indexOf('/');
+    if (slash > 0) points.delete(quest.slice(0, slash));
+  }
+  if (points.size === 0) {
+    throw new SourceError(
+      SITE,
+      null,
+      `${SITE}: the quest points couldn't be read from ${QUEST_LIST}`,
+    );
+  }
+  return points;
+}
+
+/**
+ * An account's quest points: those of the quests it has finished (its quests by name and state,
+ * as for checkQuest), from loadQuestPoints.
+ */
+export function questPointsOf(quests: Record<string, string>, points: Map<string, number>): number {
+  const byKey = new Map([...points].map(([quest, value]) => [questKey(quest), value]));
+  let total = 0;
+  for (const [quest, state] of Object.entries(quests)) {
+    if (state.toLowerCase() === 'finished') total += byKey.get(questKey(quest)) ?? 0;
+  }
+  return total;
 }
 
 /** One diary's tasks, from its wiki page (`<area> Diary`), kept until the page changes. */

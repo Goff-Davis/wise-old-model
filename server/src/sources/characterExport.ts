@@ -70,15 +70,50 @@ const fsCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 
 /** The newest modified time among a folder's Character Export files, or 0 without any. */
 async function newestFile(folder: string): Promise<number> {
-  let newest = 0;
-  for (const file of Object.values(CE_FILES)) {
-    try {
-      newest = Math.max(newest, (await fs.stat(path.join(folder, file))).mtimeMs);
-    } catch (error) {
-      if (fsCode(error) === undefined) throw error;
-    }
+  const times = await Promise.all(
+    Object.values(CE_FILES).map(async (file) => {
+      try {
+        return (await fs.stat(path.join(folder, file))).mtimeMs;
+      } catch (error) {
+        if (fsCode(error) === undefined) throw error;
+        return 0;
+      }
+    }),
+  );
+  return Math.max(0, ...times);
+}
+
+/** Where Character Export writes: `character-exporter/` in the RuneLite folder. */
+export const exportRoot = (runeliteDir: string) => path.join(runeliteDir, 'character-exporter');
+
+type Entry = { name: string; isDirectory(): boolean };
+
+/** What's in Character Export's folder: nothing when it isn't there; a SourceError when it can't be read. */
+async function exportEntries(runeliteDir: string): Promise<Entry[]> {
+  try {
+    return await fs.readdir(exportRoot(runeliteDir), { withFileTypes: true });
+  } catch (error) {
+    if (isMissing(error)) return [];
+    const code = fsCode(error);
+    if (code === undefined) throw error;
+    throw new SourceError(SITE, null, `${SITE}: the RuneLite folder couldn't be read (${code})`);
   }
-  return newest;
+}
+
+/** Of `entries`, the folder for `key` (see findAccountFolder). */
+async function folderFor(
+  runeliteDir: string,
+  entries: Entry[],
+  key: string,
+): Promise<string | null> {
+  const matches = entries
+    .filter((entry) => entry.isDirectory() && nameKey(entry.name) === key)
+    .map((entry) => path.join(exportRoot(runeliteDir), entry.name));
+  if (matches.length < 2) return matches[0] ?? null;
+  const written = await Promise.all(
+    matches.map(async (folder) => ({ folder, at: await newestFile(folder) })),
+  );
+  return written.sort((a, b) => b.at - a.at)[0].folder;
 }
 
 /**
@@ -88,38 +123,38 @@ async function newestFile(folder: string): Promise<number> {
  * last. A folder that can't be read is a SourceError.
  */
 export async function findAccountFolder(runeliteDir: string, key: string): Promise<string | null> {
-  const root = path.join(runeliteDir, 'character-exporter');
-  let entries: { name: string; isDirectory(): boolean }[];
-  try {
-    entries = await fs.readdir(root, { withFileTypes: true });
-  } catch (error) {
-    if (isMissing(error)) return null;
-    const code = fsCode(error);
-    if (code === undefined) throw error;
-    throw new SourceError(SITE, null, `${SITE}: the RuneLite folder couldn't be read (${code})`);
-  }
-  const matches = entries
-    .filter((entry) => entry.isDirectory() && nameKey(entry.name) === key)
-    .map((entry) => path.join(root, entry.name));
-  if (matches.length < 2) return matches[0] ?? null;
-  const written = await Promise.all(
-    matches.map(async (folder) => ({ folder, at: await newestFile(folder) })),
-  );
-  return written.sort((a, b) => b.at - a.at)[0].folder;
+  return folderFor(runeliteDir, await exportEntries(runeliteDir), key);
+}
+
+export type FolderStatus = { found: boolean; lastWritten: string | null };
+
+async function statusOf(folder: string | null): Promise<FolderStatus> {
+  if (!folder) return { found: false, lastWritten: null };
+  const newest = await newestFile(folder);
+  return { found: true, lastWritten: newest > 0 ? new Date(newest).toISOString() : null };
 }
 
 /**
  * Whether the account has an export folder, and when its newest file was written. A folder
  * that can't be read is a SourceError.
  */
-export async function exportFolderStatus(
+export async function exportFolderStatus(runeliteDir: string, key: string): Promise<FolderStatus> {
+  return statusOf(await findAccountFolder(runeliteDir, key));
+}
+
+/** exportFolderStatus for each of `keys`, by key, reading Character Export's folder once. */
+export async function exportFolderStatuses(
   runeliteDir: string,
-  key: string,
-): Promise<{ found: boolean; lastWritten: string | null }> {
-  const folder = await findAccountFolder(runeliteDir, key);
-  if (!folder) return { found: false, lastWritten: null };
-  const newest = await newestFile(folder);
-  return { found: true, lastWritten: newest > 0 ? new Date(newest).toISOString() : null };
+  keys: string[],
+): Promise<Map<string, FolderStatus>> {
+  const entries = await exportEntries(runeliteDir);
+  return new Map(
+    await Promise.all(
+      keys.map(
+        async (key) => [key, await statusOf(await folderFor(runeliteDir, entries, key))] as const,
+      ),
+    ),
+  );
 }
 
 type FileRead =

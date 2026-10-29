@@ -7,8 +7,10 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import {
+  type AccountChanges,
   AccountLookupSchema,
   AccountSchema,
+  AccountStatusSchema,
   AddedAccountSchema,
   BANK_PLACES,
   BankViewSchema,
@@ -27,6 +29,9 @@ import { apiGet, apiSend } from './client.ts';
 import { apiKey, apiQuery } from './queryClient.ts';
 
 export const accountsQuery = apiQuery('/api/accounts', z.array(AccountSchema));
+
+/** Each account's Character Export folder and Temple log as saved, for Settings → Accounts. */
+export const accountStatusQuery = apiQuery('/api/accounts/status', z.array(AccountStatusSchema));
 
 /** An account's name from the account list, or "this account" until it's loaded. */
 export function useAccountName(accountId: string): string {
@@ -151,11 +156,43 @@ export function useRefreshAccount(accountId: string) {
   });
 }
 
-export function useRenameAccount(accountId: string) {
+/**
+ * Renames an account or changes its type. The account list reloads; a rename also reloads the
+ * account's pages on screen (the Overview's heading) and what Settings found for it (its folder
+ * goes by its name). Pages not on screen load afresh when next shown.
+ */
+export function useChangeAccount(accountId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) =>
-      apiSend('PATCH', `/api/accounts/${accountId}`, { name }, AccountSchema),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: accountsQuery.queryKey }),
+    mutationFn: (changes: AccountChanges) =>
+      apiSend('PATCH', `/api/accounts/${accountId}`, changes, AccountSchema),
+    onSuccess: (_account, changes) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsQuery.queryKey, exact: true }),
+        ...(changes.name === undefined
+          ? []
+          : [
+              queryClient.invalidateQueries({ queryKey: apiKey(`/api/accounts/${accountId}`) }),
+              queryClient.invalidateQueries({ queryKey: accountStatusQuery.queryKey }),
+            ]),
+      ]),
+  });
+}
+
+/**
+ * Deletes an account and everything saved for it. The account list reloads (a page open on the
+ * account then goes home), and what was loaded for the account is dropped.
+ */
+export function useDeleteAccount(accountId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend('DELETE', `/api/accounts/${accountId}`, undefined, z.unknown()),
+    onSuccess: async () => {
+      queryClient.removeQueries({ queryKey: apiKey(`/api/accounts/${accountId}`) });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: accountsQuery.queryKey, exact: true }),
+        queryClient.invalidateQueries({ queryKey: accountStatusQuery.queryKey }),
+      ]);
+    },
   });
 }

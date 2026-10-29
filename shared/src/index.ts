@@ -1,3 +1,4 @@
+export * from './about.ts';
 export * from './accounts.ts';
 export * from './bank.ts';
 export * from './chat.ts';

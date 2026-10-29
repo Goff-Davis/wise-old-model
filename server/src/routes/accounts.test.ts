@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs';
+import { statSync, utimesSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { Freshness } from '@wom/shared';
@@ -64,6 +64,82 @@ async function setup(answers: Record<string, Answer> = {}) {
     );
   return { db, app, exportFiles, ...fake };
 }
+
+describe('GET /api/accounts/status', () => {
+  it("gives each account's Character Export folder and Temple log as saved, asking no site", async () => {
+    const { db, app, exportFiles, requests } = await setup();
+    const pete = await insertAccount(db);
+    const mikael = await insertAccount(db, { name: 'Mikael' });
+    const zezima = await insertAccount(db, { name: 'Zezima' });
+    const written = new Date('2026-10-28T08:30:00.000Z');
+    const folder = exportFiles('Lumby_Pete', ['quests.json']);
+    utimesSync(path.join(folder, 'quests.json'), written, written);
+    await saveSource(db, {
+      accountId: mikael.id,
+      kind: 'temple_clog',
+      data: fixture('temple/clog-mikael.json'),
+      fetchedAt: '2026-10-28T09:00:00.000Z',
+      timeZone: 'UTC',
+    });
+    // Zezima's Collection log page found Temple has no log for the name.
+    await call(app, { path: `/api/accounts/${zezima.id}/collection-log` });
+    const asked = requests.length;
+
+    const res = await call(app, { path: '/api/accounts/status' });
+    expect(res.status).toBe(200);
+    expect(requests).toHaveLength(asked);
+    const notFetched = {
+      kind: 'temple_clog',
+      fetchedAt: null,
+      stale: true,
+      error: null,
+      notFound: false,
+    };
+    const noFolder = { found: false, lastWritten: null, error: null };
+    expect(res.body).toEqual([
+      {
+        id: pete.id,
+        characterExport: { found: true, lastWritten: written.toISOString(), error: null },
+        temple: notFetched,
+      },
+      {
+        id: mikael.id,
+        characterExport: noFolder,
+        temple: { ...notFetched, fetchedAt: '2026-10-28T09:00:00.000Z', stale: false },
+      },
+      {
+        id: zezima.id,
+        characterExport: noFolder,
+        temple: {
+          ...notFetched,
+          error: "Temple: Zezima hasn't synced their collection log yet",
+          notFound: true,
+        },
+      },
+    ]);
+  });
+});
+
+describe('GET /api/accounts/status (an unreadable folder)', () => {
+  it("says why an account's folder couldn't be checked when the RuneLite folder can't be read", async () => {
+    const { db, app } = await setup();
+    const pete = await insertAccount(db);
+    vi.spyOn(fs, 'readdir').mockRejectedValue(
+      Object.assign(new Error('denied'), { code: 'EACCES' }),
+    );
+    const res = await call(app, { path: '/api/accounts/status' });
+    expect(res.body).toMatchObject([
+      {
+        id: pete.id,
+        characterExport: {
+          found: null,
+          lastWritten: null,
+          error: "Character Export: the RuneLite folder couldn't be read (EACCES)",
+        },
+      },
+    ]);
+  });
+});
 
 describe('GET /api/accounts/lookup', () => {
   it('shows what the hiscores and Wise Old Man know about a name', async () => {
@@ -422,6 +498,47 @@ describe('GET, PATCH and DELETE /api/accounts', () => {
     expect(
       (await db.selectFrom('accounts').select('name_key').executeTakeFirstOrThrow()).name_key,
     ).toBe('lumby peter');
+  });
+
+  it('keeps the history attached through a rename: saved data, goals and chats', async () => {
+    const { db, app } = await setup();
+    const account = await insertAccount(db);
+    // Fetched just now, so the goals page doesn't fetch them again.
+    const fetchedAt = new Date().toISOString();
+    await saveSource(db, {
+      accountId: account.id,
+      kind: 'hiscores',
+      data: fixture('hiscores/lynx-titan.json'),
+      fetchedAt,
+      timeZone: 'UTC',
+    });
+    const goal = await call(app, {
+      method: 'POST',
+      path: `/api/accounts/${account.id}/goals`,
+      body: { title: 'Clear out the bank', target: { kind: 'custom' } },
+    });
+    expect(goal.status).toBe(201);
+    const chat = await call(app, { method: 'POST', path: `/api/accounts/${account.id}/chats` });
+    expect(chat.status).toBe(201);
+
+    const renamed = await call(app, {
+      method: 'PATCH',
+      path: `/api/accounts/${account.id}`,
+      body: { name: 'Lumby Peter' },
+    });
+    expect(renamed.body).toMatchObject({ id: account.id, name: 'Lumby Peter' });
+    expect(await listSnapshots(db, account.id, 'hiscores')).toHaveLength(1);
+    expect((await getSource(db, account.id, 'hiscores'))?.fetchedAt).toBe(fetchedAt);
+    const goals = await call(app, { path: `/api/accounts/${account.id}/goals` });
+    expect((goals.body as { goals: { id: number }[] }).goals.map((one) => one.id)).toEqual([
+      (goal.body as { id: number }).id,
+    ]);
+    const sessions = await db
+      .selectFrom('chat_sessions')
+      .select('id')
+      .where('account_id', '=', account.id)
+      .execute();
+    expect(sessions.map((one) => one.id)).toEqual([(chat.body as { id: string }).id]);
   });
 
   it('keeps a type from Wise Old Man when the change sends the same type', async () => {

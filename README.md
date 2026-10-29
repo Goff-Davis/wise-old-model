@@ -27,7 +27,17 @@ It rebuilds, for personal use, the idea behind "Waise Old Man" (the Gielinor bot
 
 ## Status
 
-Being built in phases. Phases 1 to 6 are in place: the local server, its database and settings, and the three-column app in both themes; adding an account by name (looked up on the hiscores, Wise Old Man, TempleOSRS and Character Export's files); the Overview page with the stats tiles, quests, diaries, combat achievements, the collection log, top boss kill counts, worn gear, what's missing, where the data came from and when, and Refresh; Character Export's game data read from RuneLite's folder as you play (or on Refresh); the Bank and gear and Collection log pages; and the calculations the goals and the chat will use (XP and hours to a target at Wise Old Man's rates, quest and diary requirement checks against the wiki, gear upgrades from the wiki's recommended setups, and item stats, prices and drop sources). Phase 5 added the This week page (XP, kills and clues, what was completed and new collection log items for today, the last 7 or 30 days, or days picked) and goals: eight kinds (a skill level or XP, a quest, a diary tier, combat achievements, boss kills, a collection log item or entry, an item, or your own), with progress worked out from the account's data, what a quest or diary still needs, your own order, and goals that complete themselves as you play. Phase 6 added the chat: ask about the account and Claude looks things up with the app's own tools (your stats, quests, diaries, combat achievements, collection log, gains, bank and gear, requirement checks, XP and hours, gear upgrades, the wiki and prices, and your goals), shows what it looked at, cites the wiki pages it read, and asks before adding or changing a goal; Stop ends an answer, Earlier chats keeps each account's chats, and Suggest goals and "Ask the AI for a plan" on the Goals page ask it from there. With your Claude plan, it uses the plan's usage; the tokens each answer used show under it. The design is in [ARCHITECTURE.md](ARCHITECTURE.md) and the build steps, in phases, are in [PLAN.md](PLAN.md).
+Built, from the phases in [PLAN.md](PLAN.md); what's left is checking it end to end on real accounts. What it does:
+
+- **Accounts:** add one by name (looked up on the hiscores, Wise Old Man, TempleOSRS and Character Export's files); rename it, change its type or delete it in Settings; a renamed account is noticed on Refresh and offered the new name, keeping its history.
+- **Overview:** the stats tiles, quests, diaries, combat achievements, the collection log, top boss kill counts, worn gear, what's missing and how to get it, where the data came from and when, and Refresh.
+- **This week:** XP, kills and clues, what was completed and new collection log items, for today, the last 7 or 30 days, or days picked.
+- **Bank and gear** and the **Collection log**, read from RuneLite's folder as you play (or on Refresh) and from TempleOSRS.
+- **Goals:** eight kinds (a skill level or XP, a quest, a diary tier, combat achievements, boss kills, a collection log item or entry, an item, or your own), with progress from the account's data, what a quest or diary still needs, your own order, and goals that complete themselves as you play.
+- **The chat:** ask about the account and Claude looks things up with the app's own tools (stats, quests, diaries, combat achievements, collection log, gains, bank and gear, requirement checks, XP and hours, gear upgrades, the wiki and prices, and your goals), shows what it looked at, cites the wiki pages it read, and asks before adding or changing a goal. With your Claude plan it uses the plan's usage; the model and effort are picked from the ones Claude Code lists.
+- **Settings:** accounts, where the game data is read from and how often, the chat's billing, model and limits, the theme and time zone, and About: the data folder, backups (daily, and Back up now), the `.env` settings and the credits.
+
+The design is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Requirements
 
@@ -39,8 +49,6 @@ Being built in phases. Phases 1 to 6 are in place: the local server, its databas
 
 ## Setup and running
 
-These steps run what exists so far (see Status).
-
 1. `npm install` (again after switching between WSL and Windows on the same checkout).
 2. Copy `.env.example` to `.env` (git-ignored) and fill in `CONTACT`.
 
@@ -48,7 +56,7 @@ These steps run what exists so far (see Status).
    |---|---|---|---|
    | `CONTACT` | Yes | (none) | Your Discord name or email, sent in the User-Agent so Wise Old Man, Temple and the wiki can reach you |
    | `PORT` | No | `4747` | Port the server listens on |
-   | `DATA_DIR` | No | Your OS's app-data folder | Database, backups and icons |
+   | `DATA_DIR` | No | Your OS's app-data folder | Database, backups, icons and the chat's Claude Code working folder |
    | `RUNELITE_DIR` | No | `~/.runelite` | Where RuneLite keeps Character Export's files. On WSL with RuneLite on Windows: `/mnt/c/Users/<you>/.runelite` |
    | `ANTHROPIC_API_KEY` | No | (none) | Only used if you switch the chat's billing to an API key |
 

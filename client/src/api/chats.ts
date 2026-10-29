@@ -1,4 +1,9 @@
-import { ChatMessageSchema, ChatModelsAnswerSchema, ChatSessionSchema } from '@wom/shared';
+import {
+  ChatMessageSchema,
+  ChatModelsAnswerSchema,
+  ChatSessionSchema,
+  type Settings,
+} from '@wom/shared';
 import { z } from 'zod';
 import { apiQuery } from './queryClient.ts';
 
@@ -12,5 +17,7 @@ export function messagesQuery(chatId: string) {
   return apiQuery(`/api/chats/${chatId}/messages`, z.array(ChatMessageSchema));
 }
 
-/** The models the chat can use with the billing set, as its provider lists them. */
-export const chatModelsQuery = apiQuery('/api/chat/models', ChatModelsAnswerSchema);
+/** The models the chat can use with `billing`, as its provider lists them. */
+export function chatModelsQuery(billing: Settings['billing']) {
+  return apiQuery(`/api/chat/models?billing=${billing}`, ChatModelsAnswerSchema);
+}

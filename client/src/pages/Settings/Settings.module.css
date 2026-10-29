@@ -1,18 +1,26 @@
 .settings {
+  display: grid;
+  align-content: start;
+  gap: 28px;
   padding: 20px 24px;
 }
 
 .settings h2 {
-  margin: 0 0 16px;
+  margin: 0;
 }
 
 .section {
   display: grid;
   gap: 14px;
-  max-width: 32rem;
+  max-width: 40rem;
 }
 
-.section h3 {
+.section h3,
+.section h4 {
+  margin: 0;
+}
+
+.section p {
   margin: 0;
 }
 
@@ -40,8 +48,112 @@
   align-items: center;
 }
 
-.note {
-  margin: 0;
-  padding: 20px 24px;
+.muted,
+.hint {
   color: var(--muted);
+}
+
+.hint {
+  font-size: 0.92rem;
+}
+
+.number {
+  width: 8rem;
+}
+
+/* Buttons and boxes side by side, wrapping when narrow. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* What's found or set, the label in its own column. */
+.facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.facts > div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 4px 16px;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* A path or name from .env wraps anywhere rather than widening the page. */
+.path {
+  overflow-wrap: anywhere;
+}
+
+.accounts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.account {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.accountTop {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px 16px;
+}
+
+.accountTop h4 {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.renameForm {
+  display: grid;
+  gap: 6px;
+}
+
+.danger {
+  border-color: var(--not-started);
+  color: var(--not-started);
+}
+
+.env {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.env li {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* One column on a narrow screen. */
+@media (max-width: 560px) {
+  .facts > div,
+  .env li {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

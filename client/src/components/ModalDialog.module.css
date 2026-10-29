@@ -16,3 +16,10 @@
 .dialog h2 {
   margin: 0 0 14px;
 }
+
+/* A dialog's buttons, at its end. */
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}

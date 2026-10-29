@@ -191,6 +191,16 @@ function current(kind: OnlineKind, row: SourceRow | null, failure: Failure | und
   return freshnessOf(kind, null, failure?.error ?? null, failure?.notFound ?? false);
 }
 
+/** A kind's freshness from its saved row and the last failure remembered, asking no site. */
+export function savedFreshness(
+  memory: FreshnessMemory,
+  accountId: number,
+  kind: OnlineKind,
+  row: SourceRow | null,
+): Freshness {
+  return current(kind, row, memory.failures.get(memoryKey(accountId, kind)));
+}
+
 /**
  * One kind for one account, fetched if it's due. `notFound` is the error of the kind it waits
  * for, when that wasn't found: a due kind is then noted as not found too, without asking.

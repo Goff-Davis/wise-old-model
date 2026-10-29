@@ -958,11 +958,11 @@ Spec: Frontend → Settings page; Database → Backups.
 
 **Files:** Modify `client/src/pages/Settings/Settings.tsx` (+ sections `Accounts.tsx`, `GameData.tsx`, `Ai.tsx`, `About.tsx`), `server/src/routes/settings.ts` (`GET /api/about` → `{ dataDir, runeliteDir, runeliteFound, lastBackup, env: { CONTACT, PORT, DATA_DIR, RUNELITE_DIR, ANTHROPIC_API_KEY: 'set' | 'not set' } }`; `POST /api/backups` → `{ file }`). Test: `server/src/routes/about.test.ts`, `client/src/pages/Settings/Settings.test.tsx`.
 
-- [ ] **Step 1: Write the failing tests**: `GET /api/about` never contains the API key's value; `POST /api/backups` creates a file; the AI section hides the spending cap unless billing is API key; the model list offers `claude-opus-5-5` (default), `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`; Delete account asks for confirmation naming the account; About shows "Game images © Jagex Ltd." and the CC BY-NC-SA 3.0 link.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** the Accounts, Game data, AI and About sections as specified.
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: `GET /api/about` never contains the API key's value; `POST /api/backups` creates a file; the AI section hides the spending cap unless billing is API key; the model list offers `claude-opus-5-5` (default), `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1`; Delete account asks for confirmation naming the account; About shows "Game images © Jagex Ltd." and the CC BY-NC-SA 3.0 link.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** the Accounts, Game data, AI and About sections as specified.
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 34: Name changes, final docs and end-to-end check
 
@@ -970,10 +970,10 @@ Spec: Frontend → Name changes; the Status line at the top of `ARCHITECTURE.md`
 
 **Files:** Modify `client/src/pages/Overview/Overview.tsx` (show `renameSuggestion` as "This account may have been renamed to <name>. Rename it?" with Rename / Not now), `ARCHITECTURE.md`, `README.md`, `CLAUDE.md`.
 
-- [ ] **Step 1: Write the failing test**: a refresh returning `renameSuggestion: 'Lumby Peter'` shows the prompt; Rename calls `PATCH /api/accounts/:id { name: 'Lumby Peter' }` and the history stays attached.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Docs pass:** remove "planned" wording from `ARCHITECTURE.md` where the code exists, record any differences, refresh `README.md`'s setup and `CLAUDE.md`'s commands so they match `package.json`.
+- [x] **Step 1: Write the failing test**: a refresh returning `renameSuggestion: 'Lumby Peter'` shows the prompt; Rename calls `PATCH /api/accounts/:id { name: 'Lumby Peter' }` and the history stays attached.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Docs pass:** remove "planned" wording from `ARCHITECTURE.md` where the code exists, record any differences, refresh `README.md`'s setup and `CLAUDE.md`'s commands so they match `package.json`.
 - [ ] **Step 6: End-to-end check with the user** on WSL and on Windows (`npm install` there first): add each real account; Overview, This week, Bank and gear, Collection log and Goals show real data; switch Automatic/Manual; ask the four questions in `README.md` → Goals ("What should I work on next?", "Can I do Dragon Slayer II yet? What am I missing?", "What's my best gear upgrade for under 20m?", "What did I get done this week?") and check each answer uses real data and cites wiki pages.
 - [ ] **Step 7: Checkpoint.**

@@ -1,8 +1,10 @@
 import type { QueryClient } from '@tanstack/react-query';
 import {
+  type About,
   type Account,
   type AccountLookup,
   type BankView,
+  type ChatModel,
   type CollectionLogView,
   defaultSettings,
   type Gains,
@@ -90,6 +92,36 @@ export function fakeApi(
   return patches;
 }
 
+/** A time `minutes` before now, as stored. */
+export const minutesAgo = (minutes: number) =>
+  new Date(Date.now() - minutes * 60_000).toISOString();
+
+/** Models as Claude Code might list them: ids, aliases, one with no effort, a level the app hasn't named. */
+export const TEST_MODELS: ChatModel[] = [
+  {
+    id: 'claude-fable-5-1',
+    resolvedId: null,
+    label: 'Fable',
+    description: 'Most capable',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+  },
+  {
+    id: 'opus',
+    resolvedId: 'claude-opus-5-5',
+    label: 'Opus',
+    description: 'For complex work',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  },
+  { id: 'claude-haiku-5-5', resolvedId: null, label: 'Haiku', description: 'Fast', efforts: [] },
+  {
+    id: 'sonnet',
+    resolvedId: 'claude-sonnet-5-5',
+    label: 'Sonnet',
+    description: 'Everyday',
+    efforts: ['low', 'high'],
+  },
+];
+
 /** The app's own query client, minus retries, so a failing request fails the test at once. */
 export function testQueryClient(): QueryClient {
   const client = createQueryClient();
@@ -105,6 +137,28 @@ export const LUMBY_PETE: Account = {
   typeSource: 'wom',
   createdAt: '2026-10-01T00:00:00.000Z',
 };
+
+/** Where a Linux user's data and RuneLite folders are, backed up 3 hours ago, plus `changes`. */
+export function testAbout(changes: Partial<About> = {}): About {
+  return {
+    dataDir: '/home/u/.local/share/wise-old-model',
+    runeliteDir: '/home/u/.runelite',
+    runeliteFound: true,
+    characterExportFound: true,
+    lastBackup: {
+      file: '/home/u/.local/share/wise-old-model/backups/wom-2026-10-27T120000Z.db',
+      at: minutesAgo(3 * 60),
+    },
+    env: {
+      CONTACT: 'me@example.com',
+      PORT: null,
+      DATA_DIR: null,
+      RUNELITE_DIR: '~/.runelite',
+      ANTHROPIC_API_KEY: 'not set',
+    },
+    ...changes,
+  };
+}
 
 /** What a lookup of Lumby Pete finds: on the hiscores, and tracked as an ironman, plus `changes`. */
 export function testLookup(changes: Partial<AccountLookup> = {}): AccountLookup {
@@ -124,7 +178,7 @@ export function testLookup(changes: Partial<AccountLookup> = {}): AccountLookup 
 
 /** An overview of `account` with a few stats, kills and fresh sources, plus `changes`. */
 export function testOverview(account: Account = LUMBY_PETE, changes: Partial<Overview> = {}) {
-  const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const fetchedAt = minutesAgo(5);
   const overview: Overview = {
     account,
     combatLevel: 126,
@@ -192,7 +246,7 @@ const logItem = (id: number, name: string, count = 0, date: string | null = null
  * fetched.
  */
 export function testGains(changes: Partial<Gains> = {}): Gains {
-  const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const fetchedAt = minutesAgo(5);
   return {
     start: '2026-10-21T12:00:00.000Z',
     end: '2026-10-28T12:00:00.000Z',
@@ -225,7 +279,7 @@ export function testGains(changes: Partial<Gains> = {}): Gains {
  * Castle Wars (complete, one item without a count) in Minigames.
  */
 export function testCollectionLogView(changes: Partial<CollectionLogView> = {}): CollectionLogView {
-  const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60_000).toISOString();
+  const hoursAgo = (hours: number) => minutesAgo(hours * 60);
   return {
     log: {
       lastChecked: hoursAgo(2),
@@ -278,7 +332,7 @@ export function testCollectionLogView(changes: Partial<CollectionLogView> = {}):
     tabsError: null,
     freshness: {
       kind: 'temple_clog',
-      fetchedAt: new Date(Date.now() - 5 * 60_000).toISOString(),
+      fetchedAt: minutesAgo(5),
       stale: false,
       error: null,
       notFound: false,
@@ -312,7 +366,7 @@ export function testGoal(
  * II, 75 Magic, Vorki, Elite combat achievements, a custom one), two done, one dropped.
  */
 export function testGoalsView(changes: Partial<GoalsView> = {}): GoalsView {
-  const fetchedAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const fetchedAt = minutesAgo(5);
   const progress = (more: Partial<NonNullable<GoalWithProgress['progress']>>) => ({
     done: false,
     fraction: null,

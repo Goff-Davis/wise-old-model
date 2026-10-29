@@ -13,7 +13,7 @@ import {
 } from '@wom/shared';
 import { type FormEvent, type JSX, useId, useState } from 'react';
 import { goalOptionsQuery, useAddGoal } from '../../api/goals.ts';
-import { ModalDialog } from '../../components/ModalDialog.tsx';
+import { DialogActions, ModalDialog } from '../../components/ModalDialog.tsx';
 import { Problem } from '../../components/Problem.tsx';
 import { type SearchOption, SearchSelect } from '../../components/SearchSelect.tsx';
 import styles from './Goals.module.css';
@@ -421,14 +421,14 @@ function AddGoalForm(props: { accountId: string; onDone: () => void }): JSX.Elem
       </Field>
       {problem && <Problem>{problem}</Problem>}
       {add.isError && <Problem>Couldn't add the goal. {add.error.message}</Problem>}
-      <div className={styles.formActions}>
+      <DialogActions>
         <button type="button" onClick={props.onDone}>
           Cancel
         </button>
         <button type="submit" className={styles.primary} disabled={add.isPending}>
           Add
         </button>
-      </div>
+      </DialogActions>
     </form>
   );
 }

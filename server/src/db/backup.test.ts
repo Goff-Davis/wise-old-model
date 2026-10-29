@@ -3,7 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { tempDir, testDb } from '../../test/helpers.ts';
-import { backupIfDue, backupNow } from './backup.ts';
+import { backupFolder, backupIfDue, backupNow, latestBackup } from './backup.ts';
 import { migrations } from './migrations.ts';
 import { openAppDatabase } from './open.ts';
 
@@ -44,7 +44,10 @@ describe('backupIfDue', () => {
   it('makes the first backup', async () => {
     const db = await open();
     const made = await backupIfDue(db, backupDir, at(0));
-    expect(made).toBe(path.join(backupDir, 'wom-2026-10-27T120000Z.db'));
+    expect(made).toEqual({
+      file: path.join(backupDir, 'wom-2026-10-27T120000Z.db'),
+      at: '2026-10-27T12:00:00.000Z',
+    });
     expect(backups()).toEqual(['wom-2026-10-27T120000Z.db']);
   });
 
@@ -52,7 +55,7 @@ describe('backupIfDue', () => {
     const db = await open();
     await backupIfDue(db, backupDir, at(0));
     expect(await backupIfDue(db, backupDir, at(120))).toBeNull();
-    expect(await backupIfDue(db, backupDir, at(24 * 60 + 1))).toBe(
+    expect((await backupIfDue(db, backupDir, at(24 * 60 + 1)))?.file).toBe(
       path.join(backupDir, 'wom-2026-10-28T120100Z.db'),
     );
     expect(backups()).toHaveLength(2);
@@ -61,7 +64,7 @@ describe('backupIfDue', () => {
   it("doesn't count a backup named in the future (made while the clock was ahead)", async () => {
     const db = await open();
     await backupNow(db, backupDir, at(3 * 24 * 60));
-    expect(await backupIfDue(db, backupDir, at(0))).toBe(
+    expect((await backupIfDue(db, backupDir, at(0)))?.file).toBe(
       path.join(backupDir, 'wom-2026-10-27T120000Z.db'),
     );
     expect(await backupIfDue(db, backupDir, at(120))).toBeNull();
@@ -110,7 +113,7 @@ describe('backupNow', () => {
     const db = await open();
     await db.insertInto('settings').values({ key: 'theme', value: '"light"' }).execute();
     const copy = await backupNow(db, backupDir, at(0));
-    const raw = new DatabaseSync(copy, { readOnly: true });
+    const raw = new DatabaseSync(copy.file, { readOnly: true });
     expect(raw.prepare('select value from settings where key = ?').get('theme')).toEqual({
       value: '"light"',
     });
@@ -162,5 +165,33 @@ describe('migrations', () => {
   it('does not back up a brand-new database', async () => {
     await open();
     expect(existsSync(backupDir)).toBe(false);
+  });
+});
+
+describe('latestBackup', () => {
+  it('is the newest backup by its name, with its time; none without a backup', () => {
+    expect(latestBackup(backupDir, at(0))).toBeNull();
+    mkdirSync(backupDir, { recursive: true });
+    writeFileSync(path.join(backupDir, 'notes.txt'), '');
+    expect(latestBackup(backupDir, at(0))).toBeNull();
+    earlierBackups([30, 5, 90]);
+    expect(latestBackup(backupDir, at(120))).toEqual({
+      file: path.join(backupDir, 'wom-2026-10-27T133000Z.db'),
+      at: '2026-10-27T13:30:00.000Z',
+    });
+  });
+
+  it("passes over a backup named in the future (made while the clock was ahead), unless it's all there is", () => {
+    earlierBackups([60 * 24 * 3]);
+    expect(latestBackup(backupDir, at(0))).toEqual({
+      file: path.join(backupDir, 'wom-2026-10-30T120000Z.db'),
+      at: '2026-10-30T12:00:00.000Z',
+    });
+    earlierBackups([30]);
+    expect(latestBackup(backupDir, at(60))?.at).toBe('2026-10-27T12:30:00.000Z');
+  });
+
+  it('lives in backups/ in the data folder', () => {
+    expect(backupFolder(dir)).toBe(path.join(dir, 'backups'));
   });
 });

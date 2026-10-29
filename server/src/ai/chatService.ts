@@ -13,6 +13,7 @@ import {
   errorMessage,
   HOUR_MS,
   NEW_CHAT_TITLE,
+  type Settings,
   squeeze,
   UserContentSchema,
 } from '@wom/shared';
@@ -424,11 +425,11 @@ export function createChatService(deps: ChatDeps) {
       resolve(approve);
     },
 
-    /** The models the provider offers with the billing set, or none and why. */
-    async listModels(): Promise<ChatModelsAnswer> {
+    /** The models the provider offers with `billing` (by default the one set), or none and why. */
+    async listModels(asked?: Settings['billing']): Promise<ChatModelsAnswer> {
       const { models } = deps.provider;
       if (!models) return { models: [], error: null };
-      const { billing } = await getSettings(db);
+      const billing = asked ?? (await getSettings(db)).billing;
       let kept = modelLists.get(billing);
       if (!kept || !withinLimit(now().getTime() - kept.at, HOUR_MS)) {
         kept = { at: now().getTime(), models: models.call(deps.provider, billing) };

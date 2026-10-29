@@ -22,6 +22,19 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ CONTACT: '   ' }, 'linux', '/home/u')).toThrow(/CONTACT/);
   });
 
+  it('keeps PORT, DATA_DIR and RUNELITE_DIR as they were set, for the About section', () => {
+    expect(onLinux().env).toEqual({ PORT: null, DATA_DIR: null, RUNELITE_DIR: null });
+    const config = onLinux({ PORT: ' 4800 ', DATA_DIR: '~/wom', RUNELITE_DIR: '/mnt/c/rl' });
+    expect(config.env).toEqual({ PORT: '4800', DATA_DIR: '~/wom', RUNELITE_DIR: '/mnt/c/rl' });
+    expect(config.dataDir).toBe('/home/u/wom');
+    // Empty counts as not set.
+    expect(onLinux({ PORT: '', DATA_DIR: ' ', RUNELITE_DIR: '' }).env).toEqual({
+      PORT: null,
+      DATA_DIR: null,
+      RUNELITE_DIR: null,
+    });
+  });
+
   it('defaults on Linux', () => {
     const config = onLinux();
     expect(config.dataDir).toBe('/home/u/.local/share/wise-old-model');

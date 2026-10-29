@@ -1,7 +1,7 @@
 import { fireEvent, waitFor, within } from '@testing-library/react';
 import type { Overview } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { type FakeRoute, LUMBY_PETE, testOverview } from '../../test/fakeApi.ts';
+import { type FakeRoute, LUMBY_PETE, refusal, testOverview } from '../../test/fakeApi.ts';
 import { renderApp } from '../../test/renderApp.tsx';
 
 /** Lumby Pete's overview page, with the server also answering `extra` (or answering it instead). */
@@ -24,6 +24,12 @@ const kills = (count: number) =>
   ['Vorkath', 'Zulrah', 'Kraken', 'Cerberus', 'Giant Mole', 'Obor', 'Bryophyta']
     .slice(0, count)
     .map((name, i) => ({ name, kills: 1_000 - i * 100 }));
+
+/** What Overview asks once a Refresh finds Lumby Pete's rename. */
+const PROMPT = 'This account may have been renamed to Lumby Peter. Rename it?';
+
+/** A Refresh that finds Lumby Pete renamed to Lumby Peter. */
+const suggestsLumbyPeter = () => ({ freshness: [], renameSuggestion: 'Lumby Peter' });
 
 describe('Overview', () => {
   it("shows the account's name, type, combat and total level", async () => {
@@ -191,13 +197,88 @@ describe('Overview', () => {
     });
     await within(page).findByRole('heading', { name: 'Lumby Pete' });
     fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
-    expect(
-      await within(page).findByText('Wise Old Man shows Lumby Pete was renamed to Lumby Peter.'),
-    ).toBeTruthy();
-    fireEvent.click(within(page).getByRole('button', { name: 'Rename to Lumby Peter' }));
+    expect(await within(page).findByText(PROMPT)).toBeTruthy();
+    fireEvent.click(within(page).getByRole('button', { name: 'Rename' }));
     await waitFor(() => expect(refreshed).toBe(2));
     expect(renames).toEqual([{ name: 'Lumby Peter' }]);
-    expect(within(page).queryByRole('button', { name: 'Rename to Lumby Peter' })).toBeNull();
+    expect(within(page).queryByText(/may have been renamed/)).toBeNull();
+    expect(within(page).queryByRole('button', { name: 'Rename' })).toBeNull();
+    // The focus goes to the Sources heading, not to the page, as the prompt goes.
+    expect(document.activeElement).toBe(within(page).getByRole('heading', { name: 'Sources' }));
+  });
+
+  it('shows the new name as soon as the rename is made, while Refresh fetches under it', async () => {
+    let renamed = false;
+    let refreshed = 0;
+    const { page } = renderOverview(testOverview(), {
+      'GET /api/accounts/1/overview': () =>
+        testOverview(renamed ? { ...LUMBY_PETE, name: 'Lumby Peter' } : LUMBY_PETE),
+      'POST /api/accounts/1/refresh': () => {
+        refreshed += 1;
+        // The Refresh under the new name takes as long as the sites do.
+        return refreshed === 1 ? suggestsLumbyPeter() : new Promise(() => {});
+      },
+      'PATCH /api/accounts/1': () => {
+        renamed = true;
+        return { ...LUMBY_PETE, name: 'Lumby Peter' };
+      },
+    });
+    await within(page).findByRole('heading', { name: 'Lumby Pete' });
+    fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
+    await within(page).findByText(PROMPT);
+    fireEvent.click(within(page).getByRole('button', { name: 'Rename' }));
+    expect(await within(page).findByRole('heading', { name: 'Lumby Peter' })).toBeTruthy();
+    expect(within(page).getByRole('button', { name: 'Refreshing…' })).toBeTruthy();
+  });
+
+  it('puts the rename off on Not now, and offers it again on the next Refresh', async () => {
+    const renames: unknown[] = [];
+    const { page } = renderOverview(testOverview(), {
+      'POST /api/accounts/1/refresh': suggestsLumbyPeter,
+      'PATCH /api/accounts/1': ({ body }) => {
+        renames.push(body);
+        return { ...LUMBY_PETE, name: 'Lumby Peter' };
+      },
+    });
+    await within(page).findByRole('heading', { name: 'Lumby Pete' });
+    fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
+    await within(page).findByText(PROMPT);
+    fireEvent.click(within(page).getByRole('button', { name: 'Not now' }));
+    expect(within(page).queryByText(PROMPT)).toBeNull();
+    expect(within(page).queryByRole('button', { name: 'Not now' })).toBeNull();
+    expect(document.activeElement).toBe(within(page).getByRole('heading', { name: 'Sources' }));
+
+    fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
+    expect(await within(page).findByText(PROMPT)).toBeTruthy();
+    expect(renames).toEqual([]);
+  });
+
+  it('keeps the prompt with why a rename failed, until Not now or the next Refresh', async () => {
+    const { page } = renderOverview(testOverview(), {
+      'POST /api/accounts/1/refresh': suggestsLumbyPeter,
+      'PATCH /api/accounts/1': () => refusal(409, 'Lumby Peter is already added.'),
+    });
+    await within(page).findByRole('heading', { name: 'Lumby Pete' });
+    const failed = "Couldn't rename Lumby Pete. Lumby Peter is already added.";
+    fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
+    await within(page).findByText(PROMPT);
+    fireEvent.click(within(page).getByRole('button', { name: 'Rename' }));
+    expect((await within(page).findByRole('alert')).textContent).toBe(failed);
+    expect(within(page).getByText(PROMPT)).toBeTruthy();
+
+    fireEvent.click(within(page).getByRole('button', { name: 'Not now' }));
+    expect(within(page).queryByText(PROMPT)).toBeNull();
+    expect(within(page).queryByRole('alert')).toBeNull();
+
+    // The next Refresh offers it again, without the old failure.
+    fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(within(page).getByText(PROMPT)).toBeTruthy());
+    expect(within(page).queryByRole('alert')).toBeNull();
+    fireEvent.click(within(page).getByRole('button', { name: 'Rename' }));
+    await within(page).findByRole('alert');
+    fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
+    await waitFor(() => expect(within(page).queryByRole('alert')).toBeNull());
+    expect(within(page).getByText(PROMPT)).toBeTruthy();
   });
 
   it('keeps showing the overview when reloading it fails, and says so', async () => {

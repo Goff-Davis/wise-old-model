@@ -10,6 +10,8 @@ export type Config = {
   anthropicApiKey: string | null;
   isDev: boolean;
   version: string;
+  /** PORT, DATA_DIR and RUNELITE_DIR as set (null when not, so the default applies), to show. */
+  env: { PORT: string | null; DATA_DIR: string | null; RUNELITE_DIR: string | null };
 };
 
 export class ConfigError extends Error {
@@ -142,6 +144,11 @@ export function loadConfig(
     anthropicApiKey: value(env, 'ANTHROPIC_API_KEY'),
     isDev: env.NODE_ENV === 'development',
     version: readVersion(),
+    env: {
+      PORT: value(env, 'PORT'),
+      DATA_DIR: value(env, 'DATA_DIR'),
+      RUNELITE_DIR: value(env, 'RUNELITE_DIR'),
+    },
   };
 }
 

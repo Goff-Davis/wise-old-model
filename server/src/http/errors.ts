@@ -6,7 +6,7 @@ import { SourceError } from './requester.ts';
 const SERVER_ERROR =
   "Something went wrong on Wise Old Model's server. Its console has the details.";
 
-/** An answer meant for the client: a 4xx status and one sentence for the person using the app. */
+/** An answer meant for the client: its status and one sentence for the person using the app. */
 export class HttpError extends Error {
   name = 'HttpError';
   readonly status: number;
@@ -26,10 +26,11 @@ export function parseInput<T>(schema: z.ZodType<T>, value: unknown): T {
 }
 
 /**
- * Errors answer in JSON like everything else, and only here. An error meant for the client
- * (`expose: true`: an HttpError, or body-parser's answer to a body that isn't JSON or is too
- * large) keeps its 4xx status and message, and another site's failure (a SourceError, whose
- * message is written for the person) is a 502 with its message. Anything else is a 500 whose
+ * Errors answer in JSON like everything else, and only here. An HttpError keeps its status and
+ * message, whatever the status; another error meant for the client (`expose: true`, such as
+ * body-parser's answer to a body that isn't JSON or is too large) keeps a 4xx status and its
+ * message; and another site's failure (a SourceError, whose message is written for the person)
+ * is a 502 with its message. Anything else is a 500 whose
  * details go to the server's console only, even when it carries a status: a missing file's path
  * isn't the browser's business.
  */
@@ -40,6 +41,10 @@ export const jsonErrors: ErrorRequestHandler = (error, _req, res, next) => {
   }
   if (error instanceof SourceError) {
     res.status(502).json({ error: error.message } satisfies ErrorAnswer);
+    return;
+  }
+  if (error instanceof HttpError) {
+    res.status(error.status).json({ error: error.message } satisfies ErrorAnswer);
     return;
   }
   const { status, expose } = error as { status?: unknown; expose?: unknown };

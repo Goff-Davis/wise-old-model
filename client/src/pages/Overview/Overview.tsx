@@ -10,9 +10,9 @@ import {
   PROGRESS_ICONS,
   type SourceKind,
 } from '@wom/shared';
-import { type JSX, useId, useState } from 'react';
+import { type JSX, useId, useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { overviewQuery, useRefreshAccount, useRenameAccount } from '../../api/accounts.ts';
+import { overviewQuery, useChangeAccount, useRefreshAccount } from '../../api/accounts.ts';
 import { Icon } from '../../components/Icon.tsx';
 import { pageStates } from '../../components/PageStates.tsx';
 import { Problem } from '../../components/Problem.tsx';
@@ -188,18 +188,78 @@ function BossKills(props: {
   );
 }
 
+/**
+ * A rename Wise Old Man suggests after a Refresh: Rename renames the account (its history stays)
+ * and fetches everything under the new name; Not now puts it off. A rename that fails says why
+ * here. Each Refresh makes a new one, so what was put off or failed goes with it.
+ */
+function RenamePrompt(props: {
+  account: Account;
+  suggestion: string;
+  refresh: ReturnType<typeof useRefreshAccount>;
+  onGone: () => void;
+}): JSX.Element | null {
+  const { refresh } = props;
+  const rename = useChangeAccount(String(props.account.id));
+  const [putOff, setPutOff] = useState(false);
+  if (putOff) return null;
+  return (
+    <div className={styles.rename}>
+      <p>This account may have been renamed to {props.suggestion}. Rename it?</p>
+      <span className={styles.renameButtons}>
+        <button
+          type="button"
+          disabled={rename.isPending}
+          onClick={() =>
+            rename.mutate(
+              { name: props.suggestion },
+              {
+                // Then fetch everything under the new name.
+                onSuccess: () => {
+                  props.onGone();
+                  refresh.reset();
+                  refresh.mutate();
+                },
+              },
+            )
+          }
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          disabled={rename.isPending}
+          onClick={() => {
+            props.onGone();
+            setPutOff(true);
+          }}
+        >
+          Not now
+        </button>
+      </span>
+      {rename.isError && (
+        <Problem>
+          Couldn't rename {props.account.name}. {rename.error.message}
+        </Problem>
+      )}
+    </div>
+  );
+}
+
 /** When each source was last fetched, Refresh, and a rename Wise Old Man suggests after it. */
 function Sources(props: { account: Account; freshness: Freshness[] }) {
   const id = useId();
   const zone = useTimeZone();
-  const accountId = String(props.account.id);
-  const refresh = useRefreshAccount(accountId);
-  const rename = useRenameAccount(accountId);
+  const refresh = useRefreshAccount(String(props.account.id));
   const suggestion = refresh.data?.renameSuggestion ?? null;
+  // As the prompt goes, the focus goes to the heading rather than to the page.
+  const heading = useRef<HTMLHeadingElement>(null);
 
   return (
     <section aria-labelledby={id} className={styles.section}>
-      <h3 id={id}>Sources</h3>
+      <h3 id={id} ref={heading} tabIndex={-1}>
+        Sources
+      </h3>
       <dl className={styles.sources}>
         {props.freshness.map((entry) => (
           <div key={entry.kind}>
@@ -209,31 +269,13 @@ function Sources(props: { account: Account; freshness: Freshness[] }) {
         ))}
       </dl>
       {suggestion && (
-        <div className={styles.rename}>
-          <p>
-            Wise Old Man shows {props.account.name} was renamed to {suggestion}.
-          </p>
-          <button
-            type="button"
-            disabled={rename.isPending}
-            onClick={() =>
-              rename.mutate(suggestion, {
-                // Then fetch everything under the new name.
-                onSuccess: () => {
-                  refresh.reset();
-                  refresh.mutate();
-                },
-              })
-            }
-          >
-            Rename to {suggestion}
-          </button>
-        </div>
-      )}
-      {rename.isError && (
-        <Problem>
-          Couldn't rename {props.account.name}. {rename.error.message}
-        </Problem>
+        <RenamePrompt
+          key={refresh.submittedAt}
+          account={props.account}
+          suggestion={suggestion}
+          refresh={refresh}
+          onGone={() => heading.current?.focus()}
+        />
       )}
       <RefreshButton refresh={refresh} />
     </section>

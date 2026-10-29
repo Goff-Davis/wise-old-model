@@ -129,6 +129,12 @@
   margin: 0;
 }
 
+.renameButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .notice,
 .note {
   margin: 0;

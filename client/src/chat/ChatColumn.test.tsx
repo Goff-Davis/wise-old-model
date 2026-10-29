@@ -3,8 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { ChatEvent, ChatMessage, ChatSession, Settings } from '@wom/shared';
 import type { JSX } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { type FakeRoute, fakeApi, refusal, testQueryClient } from '../test/fakeApi.ts';
-import { ChatColumn, nearestEffort, usageText } from './ChatColumn.tsx';
+import { nearestEffort } from '../settings/useModelChoice.ts';
+import { type FakeRoute, fakeApi, refusal, TEST_MODELS, testQueryClient } from '../test/fakeApi.ts';
+import { ChatColumn, usageText } from './ChatColumn.tsx';
 import { ChatProviders, useChat, useChatAsk } from './useChat.tsx';
 
 const CHAT: ChatSession = {
@@ -87,32 +88,6 @@ function renderChat(
   };
   return { sent, box, type, patches };
 }
-
-/** Models as Claude Code might list them: ids, aliases, one with no effort, a level the app hasn't named. */
-const MODELS = [
-  {
-    id: 'claude-fable-5-1',
-    resolvedId: null,
-    label: 'Fable',
-    description: 'Most capable',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-  },
-  {
-    id: 'opus',
-    resolvedId: 'claude-opus-5-5',
-    label: 'Opus',
-    description: 'For complex work',
-    efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
-  },
-  { id: 'claude-haiku-5-5', resolvedId: null, label: 'Haiku', description: 'Fast', efforts: [] },
-  {
-    id: 'sonnet',
-    resolvedId: 'claude-sonnet-5-5',
-    label: 'Sonnet',
-    description: 'Everyday',
-    efforts: ['low', 'high'],
-  },
-];
 
 const USER: ChatMessage = {
   id: 1,
@@ -574,7 +549,7 @@ describe('ChatColumn', () => {
       routes: {
         'GET /api/chats/c1/messages': () => [],
         'POST /api/chats/c1/messages': () => answer.response,
-        'GET /api/chat/models': () => ({ models: MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
       },
     });
     await screen.findByPlaceholderText('Ask about Lumby Pete');
@@ -622,7 +597,7 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
       },
       settings: { model: 'claude-opus-5-5' },
     });
@@ -634,7 +609,7 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
       },
       settings: { model: 'claude-opus-4-8', effort: 'high' },
     });
@@ -649,7 +624,7 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
       },
       refuse: 'Settings are read-only right now.',
     });

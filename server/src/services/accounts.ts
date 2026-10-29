@@ -2,6 +2,7 @@ import {
   type Account,
   type AccountChanges,
   type AccountLookup,
+  type AccountStatus,
   type AccountType,
   AccountTypeSchema,
   type AddedAccount,
@@ -16,11 +17,13 @@ import type { AccountRow, DB } from '../db/schema.ts';
 import { HttpError } from '../http/errors.ts';
 import { type Requester, SourceError } from '../http/requester.ts';
 import { getSettings } from '../settings/settingsRepo.ts';
-import type { Checked } from '../sources/answers.ts';
+import { type Checked, orSourceFailure } from '../sources/answers.ts';
 import {
   checkFiles,
   exportFolderStatus,
+  exportFolderStatuses,
   type FileCheckResult,
+  type FolderStatus,
 } from '../sources/characterExport.ts';
 import { fetchHiscores, fetchHiscoresText, hiscoresLevels } from '../sources/hiscores.ts';
 import { comparableLog, fetchCollectionLogText, getSyncStatus } from '../sources/temple.ts';
@@ -36,7 +39,7 @@ import {
   type WomPlayer,
   type WomPlayerType,
 } from '../sources/wom.ts';
-import { clearSourceErrors, saveSource } from '../store/sourceState.ts';
+import { clearSourceErrors, listSources, saveSource } from '../store/sourceState.ts';
 import {
   ensureFresh,
   type Fetchers,
@@ -46,6 +49,7 @@ import {
   ONLINE_KINDS,
   type OnlineKind,
   REFRESH_FLOOR_MS,
+  savedFreshness,
 } from './freshness.ts';
 
 export function toAccount(row: AccountRow): Account {
@@ -66,6 +70,28 @@ function accountTypeFromWom(type: WomPlayerType): AccountType | null {
 export async function listAccounts(db: Kysely<DB>): Promise<Account[]> {
   const rows = await db.selectFrom('accounts').selectAll().orderBy('name_key').execute();
   return rows.map(toAccount);
+}
+
+/**
+ * Each account's Character Export folder and Temple log as saved, in the order of the list, for
+ * the Settings page. No site is asked.
+ */
+export async function accountStatuses(deps: AccountDeps): Promise<AccountStatus[]> {
+  const accounts = await listAccounts(deps.db);
+  const keys = accounts.map((account) => nameKey(account.name));
+  const [folders, logs] = await Promise.all([
+    orSourceFailure(exportFolderStatuses(deps.runeliteDir, keys), new Map<string, FolderStatus>()),
+    listSources(deps.db, 'temple_clog'),
+  ]);
+  const logOf = new Map(logs.map((row) => [row.accountId, row]));
+  return accounts.map((account, i) => ({
+    id: account.id,
+    characterExport: {
+      ...(folders.value.get(keys[i] ?? '') ?? { found: null, lastWritten: null }),
+      error: folders.error,
+    },
+    temple: savedFreshness(deps.memory, account.id, 'temple_clog', logOf.get(account.id) ?? null),
+  }));
 }
 
 /** The account with this id from a URL (plain digits only), or a 404. */

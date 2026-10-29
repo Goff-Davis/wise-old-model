@@ -95,6 +95,24 @@ export const AccountSchema = z.object({
 export type Account = z.infer<typeof AccountSchema>;
 
 /**
+ * What the Settings page shows of an account besides its name and type, from what's saved (no
+ * site is asked): whether its Character Export folder is there and when it was last written
+ * (`found` null, with why, when the RuneLite folder can't be read), and Temple's log as last
+ * fetched (`notFound` when Temple had none for the name).
+ */
+export const AccountStatusSchema = z.object({
+  id: z.number(),
+  characterExport: z.object({
+    found: z.boolean().nullable(),
+    lastWritten: z.string().nullable(),
+    error: z.string().nullable(),
+  }),
+  temple: FreshnessSchema,
+});
+
+export type AccountStatus = z.infer<typeof AccountStatusSchema>;
+
+/**
  * What the add-account dialog shows about a name before it's added. `onHiscores`, `womTracked`,
  * `temple.synced` and `characterExport.found` are null when that source couldn't be checked;
  * `problems` says why.

@@ -20,6 +20,14 @@ describe('jsonErrors', () => {
     expect(res.body).toEqual({ error: 'That name is taken.' });
   });
 
+  it("passes on an HttpError's message at any status, a 500 included", async () => {
+    const res = await call(appThatFails(new HttpError(500, "Couldn't make the backup.")), {
+      path: '/fail',
+    });
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: "Couldn't make the backup." });
+  });
+
   it("answers another site's failure with a 502 and what went wrong there", async () => {
     for (const failure of [
       new SourceError('OSRS Wiki', 500, 'OSRS Wiki: server error (500)'),

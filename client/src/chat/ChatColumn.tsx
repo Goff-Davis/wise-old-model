@@ -1,13 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
 import {
   type ChatMessage,
-  type ChatModel,
   type ChatUsage,
-  effortLabel,
   errorMessage,
   formatCompact,
   formatTime,
-  HOUR_MS,
   PROGRESS_ICONS,
   plural,
 } from '@wom/shared';
@@ -21,10 +17,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { chatModelsQuery } from '../api/chats.ts';
+import { ExternalLink } from '../components/ExternalLink.tsx';
+import { focusOnShow } from '../components/focus.ts';
 import { Icon } from '../components/Icon.tsx';
 import { Problem } from '../components/Problem.tsx';
-import { useSettings, useTimeZone, useUpdateSettings } from '../settings/useSettings.ts';
+import { EffortOptions, ModelOptions } from '../settings/ModelOptions.tsx';
+import { useModelChoice } from '../settings/useModelChoice.ts';
+import { useTimeZone } from '../settings/useSettings.ts';
 import styles from './ChatColumn.module.css';
 import { Markdown } from './Markdown.tsx';
 import { type Chat, type LiveAnswer, useChatContext } from './useChat.tsx';
@@ -189,9 +188,7 @@ function Answer(props: {
                 {answer.sources.map((source, i) => (
                   <span key={source.url}>
                     {i > 0 && ', '}
-                    <a href={source.url} target="_blank" rel="noopener noreferrer">
-                      {source.title}
-                    </a>
+                    <ExternalLink href={source.url}>{source.title}</ExternalLink>
                   </span>
                 ))}
               </>
@@ -224,8 +221,6 @@ const StoredMessage = memo(function StoredMessage(props: { message: ChatMessage 
 });
 
 /** Gives an element the focus as it's shown (the box a row turns into, the answer it asks for). */
-const focusOnShow = (element: HTMLElement | null) => element?.focus();
-
 /** Earlier chats: newest first, each opened, renamed or deleted here. */
 function EarlierChats(props: { chat: Chat; onClose: () => void }): JSX.Element {
   const { chat } = props;
@@ -335,98 +330,34 @@ function EarlierChats(props: { chat: Chat; onClose: () => void }): JSX.Element {
   );
 }
 
-type Picked = { model?: string; effort?: string };
-
-/** Each level once, in the order the models list them (least first). */
-function levelsOf(models: ChatModel[]): string[] {
-  return [...new Set(models.flatMap((model) => model.efforts))];
-}
-
 /**
- * The level of `levels` nearest `effort` in `order` (the lower of two as near), or `effort`
- * itself when it's one of them.
- */
-export function nearestEffort(effort: string, levels: string[], order: string[]): string {
-  if (levels.includes(effort)) return effort;
-  const at = order.indexOf(effort);
-  const distance = (level: string) => Math.abs(order.indexOf(level) - at);
-  return levels.reduce((best, level) => (distance(level) < distance(best) ? level : best));
-}
-
-/**
- * The model and effort the next message is answered with: the AI settings, picked from the
- * models the provider lists (Claude Code's own, so they follow its releases), each with the
- * effort levels it takes. A pick is saved at once, shown meanwhile, and back to what's saved if
- * it isn't. The saved model is found by its id or by the model an alias stands for; one the
- * list hasn't (or every model, when it can't be listed) is kept as a choice of its own. A model
- * with no effort setting has no effort to pick, and switching to one without the effort set
- * takes the nearest it has. They wait while the chat answers.
+ * The model and effort for the next message, beside Send (see useModelChoice). They wait while
+ * the chat answers.
  */
 function ChatOptions(props: { busy: boolean }): JSX.Element {
-  const settings = useSettings();
-  const update = useUpdateSettings();
-  const listed = useQuery({ ...chatModelsQuery, staleTime: HOUR_MS });
-  const saved = settings.data;
-  // What was picked, until its save settles (a mutation is pending only a tick later).
-  const [picked, setPicked] = useState<Picked | null>(null);
-  const pick = (change: Picked) => {
-    setPicked(change);
-    update.mutate(change, { onSettled: () => setPicked(null) });
-  };
-  const modelId = picked?.model ?? saved?.model ?? '';
-  const effort = picked?.effort ?? saved?.effort ?? '';
-  const models = listed.data?.models ?? [];
-  const current =
-    models.find((model) => model.id === modelId) ??
-    models.find((model) => model.resolvedId === modelId);
-  const rows: ChatModel[] =
-    current || !modelId
-      ? models
-      : [
-          ...models,
-          { id: modelId, resolvedId: null, label: modelId, description: '', efforts: [] },
-        ];
-  const order = levelsOf(models);
-  // A model not in the list could take any level the others do.
-  const levels = current ? current.efforts : order;
-  const efforts = levels.includes(effort) || !effort ? levels : [...levels, effort];
-  const disabled = props.busy || !saved;
-  const why = listed.data?.error ? `Couldn't list the models: ${listed.data.error}` : undefined;
+  const choice = useModelChoice();
+  const disabled = props.busy || !choice.ready;
   return (
     <>
-      {update.isError && <Problem>Couldn't save that: {update.error.message}</Problem>}
+      {choice.saveError && <Problem>Couldn't save that: {choice.saveError.message}</Problem>}
       <select
         aria-label="Model"
-        title={why ?? 'The model for the next message'}
-        value={current?.id ?? modelId}
+        title={choice.listProblem ?? 'The model for the next message'}
+        value={choice.model}
         disabled={disabled}
-        onChange={(event) => {
-          const id = event.target.value;
-          const next = rows.find((model) => model.id === id);
-          const nearest =
-            next && next.efforts.length > 0 ? nearestEffort(effort, next.efforts, order) : effort;
-          pick(nearest === effort ? { model: id } : { model: id, effort: nearest });
-        }}
+        onChange={(event) => choice.pickModel(event.target.value)}
       >
-        {rows.map((model) => (
-          <option key={model.id} value={model.id} title={model.description || undefined}>
-            {model.label}
-          </option>
-        ))}
+        <ModelOptions models={choice.models} />
       </select>
-      {(!current || current.efforts.length > 0) && (
+      {choice.showEffort && (
         <select
           aria-label="Effort"
           title="How hard it thinks about the next message"
-          value={effort}
+          value={choice.effort}
           disabled={disabled}
-          onChange={(event) => pick({ effort: event.target.value })}
+          onChange={(event) => choice.pickEffort(event.target.value)}
         >
-          {efforts.map((level) => (
-            <option key={level} value={level}>
-              {effortLabel(level)}
-            </option>
-          ))}
+          <EffortOptions efforts={choice.efforts} />
         </select>
       )}
     </>

@@ -18,14 +18,9 @@
   line-height: 1.15;
 }
 
-.actions,
-.formActions {
+.actions {
   display: flex;
   gap: 8px;
-}
-
-.formActions {
-  justify-content: flex-end;
 }
 
 .primary {

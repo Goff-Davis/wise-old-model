@@ -1,6 +1,11 @@
 import { type JSX, type ReactNode, useEffect, useId, useRef } from 'react';
 import styles from './ModalDialog.module.css';
 
+/** A dialog's buttons, in a row at its end. */
+export function DialogActions(props: { children: ReactNode }): JSX.Element {
+  return <div className={styles.actions}>{props.children}</div>;
+}
+
 /**
  * A modal dialog with a heading, shown while `open`. Its content is mounted only while open, so
  * each opening starts afresh; Escape, or the content's own buttons, close it (`onClose`).

@@ -1,4 +1,5 @@
 import type { JSX, ReactNode } from 'react';
+import { ExternalLink } from '../components/ExternalLink.tsx';
 
 /**
  * Code, a link (its address may hold one pair of brackets, as wiki addresses do), bold, then
@@ -25,9 +26,9 @@ function inline(text: string, at: number | string = 0): ReactNode[] {
     else if (linkText !== undefined && href !== undefined) {
       nodes.push(
         WEB.test(href) ? (
-          <a key={key} href={href} target="_blank" rel="noopener noreferrer">
+          <ExternalLink key={key} href={href}>
             {inline(linkText, key)}
-          </a>
+          </ExternalLink>
         ) : (
           inline(linkText, key)
         ),

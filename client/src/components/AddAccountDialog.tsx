@@ -1,20 +1,19 @@
 import {
-  ACCOUNT_TYPE_LABELS,
   type Account,
   type AccountLookup,
   AccountNameSchema,
   type AccountType,
-  AccountTypeSchema,
   formatNumber,
   formatTime,
-  TEMPLE_SYNC_STEPS,
 } from '@wom/shared';
 import { type FormEvent, type JSX, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAddAccount, useLookUp } from '../api/accounts.ts';
 import { pagePath } from '../pages/pageList.ts';
 import { useTimeZone } from '../settings/useSettings.ts';
+import { AccountTypeSelect } from './AccountTypeSelect.tsx';
 import styles from './AddAccountDialog.module.css';
+import { exportFolderFinding, NO_TEMPLE_LOG } from './findings.ts';
 import { ModalDialog } from './ModalDialog.tsx';
 import { Problem } from './Problem.tsx';
 
@@ -45,20 +44,10 @@ function womFinding(found: AccountLookup): string {
     : `Tracks ${found.name}.`;
 }
 
-function characterExportFinding(found: AccountLookup, zone: string): string {
-  const { found: written, lastWritten } = found.characterExport;
-  if (written === null) return "Couldn't check.";
-  return written && lastWritten
-    ? `Found. Last written ${formatTime(lastWritten, zone, 'relative')}.`
-    : `Not found yet. Log in to ${found.name} with the Character Export plugin on, then open the bank and each diary journal once.`;
-}
-
 function templeFinding(found: AccountLookup, zone: string): string {
   const { synced, lastChecked } = found.temple;
   if (synced === null) return "Couldn't check.";
-  if (!synced) {
-    return `No collection log yet. ${TEMPLE_SYNC_STEPS}`;
-  }
+  if (!synced) return NO_TEMPLE_LOG;
   return lastChecked
     ? `Has the collection log, last synced ${formatTime(lastChecked, zone, 'relative')}.`
     : 'Has the collection log.';
@@ -192,7 +181,7 @@ export function AddAccountForm(props: {
                 )}
               </dd>
               <dt>Character Export</dt>
-              <dd>{characterExportFinding(found, zone)}</dd>
+              <dd>{exportFolderFinding(found.characterExport, found.name, zone)}</dd>
               <dt>TempleOSRS</dt>
               <dd>{templeFinding(found, zone)}</dd>
             </dl>
@@ -205,20 +194,13 @@ export function AddAccountForm(props: {
             )}
             <div className={styles.typeRow}>
               <label htmlFor={`${id}-type`}>Type</label>
-              <select
+              <AccountTypeSelect
                 id={`${id}-type`}
                 value={type}
-                onChange={(event) => setType(AccountTypeSchema.parse(event.target.value))}
-              >
-                {AccountTypeSchema.options.map((option) => (
-                  <option key={option} value={option}>
-                    {ACCOUNT_TYPE_LABELS[option]}
-                  </option>
-                ))}
-              </select>
-              <span className={styles.typeSource}>
-                {type === found.womType ? 'From Wise Old Man' : 'Set by hand'}
-              </span>
+                fromWom={type === found.womType}
+                noteClassName={styles.typeSource}
+                onChange={setType}
+              />
             </div>
             {add.isError && (
               <Problem>

@@ -11,7 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Being built, phase by phase, from `PLAN.md` (ticked checkboxes mark finished tasks). The design lives in `ARCHITECTURE.md`, the source of truth; sections still describe planned design until their task is built, and get updated as code lands so they describe what exists. Goals, non-goals and the four questions that define "done" are in `README.md`.
+Built from `PLAN.md`, phase by phase (ticked checkboxes mark finished tasks); the end-to-end check on real accounts is the last step. The design lives in `ARCHITECTURE.md`, the source of truth, which describes the code as it is: keep it that way as the code changes. Goals, non-goals and the four questions that define "done" are in `README.md`.
 
 ## What this is
 

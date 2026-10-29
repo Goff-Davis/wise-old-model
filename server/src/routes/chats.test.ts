@@ -290,9 +290,12 @@ describe('chat routes', () => {
     expect(await db.selectFrom('chat_messages').selectAll().execute()).toEqual([]);
   });
 
-  it("answers with the AI's models", async () => {
+  it("answers with the AI's models, for the billing asked about", async () => {
     const { app } = await setup([]);
     const res = await call(app, { path: '/api/chat/models' });
     expect(res).toMatchObject({ status: 200, body: { models: [], error: null } });
+    const keyed = await call(app, { path: '/api/chat/models?billing=api_key' });
+    expect(keyed).toMatchObject({ status: 200, body: { models: [], error: null } });
+    expect((await call(app, { path: '/api/chat/models?billing=card' })).status).toBe(400);
   });
 });

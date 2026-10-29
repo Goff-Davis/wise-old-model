@@ -11,6 +11,7 @@ import { checkFilesAndGoals, syncGoalCompletion } from '../goals/goalsService.ts
 import { parseInput } from '../http/errors.ts';
 import {
   type AccountDeps,
+  accountStatuses,
   addAccount,
   changeAccount,
   deleteAccount,
@@ -34,6 +35,10 @@ export function accountRoutes(
 
   router.get('/accounts', async (_req, res) => {
     res.json(await listAccounts(db));
+  });
+
+  router.get('/accounts/status', async (_req, res) => {
+    res.json(await accountStatuses(deps));
   });
 
   router.get('/accounts/lookup', async (req, res) => {

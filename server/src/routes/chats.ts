@@ -4,6 +4,7 @@ import {
   ChatTitleSchema,
   formatSse,
   NewChatMessageSchema,
+  SettingsSchema,
 } from '@wom/shared';
 import { Router } from 'express';
 import type { Kysely } from 'kysely';
@@ -66,8 +67,10 @@ export function chatRoutes(db: Kysely<DB>, chats: ChatService): Router {
     res.status(204).end();
   });
 
-  router.get('/chat/models', async (_req, res) => {
-    res.json(await chats.listModels());
+  // The models depend on the billing: the one asked about, or the one set.
+  router.get('/chat/models', async (req, res) => {
+    const billing = parseInput(SettingsSchema.shape.billing.optional(), req.query.billing);
+    res.json(await chats.listModels(billing));
   });
 
   router.post('/chats/:id/stop', async (req, res) => {

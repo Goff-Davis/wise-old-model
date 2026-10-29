@@ -189,6 +189,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     anthropicApiKey: null,
     isDev: false,
     version: 'test-version',
+    env: { PORT: null, DATA_DIR: null, RUNELITE_DIR: null },
     ...overrides,
   };
 }

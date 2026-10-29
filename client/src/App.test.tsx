@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   type FakeRoute,
   LUMBY_PETE,
+  testAbout,
   testGoalsView,
   testLookup,
   testOverview,
@@ -21,6 +22,9 @@ function renderAt(
   return renderApp(path, {
     routes: {
       'GET /api/accounts': () => accounts,
+      // What the Settings page asks for.
+      'GET /api/accounts/status': () => [],
+      'GET /api/about': () => testAbout(),
       ...Object.fromEntries(
         accounts.flatMap((account) => [
           [`GET /api/accounts/${account.id}/overview`, () => testOverview(account)],
@@ -103,9 +107,32 @@ describe('routes', () => {
   });
 
   it('shows the Settings page under an account', async () => {
-    renderAt('/1/settings');
+    renderAt('/1/settings', undefined, {});
     const page = screen.getByRole('region', { name: 'Page' });
     expect(await within(page).findByRole('region', { name: 'Display' })).toBeTruthy();
+  });
+
+  it('goes home, to the other account, after the open account is deleted in Settings', async () => {
+    let accounts = [LUMBY_PETE, IRON_PETE];
+    renderAt('/1/settings', [LUMBY_PETE, IRON_PETE], {
+      'GET /api/accounts': () => accounts,
+      'DELETE /api/accounts/1': () => {
+        accounts = [IRON_PETE];
+        return new Response(null, { status: 204 });
+      },
+    });
+    const page = screen.getByRole('region', { name: 'Page' });
+    const entry = await within(page).findByRole('listitem', { name: 'Lumby Pete' });
+    fireEvent.click(within(entry).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Lumby Pete' }));
+    // Iron Pete's Overview, not Settings (which names each account too). Going home remounts the
+    // layout, so the page is found again.
+    const current = () => screen.getByRole('region', { name: 'Page' });
+    await waitFor(() =>
+      expect(within(current()).getByRole('heading', { level: 2, name: 'Iron Pete' })).toBeTruthy(),
+    );
+    expect(within(current()).queryByRole('region', { name: 'Accounts' })).toBeNull();
+    expect(within(menu()).queryByRole('link', { name: 'Lumby Pete' })).toBeNull();
   });
 
   it('applies the saved theme to the page on any route', async () => {
@@ -122,13 +149,13 @@ describe('routes', () => {
     fireEvent.click(await within(menu()).findByRole('link', { name: 'Lumby Pete' }));
     await within(page).findByRole('heading', { name: 'Lumby Pete' });
     fireEvent.click(within(page).getByRole('button', { name: 'Refresh' }));
-    await within(page).findByRole('button', { name: 'Rename to Lumby Peter' });
+    await within(page).findByText('This account may have been renamed to Lumby Peter. Rename it?');
 
     // Iron Pete's overview is cached, so it shows at once.
     fireEvent.click(within(menu()).getByRole('link', { name: 'Iron Pete' }));
     expect(within(page).getByRole('heading', { name: 'Iron Pete' })).toBeTruthy();
     expect(within(page).queryByText(/renamed to Lumby Peter/)).toBeNull();
-    expect(within(page).queryByRole('button', { name: 'Rename to Lumby Peter' })).toBeNull();
+    expect(within(page).queryByRole('button', { name: 'Not now' })).toBeNull();
   });
 
   it('keeps the page when the account list fails to reload', async () => {

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Kysely } from 'kysely';
 import { type Migration, Migrator } from 'kysely/migration';
-import { backupIfDue, backupNow } from './backup.ts';
+import { backupFolder, backupIfDue, backupNow } from './backup.ts';
 import { migrations as allMigrations } from './migrations.ts';
 import { nodeSqliteDialect } from './nodeSqliteDialect.ts';
 import type { DB } from './schema.ts';
@@ -94,7 +94,7 @@ async function migrateAtomically(raw: DatabaseSync, migrator: Migrator): Promise
 
 /** The app's database, <dataDir>/wise-old-model.db, backed up at startup when the newest backup is over a day old. */
 export async function openAppDatabase(dataDir: string, now: () => Date): Promise<Kysely<DB>> {
-  const backupDir = path.join(dataDir, 'backups');
+  const backupDir = backupFolder(dataDir);
   const db = await openDatabase(path.join(dataDir, 'wise-old-model.db'), { backupDir, now });
   try {
     await backupIfDue(db, backupDir, now());

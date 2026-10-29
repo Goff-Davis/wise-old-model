@@ -519,6 +519,9 @@ describe('chat service', () => {
     await updateSettings(db, { billing: 'api_key' });
     expect((await chats.listModels()).models[0]?.id).toBe('claude-opus-5-5');
     expect(models).toHaveBeenLastCalledWith('api_key');
+    // A billing asked about by name is listed whatever the setting, from the same lists.
+    expect((await chats.listModels('plan')).models).toEqual([opus]);
+    expect(models).toHaveBeenCalledTimes(2);
     // An hour on, it's asked again; a failure says why, and isn't kept.
     await updateSettings(db, { billing: 'plan' });
     now = new Date('2026-10-29T13:00:01.000Z');

@@ -1,31 +1,22 @@
 import { MINUTE_MS } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { fakeRequester, fixture, outage, testDb } from '../../test/helpers.ts';
+import { fixture, outage, testWikiCtx } from '../../test/helpers.ts';
 import { getLatestPrices, getMapping } from './prices.ts';
-import type { WikiCtx } from './wiki.ts';
 
 const BASE = 'https://prices.runescape.wiki/api/v2/osrs';
 
 /** A context whose clock `later` moves on, over a fake prices API. */
-async function setup(answers: { mapping?: string | Error; latest?: string | Error }) {
-  const db = await testDb();
-  let now = new Date('2026-10-28T12:00:00.000Z');
-  const fake = fakeRequester(({ url }) => {
+function setup(answers: { mapping?: string | Error; latest?: string | Error }) {
+  return testWikiCtx((url) => {
     const answer = { [`${BASE}/mapping`]: answers.mapping, [`${BASE}/latest`]: answers.latest }[
-      url
+      url.href
     ];
     return answer ?? new Error(`No answer for ${url}`);
   });
-  const reads: { kind: string; fetchedAt: string; error: string | null }[] = [];
-  const ctx: WikiCtx = { req: fake.req, db, now: () => now, noteRead: (read) => reads.push(read) };
-  const later = (ms: number) => {
-    now = new Date(now.getTime() + ms);
-  };
-  return { ctx, later, reads, ...fake };
 }
 
 describe('getMapping', () => {
-  it('reads every item, with null where the wiki leaves out a limit, alch value or value', async () => {
+  it('reads every item, with null where the wiki leaves out a limit or value', async () => {
     const { ctx, urls } = await setup({ mapping: fixture('prices/mapping-sample.json') });
     const items = await getMapping(ctx);
     expect(urls).toEqual([`${BASE}/mapping`]);
@@ -36,15 +27,8 @@ describe('getMapping', () => {
       members: true,
       limit: 70,
       value: 120001,
-      highalch: 72000,
-      lowalch: 48000,
-      icon: 'Abyssal whip.png',
     });
     expect(items.find((item) => item.name === '3rd Age felling axe')?.limit).toBeNull();
-    expect(items.find((item) => item.name === 'Annihilation blueprints')).toMatchObject({
-      highalch: null,
-      lowalch: null,
-    });
     expect(items.find((item) => item.name === 'Ascension bolts')?.value).toBeNull();
   });
 

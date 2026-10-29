@@ -1,7 +1,7 @@
 import { fireEvent, within } from '@testing-library/react';
 import type { Gains } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { LUMBY_PETE, testGains } from '../../test/fakeApi.ts';
+import { LUMBY_PETE, minutesAgo, testGains } from '../../test/fakeApi.ts';
 import { renderApp } from '../../test/renderApp.tsx';
 
 /**
@@ -129,7 +129,7 @@ describe('ThisWeek', () => {
   });
 
   it('says the gains shown are an old copy when Wise Old Man no longer finds the account', async () => {
-    const fetchedAt = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
+    const fetchedAt = minutesAgo(3 * 60);
     const page = renderWeek(testGains({ gainsSource: { fetchedAt, error: null, notFound: true } }));
     expect((await within(page).findByText(/^Fetched from Wise Old Man/)).textContent).toBe(
       "Fetched from Wise Old Man 3 hours ago. It doesn't find Lumby Pete now, so these may be out of date.",
@@ -181,7 +181,7 @@ describe('ThisWeek', () => {
   });
 
   it('says when the gains shown are an old copy, and why newer ones could not be had', async () => {
-    const fetchedAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+    const fetchedAt = minutesAgo(2 * 60);
     const page = renderWeek(
       testGains({
         gainsSource: { fetchedAt, error: 'Wise Old Man: server error (500)', notFound: false },

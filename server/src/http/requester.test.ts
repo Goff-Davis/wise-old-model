@@ -53,40 +53,40 @@ const times = (calls: { at: number }[]) => calls.map((call) => call.at);
 describe('createRequester', () => {
   it('sends exactly the given User-Agent', async () => {
     const { requester, calls } = harness([ok({ name: 'zezima' })]);
-    expect(await requester.json(`${WOM}/zezima`)).toEqual({ name: 'zezima' });
+    expect(JSON.parse(await requester.text(`${WOM}/zezima`))).toEqual({ name: 'zezima' });
     expect(new Headers(calls[0]?.init.headers).get('user-agent')).toBe(USER_AGENT);
   });
 
   it('spaces requests to the wiki 1 s apart', async () => {
     const { requester, calls } = harness(() => ok());
-    await Promise.all([requester.json(`${WIKI}?a`), requester.json(`${WIKI}?b`)]);
+    await Promise.all([requester.text(`${WIKI}?a`), requester.text(`${WIKI}?b`)]);
     expect(times(calls)).toEqual([0, 1000]);
   });
 
   it('spaces requests to Wise Old Man 3 s apart', async () => {
     const { requester, calls } = harness(() => ok());
-    await Promise.all([requester.json(`${WOM}/a`), requester.json(`${WOM}/b`)]);
+    await Promise.all([requester.text(`${WOM}/a`), requester.text(`${WOM}/b`)]);
     expect(times(calls)).toEqual([0, 3000]);
   });
 
   it("doesn't make one site wait for another", async () => {
     const { requester, calls } = harness(() => ok());
-    await Promise.all([requester.json(`${WOM}/a`), requester.json(`${WIKI}?a`)]);
+    await Promise.all([requester.text(`${WOM}/a`), requester.text(`${WIKI}?a`)]);
     expect(times(calls)).toEqual([0, 0]);
   });
 
   it('never waits longer than the spacing when the clock goes backwards', async () => {
     const { requester, sleeps, setTime } = harness(() => ok());
     setTime(3_600_000);
-    await requester.json(`${WOM}/a`);
+    await requester.text(`${WOM}/a`);
     setTime(0);
-    await requester.json(`${WOM}/b`);
+    await requester.text(`${WOM}/b`);
     expect(sleeps).toEqual([3000]);
   });
 
   it('waits out a 429 for as long as Retry-After says, then carries on', async () => {
     const { requester, sleeps } = harness([status(429, { 'Retry-After': '7' }), ok({ a: 1 })]);
-    expect(await requester.json(`${WIKI}?x`)).toEqual({ a: 1 });
+    expect(JSON.parse(await requester.text(`${WIKI}?x`))).toEqual({ a: 1 });
     expect(sleeps).toEqual([7000]);
   });
 
@@ -96,7 +96,7 @@ describe('createRequester', () => {
       status(429, { 'Retry-After': inSevenSeconds }),
       ok({ a: 1 }),
     ]);
-    expect(await requester.json(`${WIKI}?x`)).toEqual({ a: 1 });
+    expect(JSON.parse(await requester.text(`${WIKI}?x`))).toEqual({ a: 1 });
     expect(sleeps).toHaveLength(1);
     expect(sleeps[0]).toBeGreaterThan(5000);
     expect(sleeps[0]).toBeLessThanOrEqual(7000);
@@ -104,7 +104,7 @@ describe('createRequester', () => {
 
   it('gives up on a server error after three retries, waiting 1, 2, then 4 s and keeping the spacing', async () => {
     const { requester, calls } = harness(() => status(500));
-    await expect(requester.json(`${WOM}/x`)).rejects.toMatchObject({
+    await expect(requester.text(`${WOM}/x`)).rejects.toMatchObject({
       name: 'SourceError',
       site: 'Wise Old Man',
       status: 500,
@@ -116,7 +116,7 @@ describe('createRequester', () => {
   it('reads the body of each failed answer, which frees its connection', async () => {
     const answers = [status(500, {}, 'oops'), status(500, {}, 'oops'), status(500, {}, 'oops')];
     const { requester } = harness([...answers, ok()]);
-    await requester.json(`${WIKI}?x`);
+    await requester.text(`${WIKI}?x`);
     expect(answers.map((answer) => answer.bodyUsed)).toEqual([true, true, true]);
   });
 
@@ -128,7 +128,7 @@ describe('createRequester', () => {
         '{"message":"Failed to update: Player was updated less than 60 seconds ago."}',
       ),
     ]);
-    await expect(requester.json(`${WOM}/zezima`, { method: 'POST' })).rejects.toMatchObject({
+    await expect(requester.text(`${WOM}/zezima`, { method: 'POST' })).rejects.toMatchObject({
       status: 400,
       message:
         'Wise Old Man: refused the request (400). Failed to update: Player was updated less than 60 seconds ago.',
@@ -137,7 +137,7 @@ describe('createRequester', () => {
 
   it('reports a 404 as NotFoundError at once', async () => {
     const { requester, calls } = harness([status(404)]);
-    const failure = requester.json(`${WOM}/nobody`);
+    const failure = requester.text(`${WOM}/nobody`);
     await expect(failure).rejects.toBeInstanceOf(NotFoundError);
     await expect(failure).rejects.toBeInstanceOf(SourceError);
     expect(calls).toHaveLength(1);
@@ -149,13 +149,13 @@ describe('createRequester', () => {
       new TypeError('fetch failed'),
       ok({ a: 1 }),
     ]);
-    expect(await requester.json(`${WIKI}?x`)).toEqual({ a: 1 });
+    expect(JSON.parse(await requester.text(`${WIKI}?x`))).toEqual({ a: 1 });
     expect(sleeps).toEqual([1000, 2000]);
   });
 
   it('says there is no connection when the site never answers', async () => {
     const { requester, calls } = harness(() => new TypeError('fetch failed'));
-    await expect(requester.json(`${WOM}/x`)).rejects.toMatchObject({
+    await expect(requester.text(`${WOM}/x`)).rejects.toMatchObject({
       site: 'Wise Old Man',
       status: null,
       message: 'Wise Old Man: no connection',
@@ -179,8 +179,8 @@ describe('createRequester', () => {
       ok({}, { 'RateLimit-Remaining': '2', 'RateLimit-Reset': '30' }),
       ok(),
     ]);
-    await requester.json(`${WOM}/a`);
-    await requester.json(`${WOM}/b`);
+    await requester.text(`${WOM}/a`);
+    await requester.text(`${WOM}/b`);
     expect(times(calls)).toEqual([0, 30000]);
   });
 
@@ -189,8 +189,8 @@ describe('createRequester', () => {
       ok({}, { 'RateLimit-Remaining': '3', 'RateLimit-Reset': '30' }),
       ok(),
     ]);
-    await requester.json(`${WOM}/a`);
-    await requester.json(`${WOM}/b`);
+    await requester.text(`${WOM}/a`);
+    await requester.text(`${WOM}/b`);
     expect(times(calls)).toEqual([0, 3000]);
   });
 
@@ -199,7 +199,7 @@ describe('createRequester', () => {
       status(429, { 'RateLimit-Remaining': '0', 'RateLimit-Reset': '20' }),
       ok(),
     ]);
-    await requester.json(`${WOM}/a`);
+    await requester.text(`${WOM}/a`);
     expect(times(calls)).toEqual([0, 20000]);
   });
 
@@ -207,8 +207,8 @@ describe('createRequester', () => {
     const { requester, calls, sleeps } = harness([
       ok({}, { 'RateLimit-Remaining': '0', 'RateLimit-Reset': '3600' }),
     ]);
-    await requester.json(`${WOM}/a`);
-    await expect(requester.json(`${WOM}/b`)).rejects.toMatchObject({
+    await requester.text(`${WOM}/a`);
+    await expect(requester.text(`${WOM}/b`)).rejects.toMatchObject({
       status: 429,
       message: 'Wise Old Man: too many requests (429). Try again in 60 minutes.',
     });
@@ -220,15 +220,15 @@ describe('createRequester', () => {
     const { requester } = harness([
       ok({}, { 'RateLimit-Remaining': '0', 'RateLimit-Reset': '72000' }),
     ]);
-    await requester.json(`${WOM}/a`);
-    await expect(requester.json(`${WOM}/b`)).rejects.toMatchObject({
+    await requester.text(`${WOM}/a`);
+    await expect(requester.text(`${WOM}/b`)).rejects.toMatchObject({
       message: 'Wise Old Man: too many requests (429). Try again in 20 hours.',
     });
   });
 
   it('gives up on a 429 whose Retry-After is over a minute', async () => {
     const { requester, calls, sleeps } = harness([status(429, { 'Retry-After': '600' })]);
-    await expect(requester.json(`${WIKI}?x`)).rejects.toMatchObject({
+    await expect(requester.text(`${WIKI}?x`)).rejects.toMatchObject({
       status: 429,
       message: 'OSRS Wiki: too many requests (429). Try again in 10 minutes.',
     });
@@ -238,7 +238,7 @@ describe('createRequester', () => {
 
   it('keeps the real status when a server error asks for a long wait', async () => {
     const { requester } = harness([status(503, { 'Retry-After': '300' })]);
-    await expect(requester.json(`${WIKI}?x`)).rejects.toMatchObject({
+    await expect(requester.text(`${WIKI}?x`)).rejects.toMatchObject({
       status: 503,
       message: 'OSRS Wiki: server error (503). Try again in 5 minutes.',
     });
@@ -246,7 +246,7 @@ describe('createRequester', () => {
 
   it("doesn't retry other refusals", async () => {
     const { requester, calls } = harness(() => status(403));
-    await expect(requester.json('https://templeosrs.com/api/x')).rejects.toMatchObject({
+    await expect(requester.text('https://templeosrs.com/api/x')).rejects.toMatchObject({
       site: 'Temple',
       status: 403,
       message: 'Temple: refused the request (403)',
@@ -254,25 +254,10 @@ describe('createRequester', () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("explains an answer that isn't JSON", async () => {
-    const { requester } = harness([new Response('<html>maintenance</html>', { status: 200 })]);
-    await expect(
-      requester.json('https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=x'),
-    ).rejects.toMatchObject({ message: "Hiscores: sent an answer that isn't JSON" });
-  });
-
-  it('sends a POST body as JSON', async () => {
-    const { requester, calls } = harness([ok({ updated: true })]);
-    await requester.json(`${WOM}/zezima`, { method: 'POST', body: { force: true } });
-    expect(calls[0]?.init.method).toBe('POST');
-    expect(calls[0]?.init.body).toBe('{"force":true}');
-    expect(new Headers(calls[0]?.init.headers).get('content-type')).toBe('application/json');
-  });
-
   it('keeps going after a failed request to the same site', async () => {
     const { requester } = harness([status(404), ok({ a: 2 })]);
-    await expect(requester.json(`${WOM}/nobody`)).rejects.toBeInstanceOf(NotFoundError);
-    expect(await requester.json(`${WOM}/somebody`)).toEqual({ a: 2 });
+    await expect(requester.text(`${WOM}/nobody`)).rejects.toBeInstanceOf(NotFoundError);
+    expect(JSON.parse(await requester.text(`${WOM}/somebody`))).toEqual({ a: 2 });
   });
 
   it('reads text and bytes', async () => {

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
-import { type Backup, DAY_MS } from '@wom/shared';
+import { type Backup, DAY_MS, errorMessage } from '@wom/shared';
 import { type Kysely, sql } from 'kysely';
 import type { DB } from './schema.ts';
 
@@ -63,7 +63,7 @@ export async function backupNow(db: Kysely<DB>, backupDir: string, now: Date): P
       rmSync(path.join(backupDir, old.name));
     } catch (error) {
       // Windows refuses while another program has it open; the next backup tries again.
-      console.warn(`Couldn't delete the old backup ${old.name}: ${(error as Error).message}`);
+      console.warn(`Couldn't delete the old backup ${old.name}: ${errorMessage(error)}`);
     }
   }
   // The name keeps whole seconds.

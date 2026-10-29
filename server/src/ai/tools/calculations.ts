@@ -1,5 +1,6 @@
 import {
   AccountTypeSchema,
+  canTrade,
   DIARY_AREAS,
   DIARY_TIER_NAMES,
   levelForXp,
@@ -162,9 +163,10 @@ export function calculationTools(deps: AccountDeps): ToolDef[] {
         const row = await accountOf(deps, ctx);
         const type = efficiencyTypeFor(AccountTypeSchema.parse(row.type));
         // The hiscores and Wise Old Man's rates are asked at once: each site has its own queue.
+        const ratesStale: Stale[] = [];
         const [{ data, levelsFetchedAt, ...known }, rates] = await Promise.all([
           checkData(deps, row, ctx),
-          orSourceFailure(getCachedRates(db, deps.req, type, ctx.now), null),
+          orSourceFailure(getCachedRates(toolWiki(deps, ctx, ratesStale), type), null),
         ]);
         // The hiscores' skills (one they don't rank has no XP in the levels), then any only the
         // character file has; a skill is found by its name or Wise Old Man's (Runecrafting).
@@ -193,12 +195,11 @@ export function calculationTools(deps: AccountDeps): ToolDef[] {
         }
         const targetXp = xp ?? xpForLevel(level ?? 2);
         const xpLeft = Math.max(targetXp - have.xp, 0);
-        const stale: Stale[] = [...known.stale];
-        const ratesError = rates.error ?? rates.value?.error;
-        if (ratesError) noteStale(stale, 'wom_rates', ratesError);
+        const stale: Stale[] = [...known.stale, ...ratesStale];
+        if (rates.error) noteStale(stale, 'wom_rates', rates.error);
         const estimate =
           rates.value && xpLeft > 0
-            ? hoursToTarget(skillRates(rates.value.value, name), have.xp, targetXp)
+            ? hoursToTarget(skillRates(rates.value, name), have.xp, targetXp)
             : { hours: 0, methods: [] };
         return {
           skill: name,
@@ -269,7 +270,7 @@ export function calculationTools(deps: AccountDeps): ToolDef[] {
           const item = byName(name);
           return (item && latestTrade(latest.value?.get(item.id))?.price) ?? null;
         };
-        const canBuy = row.type === 'regular';
+        const canBuy = canTrade(AccountTypeSchema.parse(row.type));
         const results = [];
         for (const setup of chosen) {
           const groupItems = await ownedGroupItems(wiki, setup, owned);
@@ -283,17 +284,7 @@ export function calculationTools(deps: AccountDeps): ToolDef[] {
             page: setup.page,
             style: setup.style,
             // A slot with nothing better is left out: what's owned there is the best.
-            slots: slots
-              .filter((slot) => slot.upgrades.length > 0)
-              .map((slot) => ({
-                slot: slot.slot,
-                current: slot.current,
-                upgrades: slot.upgrades.map(({ name, price: cost, buyable }) => ({
-                  name,
-                  price: cost,
-                  buyable,
-                })),
-              })),
+            slots: slots.filter((slot) => slot.upgrades.length > 0),
           });
         }
         const files = await filesState(deps, row, ['ce_bank', 'ce_equipment', 'ce_inventory']);

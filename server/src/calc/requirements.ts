@@ -1,4 +1,4 @@
-import { DIARY_AREAS, type DiaryTierName, squeeze } from '@wom/shared';
+import { type DiaryTierName, squeeze } from '@wom/shared';
 import { parse } from 'node-html-parser';
 import { SourceError } from '../http/requester.ts';
 import {
@@ -56,6 +56,9 @@ export type DiaryTask = {
 };
 
 export type QuestState = 'finished' | 'in_progress' | 'not_started' | 'unknown';
+
+/** A quest's state as the account's quests give it (it can't be unknown there). */
+export type QuestStatus = Exclude<QuestState, 'unknown'>;
 
 /**
  * Whether an account meets requirements. `met` means everything that could be checked is met;
@@ -455,20 +458,9 @@ export function findQuestReqs(all: Map<string, QuestReqs>, name: string): QuestR
   return undefined;
 }
 
-const STATES: Record<string, QuestState> = {
-  finished: 'finished',
-  in_progress: 'in_progress',
-  not_started: 'not_started',
-};
-
-/** Each quest's state from the account's quests (Character Export's FINISHED and the rest). */
-function questStates(quests: Record<string, string>): (name: string) => QuestState {
-  const states = new Map(
-    Object.entries(quests).map(([name, state]) => [
-      questKey(name),
-      STATES[state.toLowerCase()] ?? ('unknown' as const),
-    ]),
-  );
+/** Each quest's state from the account's quests; one they don't list is unknown. */
+function questStates(quests: Record<string, QuestStatus>): (name: string) => QuestState {
+  const states = new Map(Object.entries(quests).map(([name, state]) => [questKey(name), state]));
   return (name) => states.get(questKey(name)) ?? 'unknown';
 }
 
@@ -490,7 +482,7 @@ export function checkQuest(
   reqs: QuestReqs,
   account: {
     levels: Record<string, number>;
-    quests: Record<string, string>;
+    quests: Record<string, QuestStatus>;
     questPoints: number | null;
   },
 ): Check {
@@ -558,7 +550,7 @@ export function checkQuest(
 export function checkDiaryTier(
   tasks: DiaryTask[],
   tier: DiaryTask['tier'],
-  account: { levels: Record<string, number>; quests: Record<string, string> },
+  account: { levels: Record<string, number>; quests: Record<string, QuestStatus> },
 ): Check & { tasks: { number: number; task: string; met: boolean }[] } {
   const tierTasks = tasks.filter((task) => task.tier === tier);
   const [first] = tierTasks;
@@ -682,26 +674,24 @@ function questPointsIn(html: string): Map<string, number> {
  * An account's quest points: those of the quests it has finished (its quests by name and state,
  * as for checkQuest), from loadQuestPoints.
  */
-export function questPointsOf(quests: Record<string, string>, points: Map<string, number>): number {
+export function questPointsOf(
+  quests: Record<string, QuestStatus>,
+  points: Map<string, number>,
+): number {
   const byKey = new Map([...points].map(([quest, value]) => [questKey(quest), value]));
   let total = 0;
   for (const [quest, state] of Object.entries(quests)) {
-    if (state.toLowerCase() === 'finished') total += byKey.get(questKey(quest)) ?? 0;
+    if (state === 'finished') total += byKey.get(questKey(quest)) ?? 0;
   }
   return total;
 }
 
 /** One diary's tasks, from its wiki page (`<area> Diary`), kept until the page changes. */
-export async function loadDiaryPage(ctx: WikiCtx, area: string): Promise<DiaryTask[]> {
-  return parseDiaryPage(area, await getPageWikitext(ctx, `${area} Diary`));
-}
-
-/**
- * Every diary's tasks, by area. The pages are read one after another, so the first read's check
- * of day-old pages covers the rest in the same request.
- */
-export async function loadDiaryPages(ctx: WikiCtx): Promise<Map<string, DiaryTask[]>> {
-  const pages = new Map<string, DiaryTask[]>();
-  for (const area of DIARY_AREAS) pages.set(area, await loadDiaryPage(ctx, area));
-  return pages;
+export function loadDiaryPage(ctx: WikiCtx, area: string): Promise<DiaryTask[]> {
+  return parsedOnce(
+    ctx,
+    `diary:${area}`,
+    (read) => getPageWikitext(read, `${area} Diary`),
+    (wikitext) => parseDiaryPage(area, wikitext),
+  );
 }

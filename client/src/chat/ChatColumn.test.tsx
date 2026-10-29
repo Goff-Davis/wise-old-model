@@ -1,6 +1,12 @@
 import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { ChatEvent, ChatMessage, ChatSession, Settings } from '@wom/shared';
+import {
+  type ChatEvent,
+  type ChatMessage,
+  type ChatSession,
+  formatSse,
+  type Settings,
+} from '@wom/shared';
 import type { JSX } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { nearestEffort } from '../settings/useModelChoice.ts';
@@ -22,7 +28,7 @@ function stream() {
   let end: () => void = () => {};
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
-      push = (event) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      push = (event) => controller.enqueue(encoder.encode(formatSse(event)));
       end = () => controller.close();
     },
   });
@@ -358,7 +364,11 @@ describe('ChatColumn', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 
-  it('reloads the goals once an answer is done, which may have completed, added or changed some', async () => {
+  /**
+   * Sends a message to Lumby Pete's chat with the goals page loaded; `goalsReloaded` says whether
+   * the goals have been marked for reloading.
+   */
+  async function sendWithGoals() {
     const answer = stream();
     fakeApi({
       routes: {
@@ -370,6 +380,7 @@ describe('ChatColumn', () => {
     });
     const client = testQueryClient();
     client.setQueryData(['api', 'accounts', '1', 'goals'], { goals: [], freshness: [] });
+    client.setQueryData(['api', 'accounts', '1', 'gains?period=week'], {});
     render(
       <QueryClientProvider client={client}>
         <Harness />
@@ -383,13 +394,52 @@ describe('ChatColumn', () => {
     });
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
     await screen.findByText('Add it');
-    const goals = () => client.getQueryState(['api', 'accounts', '1', 'goals'])?.isInvalidated;
+    const goalsReloaded = () =>
+      client.getQueryState(['api', 'accounts', '1', 'goals'])?.isInvalidated;
+    // This week lists the goals done.
+    const weekReloaded = () =>
+      client.getQueryState(['api', 'accounts', '1', 'gains?period=week'])?.isInvalidated;
+    return { answer, goalsReloaded, weekReloaded };
+  }
+
+  const tool = (name: string, status: 'started' | 'done') =>
+    ({ type: 'tool', id: `t-${name}`, name, label: `${name}…`, status }) as const;
+
+  it('reloads the goals once an answer that changed some is done', async () => {
+    const { answer, goalsReloaded } = await sendWithGoals();
+    answer.push(tool('add_goal', 'started'));
     answer.push({ type: 'approval', requestId: 'r1', summary: 'Add goal: Reach 75 Magic (skill)' });
     answer.push({ type: 'approval_resolved', requestId: 'r1', approved: true });
-    expect(goals()).toBe(false);
+    answer.push(tool('add_goal', 'done'));
+    expect(goalsReloaded()).toBe(false);
     answer.push({ type: 'done', messageId: 3 });
     answer.end();
-    await waitFor(() => expect(goals()).toBe(true));
+    await waitFor(() => expect(goalsReloaded()).toBe(true));
+  });
+
+  it('reloads the goals and This week when the files the answer read completed some', async () => {
+    const { answer, goalsReloaded, weekReloaded } = await sendWithGoals();
+    // This week doesn't read the bank, but a goal the bank completed shows there.
+    answer.push({ type: 'files', changed: ['ce_bank'], goalsCompleted: 1 });
+    answer.push({ type: 'done', messageId: 3 });
+    answer.end();
+    await waitFor(() => expect(weekReloaded()).toBe(true));
+    expect(goalsReloaded()).toBe(true);
+  });
+
+  it('leaves the goals alone after an answer that only looked things up', async () => {
+    const { answer, goalsReloaded } = await sendWithGoals();
+    answer.push(tool('get_quests', 'started'));
+    answer.push(tool('get_quests', 'done'));
+    // A goal change that failed changed nothing either.
+    answer.push(tool('update_goal', 'started'));
+    answer.push({ ...tool('update_goal', 'started'), status: 'error' });
+    answer.push({ type: 'files', changed: [], goalsCompleted: 0 });
+    answer.push({ type: 'done', messageId: 3 });
+    answer.end();
+    await screen.findByPlaceholderText('Ask about Lumby Pete');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy());
+    expect(goalsReloaded()).toBe(false);
   });
 
   it('shows the question once while answering, though the chat is fetched again', async () => {

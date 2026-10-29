@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { AccountTypeSchema, hasBank, nameKey, type SourceKind } from '@wom/shared';
+import { AccountTypeSchema, hasBank, nameKey, type OwnedItem, type SourceKind } from '@wom/shared';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import type { AccountRow, DB } from '../db/schema.ts';
@@ -17,6 +17,7 @@ import {
 import { parseWith, readSaved } from './answers.ts';
 import {
   CE_SCHEMAS,
+  type CeContainer,
   type CeDiaries,
   CeDiariesSchema,
   DIARY_TIERS,
@@ -81,6 +82,27 @@ async function newestFile(folder: string): Promise<number> {
     }),
   );
   return Math.max(0, ...times);
+}
+
+/**
+ * A container's stacks as owned items kept `where`, each priced by `priceOf` (none without it);
+ * bank placeholders, which hold none of the item, are left out.
+ */
+export function ownedItems(
+  items: CeContainer['items'],
+  where: OwnedItem['where'],
+  priceOf: (id: number) => number | null = () => null,
+): OwnedItem[] {
+  return items
+    .filter((item) => item.quantity > 0)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      where,
+      slot: item.slot,
+      unitPrice: priceOf(item.id),
+    }));
 }
 
 /** Where Character Export writes: `character-exporter/` in the RuneLite folder. */
@@ -388,6 +410,9 @@ export type DiaryTierData = {
   namesStale: boolean;
 };
 
+/** An account's diaries: each area's tiers. */
+export type Diaries = Record<string, Record<DiaryTier, DiaryTierData>>;
+
 /**
  * Whether a diary tier is done: by its task names while they still match the tier's count (the
  * plugin's own flag is wrong for some tiers, Karamja's among them), else by the flag.
@@ -416,8 +441,8 @@ function diaryNames() {
         }
       }
     },
-    merge(file: CeDiaries): Record<string, Record<DiaryTier, DiaryTierData>> {
-      const merged: Record<string, Record<DiaryTier, DiaryTierData>> = {};
+    merge(file: CeDiaries): Diaries {
+      const merged: Diaries = {};
       for (const [area, tiers] of Object.entries(file.diaries)) {
         const byTier = {} as Record<DiaryTier, DiaryTierData>;
         for (const tier of DIARY_TIERS) {
@@ -449,7 +474,7 @@ function diaryNames() {
 export function mergeDiaryNames(
   latest: CeDiaries,
   earlier: { data: CeDiaries; takenAt: string }[],
-): Record<string, Record<DiaryTier, DiaryTierData>> {
+): Diaries {
   const names = diaryNames();
   const oldestFirst = [...earlier].sort((a, b) => Date.parse(a.takenAt) - Date.parse(b.takenAt));
   for (const snapshot of oldestFirst) names.see(snapshot.data, snapshot.takenAt);
@@ -461,9 +486,7 @@ export function mergeDiaryNames(
  * Each diaries file of a history (oldest first) with task names as mergeDiaryNames would give it
  * that file as the latest, in one pass.
  */
-export function mergeDiaryHistory(
-  history: { data: CeDiaries; takenAt: string }[],
-): Record<string, Record<DiaryTier, DiaryTierData>>[] {
+export function mergeDiaryHistory(history: { data: CeDiaries; takenAt: string }[]): Diaries[] {
   const names = diaryNames();
   return history.map(({ data, takenAt }) => {
     names.see(data, takenAt);
@@ -482,16 +505,31 @@ export function readSnapshots<T>(
   });
 }
 
+const mergedDiaries = perDatabase(() => new Map<number, { history: string; value: Diaries }>());
+
 /**
  * The account's diaries: the latest file (`latest`, read by the caller) with task names from its
- * earlier snapshots, by mergeDiaryNames; null without the file.
+ * earlier snapshots, by mergeDiaryNames; null without the file. The history only grows, so a
+ * merge is kept while the server runs until a new snapshot or file comes; its callers share it
+ * and mustn't change it.
  */
 export async function savedDiaries(
   db: Kysely<DB>,
   accountId: number,
   latest: CeDiaries | null,
-): Promise<Record<string, Record<DiaryTier, DiaryTierData>> | null> {
+): Promise<Diaries | null> {
   if (!latest) return null;
+  const { count, newest } = await db
+    .selectFrom('snapshots')
+    .select((eb) => [eb.fn.countAll<number>().as('count'), eb.fn.max('taken_at').as('newest')])
+    .where('account_id', '=', accountId)
+    .where('kind', '=', 'ce_diaries')
+    .executeTakeFirstOrThrow();
+  const history = `${count}:${newest}:${exportedAt(latest)}`;
+  const kept = mergedDiaries(db).get(accountId);
+  if (kept?.history === history) return kept.value;
   const earlier = readSnapshots(await listSnapshots(db, accountId, 'ce_diaries'), CeDiariesSchema);
-  return mergeDiaryNames(latest, earlier);
+  const value = mergeDiaryNames(latest, earlier);
+  mergedDiaries(db).set(accountId, { history, value });
+  return value;
 }

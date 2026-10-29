@@ -4,6 +4,7 @@ import {
   formatNumber,
   type GoalProgress,
   type GoalTarget,
+  PLACE_NAMES,
   plural,
   TEMPLE_SYNC_STEPS,
   xpForLevel,
@@ -358,21 +359,6 @@ function collectionLogProgress(
   );
 }
 
-const PLACES = {
-  bank: 'in the bank',
-  seed_vault: 'in the seed vault',
-  inventory: 'in the inventory',
-  equipment: 'worn',
-} as const;
-
-/** Each place as named when it isn't saved yet. */
-const PLACE_NAMES = {
-  bank: 'the bank',
-  seed_vault: 'the seed vault',
-  inventory: 'the inventory',
-  equipment: 'the worn gear',
-} as const;
-
 const list = new Intl.ListFormat('en-US', { type: 'conjunction' });
 
 function itemProgress(
@@ -387,7 +373,7 @@ function itemProgress(
     data.owned.filter((item) => ownedKey(item.name) === key).map((item) => item.where),
   );
   if (places.size === 0) {
-    const unknown = data.ownedUnknown.map((place) => PLACE_NAMES[place]);
+    const unknown = data.ownedUnknown.map((place) => PLACE_NAMES[place].place);
     return progress(
       false,
       null,
@@ -397,7 +383,7 @@ function itemProgress(
     );
   }
   const where = BANK_PLACES.filter((place) => places.has(place.where)).map(
-    (place) => PLACES[place.where],
+    (place) => PLACE_NAMES[place.where].at,
   );
   return progress(true, null, `Owned: ${list.format(where)}.`);
 }

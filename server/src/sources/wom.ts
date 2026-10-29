@@ -2,10 +2,10 @@ import { type AccountType, DAY_MS, HOUR_MS, nameKey } from '@wom/shared';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 import type { DB } from '../db/schema.ts';
-import { NotFoundError, type Requester, SourceError } from '../http/requester.ts';
-import { type CacheEntry, cachedEntry } from '../store/cache.ts';
+import { type Requester, SourceError } from '../http/requester.ts';
 import { listSources } from '../store/sourceState.ts';
-import { type Checked, fetchChecked, parseWith, readSaved } from './answers.ts';
+import { type Checked, fetchChecked, orNotFound, parseWith, readSaved } from './answers.ts';
+import { cachedFor, type WikiCtx } from './wiki.ts';
 
 const BASE = 'https://api.wiseoldman.net/v2';
 const SITE = 'Wise Old Man';
@@ -13,20 +13,6 @@ const SITE = 'Wise Old Man';
 const WomPlayerTypeSchema = z.enum(['regular', 'ironman', 'hardcore', 'ultimate', 'unknown']);
 
 export type WomPlayerType = z.infer<typeof WomPlayerTypeSchema>;
-
-export type WomPlayer = {
-  username: string;
-  displayName: string;
-  type: WomPlayerType;
-  build: string;
-  ehp: number;
-  ehb: number;
-  ttm: number;
-  updatedAt: string | null;
-  /** By WOM's metric, e.g. `kril_tsutsaroth`. An unranked boss has kills 0 and rank -1. */
-  bosses: Record<string, { kills: number; rank: number }>;
-  raw: unknown;
-};
 
 export type WomGains = {
   /** Null when Wise Old Man has no data for the period. */
@@ -114,20 +100,15 @@ function mapValues<T, U>(record: Record<string, T>, map: (value: T) => U): Recor
   return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, map(value)]));
 }
 
+/** A player, with the latest snapshot's boss kills taken out. */
+export type WomPlayer = Omit<z.infer<typeof PlayerSchema>, 'latestSnapshot'> & {
+  /** By WOM's metric, e.g. `kril_tsutsaroth`. An unranked boss has kills 0 and rank -1. */
+  bosses: Record<string, { kills: number; rank: number }>;
+};
+
 export function parsePlayer(json: unknown): WomPlayer {
-  const player = parseWith(SITE, PlayerSchema, json);
-  return {
-    username: player.username,
-    displayName: player.displayName,
-    type: player.type,
-    build: player.build,
-    ehp: player.ehp,
-    ehb: player.ehb,
-    ttm: player.ttm,
-    updatedAt: player.updatedAt,
-    bosses: player.latestSnapshot?.data.bosses ?? {},
-    raw: json,
-  };
+  const { latestSnapshot, ...player } = parseWith(SITE, PlayerSchema, json);
+  return { ...player, bosses: latestSnapshot?.data.bosses ?? {} };
 }
 
 export function parseGains(json: unknown): WomGains {
@@ -186,12 +167,7 @@ export async function fetchPlayer(
   req: Requester,
   username: string,
 ): Promise<Checked<WomPlayer> | null> {
-  try {
-    return await fetchTracked(req, username, playerUrl(username), parsePlayer);
-  } catch (error) {
-    if (error instanceof NotFoundError) return null;
-    throw error;
-  }
+  return orNotFound(fetchTracked(req, username, playerUrl(username), parsePlayer));
 }
 
 /** The player, or null when Wise Old Man doesn't track the name. */
@@ -253,10 +229,6 @@ export async function fetchAchievementsText(req: Requester, username: string): P
   return (await fetchTracked(req, username, achievementsUrl(username), parseAchievements)).text;
 }
 
-export async function getAchievements(req: Requester, username: string): Promise<Achievement[]> {
-  return (await fetchTracked(req, username, achievementsUrl(username), parseAchievements)).value;
-}
-
 /**
  * Approved name changes in which this was the old or the new name, newest first. Wise Old Man
  * finds a player by their current name only, so after a rename the old name no longer finds
@@ -297,16 +269,11 @@ export async function getEfficiencyRates(
 /**
  * The efficiency rates for a type, kept a day in the cache: they're the same for every account
  * of the type and change only with Wise Old Man's releases. While Wise Old Man can't be reached,
- * the copy kept before comes with why it's old.
+ * the copy kept before is given, and `ctx.noteRead` hears why it's old.
  */
-export function getCachedRates(
-  db: Kysely<DB>,
-  req: Requester,
-  type: EfficiencyType,
-  now: Date,
-): Promise<CacheEntry<SkillRates[]>> {
-  return cachedEntry(db, `wom-rates:${type}`, 'wom_rates', DAY_MS, now, () =>
-    getEfficiencyRates(req, type),
+export function getCachedRates(ctx: WikiCtx, type: EfficiencyType): Promise<SkillRates[]> {
+  return cachedFor(ctx, `wom-rates:${type}`, 'wom_rates', DAY_MS, () =>
+    getEfficiencyRates(ctx.req, type),
   );
 }
 

@@ -1,7 +1,7 @@
 import { fireEvent, waitFor, within } from '@testing-library/react';
 import type { BankView, OwnedItem, Settings } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { LUMBY_PETE, refusal, testBankView } from '../../test/fakeApi.ts';
+import { LUMBY_PETE, minutesAgo, refusal, testBankView } from '../../test/fakeApi.ts';
 import { renderApp } from '../../test/renderApp.tsx';
 
 const item = (
@@ -13,7 +13,7 @@ const item = (
   unitPrice: number | null = null,
 ): OwnedItem => ({ id, name, quantity, where, slot, unitPrice });
 
-const twoHoursAgo = () => new Date(Date.now() - 2 * 60 * 60_000).toISOString();
+const twoHoursAgo = () => minutesAgo(2 * 60);
 
 const CROSSBOW = item('bank', 5, 28869, "Hunters' sunlight crossbow", 1, 4_800_000);
 const BLOOD_RUNES = item('bank', 12, 565, 'Blood rune', 4_210, 300);
@@ -215,7 +215,7 @@ describe('BankGear', () => {
         worn: [],
         wornSavedAt: twoHoursAgo(),
         inventory: Array(28).fill(null),
-        inventorySavedAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+        inventorySavedAt: minutesAgo(3),
       }),
     );
     const worn = await within(page).findByRole('region', { name: 'Worn' });

@@ -1,7 +1,7 @@
 import { combatLevelOf } from '@wom/shared';
 import { z } from 'zod';
-import { NotFoundError, type Requester } from '../http/requester.ts';
-import { fetchChecked, parseWith } from './answers.ts';
+import type { Requester } from '../http/requester.ts';
+import { fetchChecked, orNotFound, parseWith } from './answers.ts';
 
 /** The game mode tables. Every account is on the main one; each iron type is also on its own. */
 export type HiscoreTable =
@@ -78,10 +78,5 @@ export async function fetchHiscores(
   rsn: string,
   table: HiscoreTable = 'hiscore_oldschool',
 ): Promise<Hiscores | null> {
-  try {
-    return (await fetchAnswer(req, rsn, table)).value;
-  } catch (error) {
-    if (error instanceof NotFoundError) return null;
-    throw error;
-  }
+  return (await orNotFound(fetchAnswer(req, rsn, table)))?.value ?? null;
 }

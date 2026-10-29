@@ -7,6 +7,7 @@ import { ChatAskProvider } from '../../chat/useChat.tsx';
 import {
   fakeApi,
   LUMBY_PETE,
+  minutesAgo,
   refusal,
   testGains,
   testGoal,
@@ -324,7 +325,7 @@ describe('Goals', () => {
     view.freshness = [
       {
         kind: 'hiscores',
-        fetchedAt: new Date(Date.now() - 2 * 60 * 60_000).toISOString(),
+        fetchedAt: minutesAgo(2 * 60),
         stale: true,
         error: 'Hiscores: no connection',
         notFound: false,

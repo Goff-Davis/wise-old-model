@@ -1,6 +1,6 @@
 import { DAY_MS } from '@wom/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { type FakeAnswer, fakeRequester, fixture, outage, testDb } from '../../test/helpers.ts';
+import { type FakeAnswer, fixture, outage, testWikiCtx } from '../../test/helpers.ts';
 import {
   categoryName,
   comparableLog,
@@ -9,29 +9,18 @@ import {
   getSyncStatus,
   parseCollectionLog,
 } from './temple.ts';
-import type { WikiCtx } from './wiki.ts';
 
 const BASE = 'https://templeosrs.com/api/collection-log';
 const temple = (name: string) => fixture(`temple/${name}.json`);
 
 /** A context over a fake Temple answering the log and the category list, whose clock moves on. */
-async function setup(answers: { log?: FakeAnswer; categories?: FakeAnswer } = {}) {
-  const db = await testDb();
-  let now = new Date('2026-10-28T12:00:00.000Z');
-  const fake = fakeRequester(({ url }) => {
-    const { pathname } = new URL(url);
-    const answer = pathname.endsWith('/categories.php')
-      ? (answers.categories ?? temple('categories'))
-      : pathname.endsWith('/player_collection_log.php')
-        ? (answers.log ?? temple('clog-mikael'))
-        : undefined;
-    return answer ?? new Error(`No answer for ${url}`);
+function setup(answers: { log?: FakeAnswer; categories?: FakeAnswer } = {}) {
+  return testWikiCtx(({ pathname }) => {
+    if (pathname.endsWith('/categories.php')) return answers.categories ?? temple('categories');
+    if (pathname.endsWith('/player_collection_log.php'))
+      return answers.log ?? temple('clog-mikael');
+    return new Error(`No answer for ${pathname}`);
   });
-  const ctx: WikiCtx = { req: fake.req, db, now: () => now };
-  const later = (ms: number) => {
-    now = new Date(now.getTime() + ms);
-  };
-  return { ctx, later, ...fake };
 }
 
 /** The fixture log, parsed as stored, each category in the tab Temple's list gives it. */

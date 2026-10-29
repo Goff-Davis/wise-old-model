@@ -41,11 +41,14 @@ const NameSchema = z
   .min(1, 'A goal needs a name for what it is about.')
   .max(100, 'A name in a goal is at most 100 characters.');
 
+/** The longest goal title. */
+export const GOAL_TITLE_MAX_LENGTH = 200;
+
 const TitleSchema = z
   .string()
   .trim()
   .min(1, 'A goal needs a title.')
-  .max(200, 'A title is at most 200 characters.');
+  .max(GOAL_TITLE_MAX_LENGTH, `A title is at most ${GOAL_TITLE_MAX_LENGTH} characters.`);
 
 const skillShape = {
   kind: z.literal('skill'),

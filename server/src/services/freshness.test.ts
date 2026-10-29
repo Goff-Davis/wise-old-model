@@ -1,9 +1,9 @@
 import type { Kysely } from 'kysely';
 import { describe, expect, it, vi } from 'vitest';
-import { insertAccount, testDb } from '../../test/helpers.ts';
+import { insertAccount, saveFor, testDb } from '../../test/helpers.ts';
 import type { AccountRow, DB } from '../db/schema.ts';
 import { NotFoundError, SourceError } from '../http/requester.ts';
-import { getSource, listSnapshots, saveSource } from '../store/sourceState.ts';
+import { getSource, listSnapshots } from '../store/sourceState.ts';
 import {
   createFreshnessMemory,
   ensureFresh,
@@ -47,13 +47,7 @@ async function setup(fails: Partial<Record<OnlineKind, Error>> = {}) {
 }
 
 async function seed(db: Kysely<DB>, account: AccountRow, kind: OnlineKind, fetchedAt: string) {
-  await saveSource(db, {
-    accountId: account.id,
-    kind,
-    data: `{"kind":"${kind}","at":"old"}`,
-    fetchedAt,
-    timeZone: 'UTC',
-  });
+  await saveFor(db, account.id)(kind, `{"kind":"${kind}","at":"old"}`, fetchedAt);
 }
 
 const fresh = (kind: OnlineKind, fetchedAt: string) => ({

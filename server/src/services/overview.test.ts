@@ -3,6 +3,7 @@ import type { Kysely } from 'kysely';
 import { describe, expect, it, vi } from 'vitest';
 import {
   exportFixture,
+  exportFixtures,
   type FakeAnswer,
   FIXTURE_CA_THRESHOLDS,
   fakeRequester,
@@ -10,6 +11,7 @@ import {
   insertAccount,
   notFound,
   outage,
+  saveFor,
   testAccountDeps,
   testDb,
   writeExportFiles,
@@ -17,7 +19,6 @@ import {
 import type { DB } from '../db/schema.ts';
 import { checkFiles, mergeDiaryNames } from '../sources/characterExport.ts';
 import { type Hiscores, parseHiscores } from '../sources/hiscores.ts';
-import { saveSource } from '../store/sourceState.ts';
 import { buildOverview, getOverview } from './overview.ts';
 
 const hiscoresText = fixture('hiscores/lynx-titan.json');
@@ -98,33 +99,30 @@ describe('buildOverview', () => {
       'Clue Scrolls (all)': 9_999,
     });
     const overview = buildOverview({ account, hiscores, bossMetrics, freshness: [] });
-    expect(overview.topKills).toEqual([
+    expect(overview.allKills).toEqual([
       { name: 'Vorkath', kills: 2_000 },
       { name: 'Zulrah', kills: 1_500 },
       { name: 'Kraken', kills: 900 },
       { name: "K'ril Tsutsaroth", kills: 300 },
       { name: 'TzTok-Jad', kills: 186 },
+      { name: 'Giant Mole', kills: 50 },
     ]);
-    expect(overview.allKills).toEqual([...overview.topKills, { name: 'Giant Mole', kills: 50 }]);
   });
 
-  it('never lists more than 5 top kill counts, or a boss without kills', () => {
+  it('never lists a boss without kills', () => {
     const hiscores = parseHiscores(JSON.parse(hiscoresText));
     hiscores.activities.forEach((activity, i) => {
       activity.score = i % 3 === 0 ? 0 : i;
     });
     const overview = buildOverview({ account, hiscores, bossMetrics, freshness: [] });
-    expect(overview.topKills).toHaveLength(5);
     expect(overview.allKills.length).toBeGreaterThan(40);
-    for (const list of [overview.topKills, overview.allKills]) {
-      expect(list.every((entry) => entry.kills > 0)).toBe(true);
-      expect(list).toEqual([...list].sort((a, b) => b.kills - a.kills));
-    }
+    expect(overview.allKills.every((entry) => entry.kills > 0)).toBe(true);
+    expect(overview.allKills).toEqual([...overview.allKills].sort((a, b) => b.kills - a.kills));
   });
 
   it('keeps bosses with the same kill count in the hiscores order', () => {
     const hiscores = withScores({ Zulrah: 100, Vorkath: 100, 'TzTok-Jad': 100 });
-    const names = buildOverview({ account, hiscores, bossMetrics, freshness: [] }).topKills.map(
+    const names = buildOverview({ account, hiscores, bossMetrics, freshness: [] }).allKills.map(
       (entry) => entry.name,
     );
     expect(names).toEqual(['TzTok-Jad', 'Vorkath', 'Zulrah']);
@@ -137,7 +135,6 @@ describe('buildOverview', () => {
       bossMetrics: [],
       freshness: [],
     });
-    expect(overview.topKills).toEqual([]);
     expect(overview.allKills).toEqual([]);
     expect(overview.missing).toEqual([
       {
@@ -269,7 +266,6 @@ describe('buildOverview', () => {
       combatLevel: null,
       totalLevel: null,
       skills: [],
-      topKills: [],
       allKills: [],
       progress: { quests: null, diaryTiers: null, combatAchievements: null, collectionLog: null },
       // Not known yet, which isn't the same as nothing worn.
@@ -286,7 +282,7 @@ const addAccount = (db: Kysely<DB>, name: string, type: AccountType = 'regular')
 const NOW = new Date('2026-10-27T12:00:00.000Z');
 
 async function save(db: Kysely<DB>, accountId: number, kind: SourceKind, data: string) {
-  await saveSource(db, { accountId, kind, data, fetchedAt: NOW.toISOString(), timeZone: 'UTC' });
+  await saveFor(db, accountId)(kind, data, NOW.toISOString());
 }
 
 /** Saves an account's online data, so the Overview has nothing to fetch. */
@@ -306,7 +302,7 @@ describe('getOverview', () => {
     const overview = await getOverview(testAccountDeps(db, req), row, NOW);
     expect(urls).toEqual([]);
     expect(overview.totalLevel).toBe(2278);
-    expect(overview.topKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
+    expect(overview.allKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
     expect(overview.progress.collectionLog).toEqual({ obtained: 587, total: 1734 });
     expect(overview.freshness).toEqual([
       {
@@ -346,7 +342,7 @@ describe('getOverview', () => {
     expect(overview.freshness.find((entry) => entry.kind === 'wom_player')).toMatchObject({
       notFound: true,
     });
-    expect(overview.topKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
+    expect(overview.allKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
   });
 
   it('still answers when the saved hiscores no longer read as hiscores', async () => {
@@ -391,11 +387,7 @@ describe("getOverview with an account's Character Export files", () => {
 
   it("reads the saved files, Temple's log and the wiki's thresholds into the rows", async () => {
     const { row, deps } = await withFiles(
-      Object.fromEntries(
-        ['quests.json', 'diaries.json', 'combat_achievements.json', 'equipment.json'].map(
-          (file) => [file, exportFixture(file)],
-        ),
-      ),
+      exportFixtures(['quests.json', 'diaries.json', 'combat_achievements.json', 'equipment.json']),
     );
     const overview = await getOverview(deps, row, NOW);
     expect(overview.progress).toMatchObject({

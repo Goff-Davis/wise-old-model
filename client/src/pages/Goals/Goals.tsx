@@ -20,7 +20,7 @@ import { useTimeZone } from '../../settings/useSettings.ts';
 import { AddGoalDialog } from './AddGoalDialog.tsx';
 import styles from './Goals.module.css';
 
-/** What a button that needs the chat says until the chat is built. */
+/** What a button that needs the chat says when there's no chat to send to. */
 const NEEDS_CHAT = 'Available once the chat is set up';
 
 /** A wiki image named after an item, as the wiki names its images (`Dragon_defender.png`). */

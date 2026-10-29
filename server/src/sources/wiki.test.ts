@@ -1,6 +1,6 @@
 import { DAY_MS } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { type FakeAnswer, fakeRequester, fixture, outage, testDb } from '../../test/helpers.ts';
+import { type FakeAnswer, fixture, outage, testWikiCtx } from '../../test/helpers.ts';
 import { NotFoundError, SourceError } from '../http/requester.ts';
 import { readCache } from '../store/cache.ts';
 import {
@@ -13,7 +13,6 @@ import {
   getSectionText,
   latestRevisions,
   searchWiki,
-  type WikiCtx,
   wikiUrl,
 } from './wiki.ts';
 
@@ -50,22 +49,14 @@ type Answer = FakeAnswer | ((params: URLSearchParams) => FakeAnswer);
  * `reads` lists what every cached answer used said about its age and errors.
  */
 async function setup(answers: Partial<Record<Call, Answer>>) {
-  const db = await testDb();
-  let now = new Date('2026-10-28T12:00:00.000Z');
-  const fake = fakeRequester(({ url }) => {
-    const params = new URL(url).searchParams;
-    const call = callOf(params);
+  const wiki = await testWikiCtx((url) => {
+    const call = callOf(url.searchParams);
     const answer = call ? answers[call] : undefined;
     if (answer === undefined) return new Error(`No answer for ${url}`);
-    return typeof answer === 'function' ? answer(params) : answer;
+    return typeof answer === 'function' ? answer(url.searchParams) : answer;
   });
-  const reads: { kind: string; fetchedAt: string; error: string | null }[] = [];
-  const ctx: WikiCtx = { req: fake.req, db, now: () => now, noteRead: (read) => reads.push(read) };
-  const calls = () => fake.urls.map((url) => callOf(new URL(url).searchParams));
-  const later = (ms: number) => {
-    now = new Date(now.getTime() + ms);
-  };
-  return { ctx, calls, later, reads, ...fake };
+  const calls = () => wiki.urls.map((url) => callOf(new URL(url).searchParams));
+  return { ...wiki, calls };
 }
 
 /** A revisions answer giving each title this revision id. */

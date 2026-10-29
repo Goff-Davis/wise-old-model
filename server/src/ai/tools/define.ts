@@ -1,8 +1,8 @@
 import type { Freshness, SourceKind } from '@wom/shared';
 import { z } from 'zod';
-import { loadQuestPoints, questPointsOf } from '../../calc/requirements.ts';
+import { loadQuestPoints, type QuestStatus, questPointsOf } from '../../calc/requirements.ts';
 import type { AccountRow } from '../../db/schema.ts';
-import { type AccountDeps, wikiCtx } from '../../services/accounts.ts';
+import { type AccountDeps, accountRow, wikiCtx } from '../../services/accounts.ts';
 import { orSourceFailure } from '../../sources/answers.ts';
 import {
   type CeKind,
@@ -66,11 +66,7 @@ export function defineTool<S extends z.ZodRawShape>(def: {
 
 /** The account a tool is run for. */
 export function accountOf(deps: AccountDeps, ctx: ToolContext): Promise<AccountRow> {
-  return deps.db
-    .selectFrom('accounts')
-    .selectAll()
-    .where('id', '=', ctx.accountId)
-    .executeTakeFirstOrThrow();
+  return accountRow(deps.db, ctx.accountId);
 }
 
 /** The sources whose last fetch failed, or that don't know the name. */
@@ -119,7 +115,7 @@ export function noteStale(stale: Stale[], kind: string, error: string): void {
 export async function questPointsFor(
   wiki: WikiCtx,
   stale: Stale[],
-  quests: Record<string, string> | null,
+  quests: Record<string, QuestStatus> | null,
 ): Promise<number | null> {
   if (!quests) return null;
   const points = await orSourceFailure(loadQuestPoints(wiki), null);

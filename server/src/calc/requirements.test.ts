@@ -1,4 +1,4 @@
-import { DAY_MS, DIARY_AREAS } from '@wom/shared';
+import { DAY_MS } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
 import { fakeRequester, fixture, testWikiCtx } from '../../test/helpers.ts';
 import {
@@ -9,11 +9,11 @@ import {
   findQuestReqs,
   loadAllQuestRequirements,
   loadDiaryPage,
-  loadDiaryPages,
   loadQuestPoints,
   parseDiaryPage,
   parseQuestRequirements,
   type QuestReqs,
+  type QuestStatus,
   questPointsOf,
 } from './requirements.ts';
 
@@ -376,9 +376,11 @@ describe('parseQuestRequirements', () => {
 /** An account that has finished every quest Dragon Slayer II needs, but `unfinished`. */
 function ds2Account(opts: {
   levels?: Record<string, number>;
-  unfinished?: Record<string, string>;
+  unfinished?: Record<string, QuestStatus>;
 }) {
-  const quests = Object.fromEntries(allQuests(ds2().quests).map((name) => [name, 'FINISHED']));
+  const quests: Record<string, QuestStatus> = Object.fromEntries(
+    allQuests(ds2().quests).map((name) => [name, 'finished']),
+  );
   return {
     levels: levelsWith(opts.levels),
     quests: { ...quests, ...opts.unfinished },
@@ -390,7 +392,7 @@ describe('checkQuest', () => {
   it("says what isn't met: a level short, and a quest not started", () => {
     const check = checkQuest(
       ds2(),
-      ds2Account({ levels: { Magic: 71 }, unfinished: { 'Dream Mentor': 'NOT_STARTED' } }),
+      ds2Account({ levels: { Magic: 71 }, unfinished: { 'Dream Mentor': 'not_started' } }),
     );
     expect(check.met).toBe(false);
     expect(check.skills.find((skill) => skill.skill === 'Magic')).toEqual({
@@ -413,7 +415,7 @@ describe('checkQuest', () => {
   it('checks a Runecraft level', () => {
     const check = checkQuest(sample('What Lies Below'), {
       levels: levelsWith({ Runecraft: 1 }),
-      quests: { 'Rune Mysteries': 'FINISHED' },
+      quests: { 'Rune Mysteries': 'finished' },
       questPoints: 0,
     });
     expect(check).toMatchObject({
@@ -424,7 +426,7 @@ describe('checkQuest', () => {
   });
 
   it("lists a quest's own needs only while it isn't finished", () => {
-    const check = checkQuest(ds2(), ds2Account({ unfinished: { 'Dream Mentor': 'IN_PROGRESS' } }));
+    const check = checkQuest(ds2(), ds2Account({ unfinished: { 'Dream Mentor': 'in_progress' } }));
     // Legends' Quest is finished, so what it needed isn't listed; Dream Mentor's is.
     expect(check.quests.map((quest) => quest.name)).toEqual([
       "Legends' Quest",
@@ -458,7 +460,7 @@ describe('checkQuest', () => {
   });
 
   it("lists what a quest in the tree needs as text only while that quest isn't finished", () => {
-    const check = checkQuest(ds2(), ds2Account({ unfinished: { 'Bone Voyage': 'NOT_STARTED' } }));
+    const check = checkQuest(ds2(), ds2Account({ unfinished: { 'Bone Voyage': 'not_started' } }));
     expect(check.unchecked).toEqual([
       '100 Kudos (for Bone Voyage)',
       'Started the pyre ship portion of the Barbarian Training miniquest to gain access to the Ancient Cavern',
@@ -476,7 +478,7 @@ describe('checkQuest', () => {
     ].join('\n');
     const check = checkQuest(parseQuestRequirements('Test', text), {
       levels: {},
-      quests: { 'Bone Voyage': 'NOT_STARTED', 'A Kingdom Divided': 'NOT_STARTED' },
+      quests: { 'Bone Voyage': 'not_started', 'A Kingdom Divided': 'not_started' },
       questPoints: 0,
     });
     expect(check.unchecked).toEqual(['100 Kudos (for Bone Voyage)']);
@@ -485,7 +487,9 @@ describe('checkQuest', () => {
   it('lists a quest needed by several quests once', () => {
     const reqs = sample('Desert Treasure II - The Fallen Empire');
     const names = allQuests(reqs.quests);
-    const quests = Object.fromEntries(names.map((name) => [name, 'NOT_STARTED']));
+    const quests: Record<string, QuestStatus> = Object.fromEntries(
+      names.map((name) => [name, 'not_started']),
+    );
     const check = checkQuest(reqs, { levels: levelsWith(), quests, questPoints: 0 });
     const listed = check.quests.map((quest) => quest.name);
     // Priest in Peril is in the tree four times.
@@ -515,7 +519,7 @@ describe('checkQuest', () => {
     const { "Legends' Quest": _legends, 'Client of Kourend': _client, ...rest } = account.quests;
     const check = checkQuest(ds2(), {
       ...account,
-      quests: { ...rest, 'Legends’ Quest': 'FINISHED' },
+      quests: { ...rest, 'Legends’ Quest': 'finished' },
     });
     expect(check.quests.find((quest) => quest.name === "Legends' Quest")?.met).toBe(true);
     expect(check.quests.find((quest) => quest.name === 'Client of Kourend')).toMatchObject({
@@ -531,7 +535,7 @@ describe('checkQuest', () => {
     const reqs = parseQuestRequirements('Test', '*[[Tears of Guthix (quest)]]');
     const check = checkQuest(reqs, {
       levels: {},
-      quests: { 'Tears of Guthix': 'FINISHED' },
+      quests: { 'Tears of Guthix': 'finished' },
       questPoints: 0,
     });
     expect(check.quests).toEqual([
@@ -558,20 +562,20 @@ describe('checkQuest', () => {
     for (const [wiki, game] of parts) {
       const check = checkQuest(parseQuestRequirements('Test', `*[[${wiki}]]`), {
         levels: {},
-        quests: { [game]: 'FINISHED' },
+        quests: { [game]: 'finished' },
         questPoints: 0,
       });
       expect(check.quests[0]?.state, wiki).toBe('finished');
     }
     // So The Great Brain Robbery is held back by Pirate Pete.
     const robbery = sample('The Great Brain Robbery');
-    const quests = Object.fromEntries(allQuests(robbery.quests).map((name) => [name, 'FINISHED']));
+    const quests = Object.fromEntries(allQuests(robbery.quests).map((name) => [name, 'finished']));
     const check = checkQuest(robbery, {
       levels: levelsWith(),
       quests: {
         ...quests,
-        "Recipe for Disaster - Another Cook's Quest": 'FINISHED',
-        'Recipe for Disaster - Pirate Pete': 'NOT_STARTED',
+        "Recipe for Disaster - Another Cook's Quest": 'finished',
+        'Recipe for Disaster - Pirate Pete': 'not_started',
       },
       questPoints: 0,
     });
@@ -836,7 +840,10 @@ describe('parseDiaryPage', () => {
 });
 
 /** An account for the diary checks: every level 99 unless said, and these quest states. */
-const diaryAccount = (quests: Record<string, string>, levels: Record<string, number> = {}) => ({
+const diaryAccount = (
+  quests: Record<string, QuestStatus>,
+  levels: Record<string, number> = {},
+) => ({
   levels: levelsWith(levels),
   quests,
 });
@@ -846,7 +853,7 @@ describe('checkDiaryTier', () => {
     const check = checkDiaryTier(
       ardougne(),
       'Easy',
-      diaryAccount({ 'Rune Mysteries': 'NOT_STARTED', Biohazard: 'FINISHED' }),
+      diaryAccount({ 'Rune Mysteries': 'not_started', Biohazard: 'finished' }),
     );
     expect(check.met).toBe(false);
     expect(check.tasks.slice(0, 3)).toEqual([
@@ -867,7 +874,7 @@ describe('checkDiaryTier', () => {
   });
 
   it('counts a quest that only has to be started once it is', () => {
-    const quests = { 'Sea Slug': 'IN_PROGRESS' };
+    const quests: Record<string, QuestStatus> = { 'Sea Slug': 'in_progress' };
     expect(checkDiaryTier(ardougne(), 'Medium', diaryAccount(quests)).tasks[6]).toMatchObject({
       number: 7,
       met: true,
@@ -875,7 +882,7 @@ describe('checkDiaryTier', () => {
     const notStarted = checkDiaryTier(
       ardougne(),
       'Medium',
-      diaryAccount({ 'Sea Slug': 'NOT_STARTED' }),
+      diaryAccount({ 'Sea Slug': 'not_started' }),
     );
     expect(notStarted.tasks[6]?.met).toBe(false);
     expect(notStarted.quests).toContainEqual({
@@ -887,9 +894,9 @@ describe('checkDiaryTier', () => {
   });
 
   it("can't check how far a quest to be partly done is while it's in progress", () => {
-    const medium = (state: string) =>
+    const medium = (state: QuestStatus) =>
       checkDiaryTier(ardougne(), 'Medium', diaryAccount({ Watchtower: state }));
-    const inProgress = medium('IN_PROGRESS');
+    const inProgress = medium('in_progress');
     expect(inProgress.tasks[8]).toMatchObject({ number: 9, met: true });
     expect(inProgress.unchecked).toContain(
       "Task 9: Watchtower partly done (it's in progress; how far can't be checked)",
@@ -900,8 +907,8 @@ describe('checkDiaryTier', () => {
       state: 'in_progress',
       met: false,
     });
-    expect(medium('NOT_STARTED').tasks[8]?.met).toBe(false);
-    const finished = medium('FINISHED');
+    expect(medium('not_started').tasks[8]?.met).toBe(false);
+    const finished = medium('finished');
     expect(finished.tasks[8]?.met).toBe(true);
     expect(finished.unchecked.filter((line) => line.startsWith('Task 9:'))).toEqual([
       'Task 9: Any light source and the Skavid map',
@@ -1055,14 +1062,14 @@ describe('questPointsOf', () => {
     expect(
       questPointsOf(
         {
-          'Dragon Slayer I': 'FINISHED',
-          'Cook’s Assistant': 'FINISHED',
-          'Dragon Slayer II': 'IN_PROGRESS',
-          'Recipe for Disaster': 'FINISHED',
-          'Recipe for Disaster - Pirate Pete': 'FINISHED',
-          "Recipe for Disaster - Another Cook's Quest": 'NOT_STARTED',
+          'Dragon Slayer I': 'finished',
+          'Cook’s Assistant': 'finished',
+          'Dragon Slayer II': 'in_progress',
+          'Recipe for Disaster': 'finished',
+          'Recipe for Disaster - Pirate Pete': 'finished',
+          "Recipe for Disaster - Another Cook's Quest": 'not_started',
           // A miniquest has none.
-          'Barbarian Training': 'FINISHED',
+          'Barbarian Training': 'finished',
         },
         points,
       ),
@@ -1079,35 +1086,17 @@ describe('loadDiaryPage', () => {
     expect(await loadDiaryPage(ctx, 'Ardougne')).toEqual(ardougne());
     expect(urls.map((url) => new URL(url).searchParams.get('page'))).toEqual(['Ardougne Diary']);
   });
-});
 
-describe('loadDiaryPages', () => {
-  it("reads the 12 diaries' pages one after another, so a day later one request checks them all", async () => {
-    const { ctx, urls, later } = await testWikiCtx((url) => {
-      if (url.searchParams.get('action') === 'query') {
-        const titles = url.searchParams.get('titles')?.split('|') ?? [];
-        const pages = titles.map((title) => ({ title, revisions: [{ revid: 1 }] }));
-        return JSON.stringify({ query: { pages } });
-      }
+  it("keeps each diary's tasks apart, worked out once per copy of its page", async () => {
+    const { ctx, urls } = await testWikiCtx((url) => {
       const page = url.searchParams.get('page') ?? '';
+      // Varrock's page has no task table the parser knows.
       const wikitext = page === 'Ardougne Diary' ? ARDOUGNE : '';
       return JSON.stringify({ parse: { title: page, revid: 1, wikitext } });
     });
-    const pages = await loadDiaryPages(ctx);
-    expect([...pages.keys()]).toEqual(DIARY_AREAS);
-    expect(DIARY_AREAS).toHaveLength(12);
-    expect(pages.get('Ardougne')?.filter((each) => each.tier === 'Easy')).toHaveLength(10);
-    expect(urls.map((url) => new URL(url).searchParams.get('page'))).toEqual(
-      DIARY_AREAS.map((area) => `${area} Diary`),
-    );
-    await loadDiaryPages(ctx);
-    expect(urls).toHaveLength(12);
-
-    later(DAY_MS + 1);
-    await loadDiaryPages(ctx);
-    const checks = urls.slice(12);
-    expect(checks).toHaveLength(1);
-    const titles = new URL(checks[0] ?? '').searchParams.get('titles')?.split('|') ?? [];
-    expect(titles.sort()).toEqual(DIARY_AREAS.map((area) => `${area} Diary`).sort());
+    const tasks = await loadDiaryPage(ctx, 'Ardougne');
+    expect(await loadDiaryPage(ctx, 'Varrock')).toEqual([]);
+    expect(await loadDiaryPage(ctx, 'Ardougne')).toBe(tasks);
+    expect(urls).toHaveLength(2);
   });
 });

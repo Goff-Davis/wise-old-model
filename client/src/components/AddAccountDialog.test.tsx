@@ -8,6 +8,7 @@ import {
   type FakeRoute,
   fakeApi,
   LUMBY_PETE,
+  minutesAgo,
   testLookup,
   testQueryClient,
 } from '../test/fakeApi.ts';
@@ -148,7 +149,7 @@ describe('AddAccountDialog', () => {
   });
 
   it('says when the name last synced its collection log on Temple', async () => {
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString();
+    const threeDaysAgo = minutesAgo(3 * 24 * 60);
     renderDialog({
       'GET /api/accounts/lookup': () => ({
         ...found,

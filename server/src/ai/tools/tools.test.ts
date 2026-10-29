@@ -8,6 +8,7 @@ import {
   insertAccount,
   outage,
   saveFor,
+  sharedDataAnswer,
   testAccountDeps,
   testDb,
 } from '../../../test/helpers.ts';
@@ -16,53 +17,17 @@ import type { ToolContext } from '../provider.ts';
 import { defineTool, MOST_RESULT_CHARS } from './define.ts';
 import { buildTools } from './index.ts';
 
-const PRICES = 'https://prices.runescape.wiki/api/v2/osrs';
 const WOM = 'https://api.wiseoldman.net/v2';
 const HISCORES =
   'https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=Lumby%20Pete';
-const RATES = `${WOM}/efficiency/rates?metric=ehp&type=ironman`;
-const wiki = (name: string) => fixture(`wiki/${name}.json`);
 
-/** The wiki, its prices, Temple's categories and Wise Old Man's rates, from the fixtures. */
+/** Lumby Pete's hiscores and week of gains, then the shared data, from the fixtures. */
 function answer({ url }: { url: string }) {
-  if (url === RATES) return fixture('wom/efficiency-rates-main.json');
   if (url === HISCORES) return hiscoresWith({ skills: { Magic: [75, 1_210_421] } });
   if (url.startsWith(`${WOM}/players/Lumby%20Pete/gained?startDate=`)) {
     return fixture('wom/gained-week.json');
   }
-  if (url === `${PRICES}/mapping`) return fixture('prices/mapping-sample.json');
-  if (url === `${PRICES}/latest`) return fixture('prices/latest-sample.json');
-  if (url === 'https://templeosrs.com/api/collection-log/categories.php') {
-    return fixture('temple/categories.json');
-  }
-  const params = new URL(url).searchParams;
-  if (params.get('list') === 'search') return wiki('search-dragon-slayer-ii');
-  if (params.get('action') === 'bucket') {
-    const query = params.get('query') ?? '';
-    if (query.includes("bucket('quest')")) return wiki('quest-dragon-slayer-ii');
-    if (query.includes('recommended_equipment')) return wiki('recommended-vorkath');
-    if (query.includes('infobox_bonuses')) return wiki('bonuses-abyssal-whip');
-    if (query.includes('dropsline')) return wiki('drops-draconic-visage');
-    return wiki('bucket-unknown');
-  }
-  if (params.get('action') === 'expandtemplates') return wiki('expandtemplates-ca-thresholds');
-  if (params.get('action') === 'parse') {
-    const page = params.get('page');
-    if (page === 'Quests/List') return wiki('parse-quests-list');
-    if (page === 'Ardougne Diary') {
-      const wikitext = fixture('wiki/diary-ardougne.wikitext');
-      return JSON.stringify({ parse: { title: 'Ardougne Diary', revid: 1, wikitext } });
-    }
-    if (page === 'Dragon Slayer II' || page === 'DS2') {
-      return params.has('section')
-        ? wiki('section-1-dragon-slayer-ii')
-        : wiki('sections-dragon-slayer-ii');
-    }
-    if (page === 'God blessing') return wiki('page-god-blessing');
-    if (page === 'God capes') return wiki('page-god-capes');
-    return wiki('parse-missing-page');
-  }
-  return outage('Some site');
+  return sharedDataAnswer(url) ?? outage('Some site');
 }
 
 /** A bank of `count` different stacks, in the bank file's format. */
@@ -251,6 +216,23 @@ describe('tools', () => {
       methods: ['Quests'],
     });
     await expect(run('calc_xp', { skill: 'Mining' })).rejects.toThrow('Give a target level or XP.');
+  });
+
+  it("says when Wise Old Man's rates are an old copy, kept while it's down", async () => {
+    const { run, db, row, state } = await setup();
+    await saveFor(db, row.id)('hiscores', hiscoresWith({ skills: { Mining: [1, 0] } }));
+    const fresh = await run('calc_xp', { skill: 'Mining', xp: 35_025 });
+    expect(fresh.stale).toEqual([]);
+    // A day and more on, Wise Old Man can't be reached: the rates kept are used, and said to be old.
+    await db
+      .updateTable('cache')
+      .set({ fetched_at: '2026-01-01T00:00:00.000Z' })
+      .where('key', '=', 'wom-rates:ironman')
+      .execute();
+    state.down = true;
+    const old = await run('calc_xp', { skill: 'Mining', xp: 35_025 });
+    expect(old).toMatchObject({ hours: fresh.hours, methods: ['Quests'] });
+    expect(old.stale).toEqual([{ kind: 'wom_rates', error: 'Some site: server error (500)' }]);
   });
 
   it('reads a wiki page as its sections, or one section, noting the page as a source', async () => {

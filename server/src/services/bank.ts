@@ -1,9 +1,16 @@
-import { BANK_PLACES, type BankView, hasBank, type OwnedItem, type SourceKind } from '@wom/shared';
+import {
+  BANK_PLACES,
+  type BankView,
+  canTrade,
+  hasBank,
+  type OwnedItem,
+  type SourceKind,
+} from '@wom/shared';
 import type { AccountRow } from '../db/schema.ts';
 import { createItemIndex } from '../items/itemIndex.ts';
 import { orSourceFailure } from '../sources/answers.ts';
 import { type CeContainer, CeContainerSchema } from '../sources/characterExport.schemas.ts';
-import { exportFiles, readExportFile } from '../sources/characterExport.ts';
+import { exportFiles, ownedItems, readExportFile } from '../sources/characterExport.ts';
 import { getLatestPrices, getMapping, LATEST_PRICES_KIND, latestTrade } from '../sources/prices.ts';
 import type { CacheRead } from '../sources/wiki.ts';
 import { type AccountDeps, toAccount, wikiCtx } from './accounts.ts';
@@ -103,7 +110,7 @@ export async function getBankView(
   for (const [i, { where }] of BANK_PLACES.entries()) {
     const { kind, saved, savedAt, error, fix } = states[i];
     const items = readExportFile(saved?.data, CeContainerSchema)?.items ?? null;
-    files.set(where, items?.filter((item) => item.quantity > 0) ?? null);
+    files.set(where, items);
     // A place not saved says what to do, or why its file couldn't be read.
     const why = error ?? fix;
     if (!items && why) missing.push({ kind, fix: why });
@@ -112,18 +119,13 @@ export async function getBankView(
     // The latest file didn't read; what's shown is from the read before.
     if (error) failed.push({ kind, error });
   }
-  const anything = [...files.values()].some((items) => items && items.length > 0);
+  const anything = [...files.values()].some((items) => items?.some((item) => item.quantity > 0));
   const prices = anything ? await loadPrices(deps, now) : NO_PRICES;
 
-  const ownedIn = (where: Place): OwnedItem[] | null =>
-    files.get(where)?.map((item) => ({
-      id: item.id,
-      name: item.name,
-      quantity: item.quantity,
-      where,
-      slot: item.slot,
-      unitPrice: prices.priceOf(item.id),
-    })) ?? null;
+  const ownedIn = (where: Place): OwnedItem[] | null => {
+    const items = files.get(where);
+    return items ? ownedItems(items, where, prices.priceOf) : null;
+  };
   const bank = ownedIn('bank');
   const seedVault = ownedIn('seed_vault');
   const carried = ownedIn('inventory');
@@ -167,7 +169,7 @@ export async function getBankView(
     inventory,
     search: found?.found ?? null,
     searchMore: found?.more ?? false,
-    ironmanNote: type !== 'regular',
+    ironmanNote: !canTrade(type),
     missing,
     failed,
   };

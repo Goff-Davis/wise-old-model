@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { MINUTE_MS, WIKI_ICON_FILE } from '@wom/shared';
 import { NotFoundError, type Requester, SourceError, siteOf } from '../http/requester.ts';
+import { shareIn } from '../store/cache.ts';
 
 /** An icon to serve: where it's kept in the data folder, and where it comes from. */
 export type IconSource = { kind: 'wiki' | 'item'; file: string; url: string };
@@ -112,12 +113,7 @@ export function createIconStore(
   return {
     get(icon) {
       const key = `${icon.kind}/${icon.file}`;
-      let pending = inFlight.get(key);
-      if (!pending) {
-        pending = load(icon, key).finally(() => inFlight.delete(key));
-        inFlight.set(key, pending);
-      }
-      return pending;
+      return shareIn(inFlight, key, () => load(icon, key));
     },
   };
 }

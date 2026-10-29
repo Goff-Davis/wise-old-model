@@ -147,15 +147,17 @@ function Missing(props: { missing: OverviewData['missing'] }) {
   );
 }
 
+/** How many of the highest kill counts show until all are asked for. */
+const TOP_KILLS = 5;
+
 function BossKills(props: {
-  top: OverviewData['topKills'];
   all: OverviewData['allKills'];
   /** How to get Wise Old Man's boss list, when there's none to tell bosses apart with. */
   bossListFix: string | null;
 }) {
   const id = useId();
   const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? props.all : props.top;
+  const shown = expanded ? props.all : props.all.slice(0, TOP_KILLS);
   return (
     <section aria-labelledby={id} className={styles.section}>
       <h3 id={id}>Boss kills</h3>
@@ -172,14 +174,14 @@ function BossKills(props: {
               </li>
             ))}
           </ul>
-          {props.all.length > props.top.length && (
+          {props.all.length > TOP_KILLS && (
             <button
               type="button"
               className={styles.more}
               aria-expanded={expanded}
               onClick={() => setExpanded((wasExpanded) => !wasExpanded)}
             >
-              {expanded ? `Show the top ${props.top.length}` : `Show all ${props.all.length}`}
+              {expanded ? `Show the top ${TOP_KILLS}` : `Show all ${props.all.length}`}
             </button>
           )}
         </>
@@ -326,7 +328,6 @@ export function Overview(): JSX.Element {
       )}
       <Progress progress={data.progress} />
       <BossKills
-        top={data.topKills}
         all={data.allKills}
         bossListFix={missing.find((entry) => entry.kind === 'wom_player')?.fix ?? null}
       />

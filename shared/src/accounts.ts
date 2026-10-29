@@ -22,12 +22,28 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   hardcore_group: 'Hardcore group ironman',
 };
 
+/** Each type as a sentence names it, with an article: "tracks Lumby Pete as an ironman". */
+export const ACCOUNT_TYPE_NOUNS: Record<AccountType, string> = {
+  regular: 'a regular account',
+  ironman: 'an ironman',
+  hardcore: 'a hardcore ironman',
+  ultimate: 'an ultimate ironman',
+  group: 'a group ironman',
+  hardcore_group: 'a hardcore group ironman',
+};
+
 /** How to get Wise Old Man to track a name. */
 export const WOM_TRACKING_STEPS =
   'Look the name up on wiseoldman.net to start tracking it, then Refresh.';
 
 /** Whether accounts of this type have a bank: ultimate ironmen can't use one. */
 export const hasBank = (type: AccountType): boolean => type !== 'ultimate';
+
+/** Whether accounts of this type can trade and use the Grand Exchange: only regular ones. */
+export const canTrade = (type: AccountType): boolean => type === 'regular';
+
+/** The longest name OSRS allows. */
+export const NAME_MAX_LENGTH = 12;
 
 /** Every kind of data saved per account: the online sources, then Character Export's files. */
 export const SourceKindSchema = z.enum([
@@ -78,8 +94,8 @@ export const AccountNameSchema = z
     z
       .string()
       .regex(
-        /^(?=.*[A-Za-z0-9])[A-Za-z0-9 _-]{1,12}$/,
-        'A name is 1 to 12 letters, numbers, spaces, hyphens or underscores, with at least one letter or number.',
+        new RegExp(`^(?=.*[A-Za-z0-9])[A-Za-z0-9 _-]{1,${NAME_MAX_LENGTH}}$`),
+        `A name is 1 to ${NAME_MAX_LENGTH} letters, numbers, spaces, hyphens or underscores, with at least one letter or number.`,
       ),
   );
 

@@ -15,6 +15,17 @@ export const OwnedItemSchema = z.object({
 
 export type OwnedItem = z.infer<typeof OwnedItemSchema>;
 
+/** How a sentence names each place: where something is (`at`), and the place itself. */
+export const PLACE_NAMES: Record<OwnedItem['where'], { at: string; place: string }> = {
+  bank: { at: 'in the bank', place: 'the bank' },
+  seed_vault: { at: 'in the seed vault', place: 'the seed vault' },
+  inventory: { at: 'in the inventory', place: 'the inventory' },
+  equipment: { at: 'worn', place: 'the worn gear' },
+};
+
+/** The longest search the Bank and gear page takes. */
+export const SEARCH_MAX_LENGTH = 100;
+
 /** Where items are kept, by the Character Export file each is read from, in a search's order. */
 export const BANK_PLACES = [
   { kind: 'ce_bank', where: 'bank' },
@@ -66,10 +77,10 @@ export const BankViewSchema = z.object({
 
 export type BankView = z.infer<typeof BankViewSchema>;
 
-/** The page's search: up to 100 characters, trimmed; empty means no search. */
+/** The page's search: up to SEARCH_MAX_LENGTH characters, trimmed; empty means no search. */
 export const BankSearchSchema = z
   .string()
   .trim()
-  .max(100, 'A search is at most 100 characters.')
+  .max(SEARCH_MAX_LENGTH, `A search is at most ${SEARCH_MAX_LENGTH} characters.`)
   .optional()
   .transform((search) => search || null);

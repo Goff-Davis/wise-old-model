@@ -133,13 +133,33 @@ export function isFresh(fetchedAt: string, ttlMs: number, now: Date): boolean {
   return withinLimit(now.getTime() - Date.parse(fetchedAt), ttlMs);
 }
 
-/** A saved row's value as a cache entry, dated `fetchedAt` (by default, when it was saved). */
+/** How big a saved row's JSON must be for its parsed value to be kept (see savedEntry). */
+const KEPT_PARSED_BYTES = 64 * 1024;
+
+const parsedRows = perDatabase(() => new Map<string, { savedAt: string; value: unknown }>());
+
+/**
+ * A saved row's value as a cache entry, dated `fetchedAt` (by default, when it was saved). A
+ * large row (the prices are a megabyte of JSON, read on each Bank and gear reload) is parsed
+ * once per saved copy while the server runs, so its callers share the value and mustn't change
+ * it.
+ */
 export function savedEntry<T>(
+  db: Kysely<DB>,
   row: CacheRow,
   error: string | null,
   fetchedAt = row.fetchedAt,
 ): CacheEntry<T> {
-  return { value: JSON.parse(row.data) as T, fetchedAt, error };
+  if (row.data.length < KEPT_PARSED_BYTES) {
+    return { value: JSON.parse(row.data) as T, fetchedAt, error };
+  }
+  const parsed = parsedRows(db);
+  let kept = parsed.get(row.key);
+  if (kept?.savedAt !== row.fetchedAt) {
+    kept = { savedAt: row.fetchedAt, value: JSON.parse(row.data) };
+    parsed.set(row.key, kept);
+  }
+  return { value: kept.value as T, fetchedAt, error };
 }
 
 /** How long a failed load stands: the site isn't asked for that key again until then. */
@@ -164,11 +184,11 @@ export function cachedEntry<T>(
 ): Promise<CacheEntry<T>> {
   return shareLoad(db, key, async () => {
     const saved = await readCache(db, key);
-    if (saved && isFresh(saved.fetchedAt, ttlMs, now)) return savedEntry<T>(saved, null);
+    if (saved && isFresh(saved.fetchedAt, ttlMs, now)) return savedEntry<T>(db, saved, null);
     const failures = failuresIn(db);
     const recent = failures.get(key);
     if (recent && isFresh(recent.at, FAILURE_PAUSE_MS, now)) {
-      if (saved) return savedEntry<T>(saved, recent.error.message);
+      if (saved) return savedEntry<T>(db, saved, recent.error.message);
       throw recent.error;
     }
     let value: T;
@@ -177,7 +197,7 @@ export function cachedEntry<T>(
     } catch (error) {
       if (!(error instanceof SourceError)) throw error;
       failures.set(key, { at: now.toISOString(), error });
-      if (saved) return savedEntry<T>(saved, error.message);
+      if (saved) return savedEntry<T>(db, saved, error.message);
       throw error;
     }
     failures.delete(key);
@@ -185,16 +205,4 @@ export function cachedEntry<T>(
     await writeCache(db, { key, kind, fetchedAt, revision: null, data: JSON.stringify(value) });
     return { value, fetchedAt, error: null };
   });
-}
-
-/** cachedEntry's value alone. */
-export async function cached<T>(
-  db: Kysely<DB>,
-  key: string,
-  kind: string,
-  ttlMs: number,
-  now: Date,
-  load: () => Promise<T>,
-): Promise<T> {
-  return (await cachedEntry(db, key, kind, ttlMs, now, load)).value;
 }

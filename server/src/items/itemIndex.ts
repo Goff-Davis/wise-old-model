@@ -1,3 +1,5 @@
+import { squeeze } from '@wom/shared';
+
 // Apostrophes are left out of names before matching: "ahrims hood" is Ahrim's hood.
 const APOSTROPHES = /['\u2019]/g;
 
@@ -22,8 +24,7 @@ function startsWordsInOrder(query: string[], words: string[]): boolean {
 }
 
 /** A name for matching inside words: lowercase, apostrophes dropped, spaces squeezed. */
-const squeeze = (text: string) =>
-  text.toLowerCase().replace(APOSTROPHES, '').replace(/\s+/g, ' ').trim();
+const matchText = (text: string) => squeeze(text.toLowerCase().replace(APOSTROPHES, ''));
 
 /**
  * Finds items by a loose name, ignoring case, best match first: the exact name (score 3), then
@@ -35,11 +36,11 @@ export function createItemIndex(items: { id: number; name: string }[]): {
 } {
   const entries = items.map((item) => {
     const words = wordsOf(item.name);
-    return { item, text: squeeze(item.name), words, key: words.join(' ') };
+    return { item, text: matchText(item.name), words, key: words.join(' ') };
   });
   return {
     find(query, limit = 5) {
-      const text = squeeze(query);
+      const text = matchText(query);
       const words = wordsOf(query);
       if (words.length === 0) return [];
       const key = words.join(' ');

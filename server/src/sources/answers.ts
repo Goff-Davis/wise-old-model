@@ -5,6 +5,16 @@ import type { DB } from '../db/schema.ts';
 import { NotFoundError, type Requester, SourceError, siteOf } from '../http/requester.ts';
 import { getSource } from '../store/sourceState.ts';
 
+/** `promise`'s value, or null when the site answered 404 (it doesn't know what was asked for). */
+export async function orNotFound<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (error instanceof NotFoundError) return null;
+    throw error;
+  }
+}
+
 /** An answer exactly as received, which is what gets stored, and what it parses to. */
 export type Checked<T> = { text: string; value: T };
 

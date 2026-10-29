@@ -1,7 +1,13 @@
 import { fireEvent, waitFor, within } from '@testing-library/react';
 import type { Overview } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { type FakeRoute, LUMBY_PETE, refusal, testOverview } from '../../test/fakeApi.ts';
+import {
+  type FakeRoute,
+  LUMBY_PETE,
+  minutesAgo,
+  refusal,
+  testOverview,
+} from '../../test/fakeApi.ts';
 import { renderApp } from '../../test/renderApp.tsx';
 
 /** Lumby Pete's overview page, with the server also answering `extra` (or answering it instead). */
@@ -49,7 +55,6 @@ describe('Overview', () => {
   it('lists the top kill counts with boss icons, and expands to all of them', async () => {
     const { page } = renderOverview(
       testOverview(LUMBY_PETE, {
-        topKills: kills(5),
         allKills: kills(7),
       }),
     );
@@ -74,7 +79,7 @@ describe('Overview', () => {
   });
 
   it('says so when the hiscores have no boss kills', async () => {
-    const { page } = renderOverview(testOverview(LUMBY_PETE, { topKills: [], allKills: [] }));
+    const { page } = renderOverview(testOverview(LUMBY_PETE, { allKills: [] }));
     expect(await within(page).findByText('No boss kills on the hiscores yet.')).toBeTruthy();
   });
 
@@ -83,7 +88,6 @@ describe('Overview', () => {
       "Boss kill counts need Wise Old Man's list of bosses, which comes with any account it tracks. Look the name up on wiseoldman.net to start tracking it, then Refresh.";
     const { page } = renderOverview(
       testOverview(LUMBY_PETE, {
-        topKills: [],
         allKills: [],
         missing: [{ kind: 'wom_player', fix }],
       }),
@@ -102,7 +106,7 @@ describe('Overview', () => {
   });
 
   it('says when Character Export saved each file, rather than when it was fetched', async () => {
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    const fiveMinutesAgo = minutesAgo(5);
     const { page } = renderOverview(
       testOverview(LUMBY_PETE, {
         freshness: [
@@ -123,7 +127,7 @@ describe('Overview', () => {
   });
 
   it('says why a source is stale, and since when its data dates', async () => {
-    const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const twoHoursAgo = minutesAgo(2 * 60);
     const { page } = renderOverview(
       testOverview(LUMBY_PETE, {
         freshness: [

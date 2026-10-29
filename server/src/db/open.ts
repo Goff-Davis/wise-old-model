@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { errorMessage } from '@wom/shared';
 import { Kysely } from 'kysely';
 import { type Migration, Migrator } from 'kysely/migration';
 import { backupFolder, backupIfDue, backupNow } from './backup.ts';
@@ -100,7 +101,7 @@ export async function openAppDatabase(dataDir: string, now: () => Date): Promise
     await backupIfDue(db, backupDir, now());
   } catch (error) {
     // The database itself is fine, so a missed daily backup doesn't stop the app.
-    console.warn(`Couldn't make the daily backup in ${backupDir}: ${(error as Error).message}`);
+    console.warn(`Couldn't make the daily backup in ${backupDir}: ${errorMessage(error)}`);
   }
   return db;
 }

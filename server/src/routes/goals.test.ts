@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   call,
   exportFixture,
+  exportFixtures,
   fakeRequester,
   fixture,
   hiscoresWith,
   insertAccount,
   outage,
   saveFor,
+  sharedDataAnswer,
   testAccountDeps,
   testConfig,
   testDb,
@@ -20,23 +22,9 @@ import { changeGoal, syncGoalCompletion } from '../goals/goalsService.ts';
 
 const RATES = 'https://api.wiseoldman.net/v2/efficiency/rates?metric=ehp&type=ironman';
 
-/**
- * The wiki's quest list, Dragon Slayer II's requirements, the Ardougne Diary page and the combat
- * achievement thresholds, and Wise Old Man's rates.
- */
+/** The shared data from the fixtures; anything else is a bug the test should catch. */
 function answer({ url }: { url: string }) {
-  if (url === RATES) return fixture('wom/efficiency-rates-main.json');
-  const params = new URL(url).searchParams;
-  if (params.get('action') === 'bucket') return fixture('wiki/quest-dragon-slayer-ii.json');
-  if (params.get('action') === 'expandtemplates') {
-    return fixture('wiki/expandtemplates-ca-thresholds.json');
-  }
-  if (params.get('page') === 'Quests/List') return fixture('wiki/parse-quests-list.json');
-  if (params.get('page') === 'Ardougne Diary') {
-    const wikitext = fixture('wiki/diary-ardougne.wikitext');
-    return JSON.stringify({ parse: { title: 'Ardougne Diary', revid: 1, wikitext } });
-  }
-  return new Error(`No answer for ${url}`);
+  return sharedDataAnswer(url) ?? new Error(`No answer for ${url}`);
 }
 
 /**
@@ -52,11 +40,7 @@ async function setup() {
   const save = saveFor(db, row.id);
   /** Gives the account Character Export files (Sample Name's), as the plugin writes them. */
   const writeFiles = (...files: string[]) =>
-    writeExportFiles(
-      config.runeliteDir,
-      'Lumby Pete',
-      Object.fromEntries(files.map((file) => [file, exportFixture(file)])),
-    );
+    writeExportFiles(config.runeliteDir, 'Lumby Pete', exportFixtures(files));
   await save(
     'hiscores',
     hiscoresWith({ skills: { Magic: [71, 850_000] }, activities: { Vorkath: 412 } }),

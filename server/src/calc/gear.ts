@@ -33,7 +33,7 @@ export type RecommendedSetup = {
 export type SlotUpgrades = {
   slot: string;
   current: string | null;
-  upgrades: { name: string; price: number | null; buyable: boolean; group: boolean }[];
+  upgrades: { name: string; price: number | null; buyable: boolean }[];
 };
 
 /** For each slot, each group in it the account has an item of, and that item (ownedGroupItems). */
@@ -93,7 +93,6 @@ export function findUpgrades(
   opts: { budget: number | null; canBuy: boolean; groupItems?: GroupItems },
 ): SlotUpgrades[] {
   const ownedKeys = new Set([...owned].map(ownedKey));
-  const groups = new Set(setup.groups);
   /** The account's item for one of the setup's: the setup's name, or its item in a group. */
   const ownedAs = (slot: string, name: string): string | null =>
     ownedKeys.has(ownedKey(name)) ? name : (opts.groupItems?.get(slot)?.get(name) ?? null);
@@ -106,7 +105,7 @@ export function findUpgrades(
     const upgrades = [...new Set(above.flat())]
       .map((name) => {
         const price = prices(name);
-        return { name, price, buyable: opts.canBuy && price !== null, group: groups.has(name) };
+        return { name, price, buyable: opts.canBuy && price !== null };
       })
       .filter(({ price }) => opts.budget === null || price === null || price <= opts.budget)
       .slice(0, MOST_UPGRADES);

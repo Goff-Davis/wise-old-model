@@ -5,7 +5,9 @@ import { nameKey } from '@wom/shared';
 import { describe, expect, it, vi } from 'vitest';
 import {
   exportFixture,
+  exportFixtures,
   insertAccount,
+  saveFor,
   tempDir,
   testDb,
   writeExportFiles,
@@ -22,6 +24,7 @@ import {
   MISSING_FIX,
   mergeDiaryHistory,
   mergeDiaryNames,
+  savedDiaries,
 } from './characterExport.ts';
 
 const ALL_KINDS = Object.keys(CE_FILES) as CeKind[];
@@ -34,11 +37,7 @@ const ALL_KINDS = Object.keys(CE_FILES) as CeKind[];
 async function setup(opts: { kinds?: CeKind[]; folder?: string } = {}) {
   const runeliteDir = tempDir();
   const files = (opts.kinds ?? ALL_KINDS).map((kind) => CE_FILES[kind]);
-  const folder = writeExportFiles(
-    runeliteDir,
-    opts.folder ?? 'Sample Name',
-    Object.fromEntries(files.map((file) => [file, exportFixture(file)])),
-  );
+  const folder = writeExportFiles(runeliteDir, opts.folder ?? 'Sample Name', exportFixtures(files));
   const db = await testDb();
   const account = await insertAccount(db, { name: 'Sample Name' });
   const waits: number[] = [];
@@ -251,6 +250,35 @@ describe('checkFiles', () => {
     });
     expect((await getSource(db, account.id, 'ce_bank'))?.data).toBe(exportFixture('bank.json'));
     expect(ALL_KINDS.every((kind) => MISSING_FIX[kind])).toBe(true);
+  });
+});
+
+describe('savedDiaries', () => {
+  it('keeps a merge until the history changes, then merges again', async () => {
+    const db = await testDb();
+    const account = await insertAccount(db);
+    const save = saveFor(db, account.id);
+    /** An export at `at` whose Ardougne easy tier names one task, `task`. */
+    const named = (at: string, task: string) => {
+      const data: CeDiaries = JSON.parse(exportFixture('diaries.json'));
+      const easy = data.diaries.Ardougne?.easy;
+      if (!easy) throw new Error('the fixture should have Ardougne easy');
+      data.exported_at = at;
+      easy.tasks = [{ name: task, complete: true }];
+      return data;
+    };
+    const taskNames = (diaries: Awaited<ReturnType<typeof savedDiaries>>) =>
+      diaries?.Ardougne?.easy.tasks?.map((task) => task.name);
+
+    const first = named('2026-10-20T10:00:00.000Z', 'Pick a cabbage');
+    await save('ce_diaries', JSON.stringify(first), '2026-10-20T10:00:00.000Z');
+    const merged = await savedDiaries(db, account.id, first);
+    expect(taskNames(merged)).toEqual(['Pick a cabbage']);
+    expect(await savedDiaries(db, account.id, first)).toBe(merged);
+
+    const second = named('2026-10-21T10:00:00.000Z', 'Steal a cake');
+    await save('ce_diaries', JSON.stringify(second), '2026-10-21T10:00:00.000Z');
+    expect(taskNames(await savedDiaries(db, account.id, second))).toEqual(['Steal a cake']);
   });
 });
 

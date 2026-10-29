@@ -1,7 +1,11 @@
 import { HOUR_MS } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
 import { outage, testDb } from '../../test/helpers.ts';
-import { cached, cachedEntry } from './cache.ts';
+import { cachedEntry } from './cache.ts';
+
+/** cachedEntry's value alone, as most of these tests look at it. */
+const cached = async <T>(...args: Parameters<typeof cachedEntry<T>>) =>
+  (await cachedEntry(...args)).value;
 
 const T0 = new Date('2026-10-28T12:00:00.000Z');
 const later = (ms: number) => new Date(T0.getTime() + ms);
@@ -162,5 +166,25 @@ describe('cached', () => {
     await cached(db, 'k', 'test', HOUR_MS, later(10 * HOUR_MS), load);
     expect(await cached(db, 'k', 'test', HOUR_MS, T0, load)).toEqual({ value: 'second' });
     expect(calls()).toBe(2);
+  });
+
+  it('parses a large saved value once per saved copy, so its callers share it', async () => {
+    const db = await testDb();
+    const value = (letter: string) => ({ rows: letter.repeat(70_000) });
+    await cachedEntry(db, 'big', 'test', HOUR_MS, T0, async () => value('x'));
+    const read = (at: Date, load = async () => value('y')) =>
+      cachedEntry(db, 'big', 'test', HOUR_MS, at, load);
+    const once = (await read(later(1))).value;
+    expect(once).toEqual(value('x'));
+    expect((await read(later(2))).value).toBe(once);
+    // A new copy, fetched once the old one is past its limit, is parsed again.
+    await read(later(HOUR_MS));
+    const next = (await read(later(HOUR_MS + 1))).value;
+    expect(next).toEqual(value('y'));
+    expect(next).not.toBe(once);
+    // A small value is parsed afresh each time, rather than kept.
+    await cachedEntry(db, 'small', 'test', HOUR_MS, T0, async () => ({ rows: 'z' }));
+    const small = () => cachedEntry(db, 'small', 'test', HOUR_MS, later(1), async () => ({}));
+    expect((await small()).value).not.toBe((await small()).value);
   });
 });

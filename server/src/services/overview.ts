@@ -27,8 +27,7 @@ import {
 } from '../sources/characterExport.schemas.ts';
 import {
   type CeKind,
-  type DiaryTier,
-  type DiaryTierData,
+  type Diaries,
   type ExportFile,
   exportFiles,
   fileMissing,
@@ -49,8 +48,6 @@ import { freshnessOf, type OnlineKind } from './freshness.ts';
  */
 const OVERVIEW_KINDS: OnlineKind[] = ['hiscores', 'wom_player', 'temple_clog'];
 
-const TOP_KILLS = 5;
-
 /** What to do when Wise Old Man's boss list isn't saved for any account. */
 const BOSS_LIST_FIX = `Boss kill counts need Wise Old Man's list of bosses, which comes with any account it tracks. ${WOM_TRACKING_STEPS}`;
 
@@ -58,7 +55,7 @@ const BOSS_LIST_FIX = `Boss kill counts need Wise Old Man's list of bosses, whic
 export type OverviewFiles = {
   quests?: CeQuests | null;
   /** Merged with earlier task names (see mergeDiaryNames). */
-  diaries?: Record<string, Record<DiaryTier, DiaryTierData>> | null;
+  diaries?: Diaries | null;
   combatAchievements?: CeCombatAchievements | null;
   equipment?: CeContainer | null;
 };
@@ -108,7 +105,6 @@ export function buildOverview(input: {
         ? { name: skill.name, level: null, xp: null }
         : { name: skill.name, level: skill.level, xp: skill.xp },
     ),
-    topKills: allKills.slice(0, TOP_KILLS),
     allKills,
     progress: {
       quests: files.quests

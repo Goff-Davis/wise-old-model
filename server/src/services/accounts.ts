@@ -94,6 +94,11 @@ export async function accountStatuses(deps: AccountDeps): Promise<AccountStatus[
   }));
 }
 
+/** The row of an account that must exist (one with a chat or goal that points at it). */
+export function accountRow(db: Kysely<DB>, id: number): Promise<AccountRow> {
+  return db.selectFrom('accounts').selectAll().where('id', '=', id).executeTakeFirstOrThrow();
+}
+
 /** The account with this id from a URL (plain digits only), or a 404. */
 export async function findAccount(db: Kysely<DB>, id: string): Promise<AccountRow> {
   const row = /^\d+$/.test(id)
@@ -101,18 +106,6 @@ export async function findAccount(db: Kysely<DB>, id: string): Promise<AccountRo
     : undefined;
   if (!row) throw new HttpError(404, 'There is no such account.');
   return row;
-}
-
-/**
- * A source failure becomes a note in `problems` and an answer of undefined (couldn't check, as
- * against null for not found); anything else is a bug and goes on.
- */
-function noting(problems: string[]) {
-  return (error: unknown): undefined => {
-    if (!(error instanceof SourceError)) throw error;
-    problems.push(error.message);
-    return undefined;
-  };
 }
 
 /**
@@ -124,22 +117,25 @@ export async function lookupAccount(
   deps: { req: Requester; runeliteDir: string },
   name: string,
 ): Promise<AccountLookup> {
-  const problems: string[] = [];
+  // A source that failed is undefined (couldn't check, as against null for not found), and why is
+  // noted in `problems`.
   const [hiscores, player, temple, characterExport] = await Promise.all([
-    fetchHiscores(deps.req, name).catch(noting(problems)),
-    getPlayer(deps.req, name).catch(noting(problems)),
-    getSyncStatus(deps.req, name).catch(noting(problems)),
-    exportFolderStatus(deps.runeliteDir, nameKey(name)).catch(noting(problems)),
+    orSourceFailure(fetchHiscores(deps.req, name), undefined),
+    orSourceFailure(getPlayer(deps.req, name), undefined),
+    orSourceFailure(getSyncStatus(deps.req, name), undefined),
+    orSourceFailure(exportFolderStatus(deps.runeliteDir, nameKey(name)), undefined),
   ]);
   return {
-    name: player?.displayName ?? hiscores?.name ?? name,
-    onHiscores: hiscores === undefined ? null : hiscores !== null,
-    ...hiscoresLevels(hiscores ?? null),
-    womType: player ? accountTypeFromWom(player.type) : null,
-    womTracked: player === undefined ? null : player !== null,
-    characterExport: characterExport ?? { found: null, lastWritten: null },
-    temple: temple ?? { synced: null, lastChecked: null },
-    problems,
+    name: player.value?.displayName ?? hiscores.value?.name ?? name,
+    onHiscores: hiscores.value === undefined ? null : hiscores.value !== null,
+    ...hiscoresLevels(hiscores.value ?? null),
+    womType: player.value ? accountTypeFromWom(player.value.type) : null,
+    womTracked: player.value === undefined ? null : player.value !== null,
+    characterExport: characterExport.value ?? { found: null, lastWritten: null },
+    temple: temple.value ?? { synced: null, lastChecked: null },
+    problems: [hiscores, player, temple, characterExport].flatMap((answer) =>
+      answer.error ? [answer.error] : [],
+    ),
   };
 }
 
@@ -293,19 +289,14 @@ async function suggestRename(
   const last = deps.memory.renameChecks.get(key);
   if (last && now.getTime() - last.at < REFRESH_FLOOR_MS) return last.suggestion;
 
-  let suggestion: string | null = null;
-  try {
-    const [newest] = await getNameChanges(deps.req, row.name);
-    if (
-      newest?.resolvedAt &&
-      nameKey(newest.oldName) === row.name_key &&
-      Date.parse(newest.resolvedAt) > Date.parse(lastFound)
-    ) {
-      suggestion = newest.newName;
-    }
-  } catch (error) {
-    if (!(error instanceof SourceError)) throw error;
-  }
+  // Wise Old Man failing means no suggestion this time.
+  const [newest] = (await orSourceFailure(getNameChanges(deps.req, row.name), [])).value;
+  const suggestion =
+    newest?.resolvedAt &&
+    nameKey(newest.oldName) === row.name_key &&
+    Date.parse(newest.resolvedAt) > Date.parse(lastFound)
+      ? newest.newName
+      : null;
   deps.memory.renameChecks.set(key, { at: now.getTime(), suggestion });
   return suggestion;
 }

@@ -1,4 +1,5 @@
 import {
+  ACCOUNT_TYPE_NOUNS,
   type Account,
   type AccountLookup,
   AccountNameSchema,
@@ -6,7 +7,7 @@ import {
   formatNumber,
   formatTime,
 } from '@wom/shared';
-import { type FormEvent, type JSX, useEffect, useId, useRef, useState } from 'react';
+import { type FormEvent, type JSX, useId, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAddAccount, useLookUp } from '../api/accounts.ts';
 import { pagePath } from '../pages/pageList.ts';
@@ -14,18 +15,9 @@ import { useTimeZone } from '../settings/useSettings.ts';
 import { AccountTypeSelect } from './AccountTypeSelect.tsx';
 import styles from './AddAccountDialog.module.css';
 import { exportFolderFinding, NO_TEMPLE_LOG } from './findings.ts';
+import { focusOnShow } from './focus.ts';
 import { ModalDialog } from './ModalDialog.tsx';
 import { Problem } from './Problem.tsx';
-
-/** How "tracks <name> as …" ends for each type. */
-const AS_TYPE: Record<AccountType, string> = {
-  regular: 'a regular account',
-  ironman: 'an ironman',
-  hardcore: 'a hardcore ironman',
-  ultimate: 'an ultimate ironman',
-  group: 'a group ironman',
-  hardcore_group: 'a hardcore group ironman',
-};
 
 function hiscoresFinding(found: AccountLookup): string {
   if (found.onHiscores === null) return "Couldn't check.";
@@ -40,7 +32,7 @@ function womFinding(found: AccountLookup): string {
   if (found.womTracked === null) return "Couldn't check.";
   if (!found.womTracked) return `Doesn't track ${found.name} yet.`;
   return found.womType
-    ? `Tracks ${found.name} as ${AS_TYPE[found.womType]}.`
+    ? `Tracks ${found.name} as ${ACCOUNT_TYPE_NOUNS[found.womType]}.`
     : `Tracks ${found.name}.`;
 }
 
@@ -62,8 +54,6 @@ function Added(props: {
   problems: string[];
   onDone: (account: Account) => void;
 }): JSX.Element {
-  const open = useRef<HTMLButtonElement>(null);
-  useEffect(() => open.current?.focus(), []);
   return (
     <div className={styles.form}>
       <p className={styles.added}>{props.account.name} was added.</p>
@@ -74,7 +64,7 @@ function Added(props: {
       </ul>
       <div className={styles.actions}>
         <button
-          ref={open}
+          ref={focusOnShow}
           type="button"
           className={styles.primary}
           onClick={() => props.onDone(props.account)}

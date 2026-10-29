@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { SourceKindSchema } from './accounts.ts';
+import { formatNumber } from './format.ts';
 import { SettingsSchema } from './settings.ts';
 
 /** A chat with the AI about one account. */
@@ -93,7 +95,7 @@ export const ChatEventSchema = z.discriminatedUnion('type', [
   /** The Character Export files the turn read as it began, and the goals they completed. */
   z.object({
     type: z.literal('files'),
-    changed: z.array(z.string()),
+    changed: z.array(SourceKindSchema),
     goalsCompleted: z.number(),
   }),
   z.object({ type: z.literal('usage'), ...ChatUsageSchema.shape }),
@@ -126,13 +128,20 @@ export const ChatModelsAnswerSchema = z.object({
 
 export type ChatModelsAnswer = z.infer<typeof ChatModelsAnswerSchema>;
 
+/** The longest message, and the longest chat title. */
+export const MESSAGE_MAX_LENGTH = 4000;
+export const CHAT_TITLE_MAX_LENGTH = 100;
+
 /** A message the user sends, and, when a page sent it, the note shown under it. */
 export const NewChatMessageSchema = z.object({
   text: z
     .string()
     .trim()
     .min(1, 'Type a message first.')
-    .max(4000, 'A message is at most 4,000 characters.'),
+    .max(
+      MESSAGE_MAX_LENGTH,
+      `A message is at most ${formatNumber(MESSAGE_MAX_LENGTH)} characters.`,
+    ),
   note: z.string().trim().min(1).max(100, 'A note is at most 100 characters.').optional(),
 });
 
@@ -142,7 +151,7 @@ export const ChatTitleSchema = z
       .string()
       .trim()
       .min(1, 'A chat needs a title.')
-      .max(100, 'A title is at most 100 characters.'),
+      .max(CHAT_TITLE_MAX_LENGTH, `A title is at most ${CHAT_TITLE_MAX_LENGTH} characters.`),
   })
   .strict();
 

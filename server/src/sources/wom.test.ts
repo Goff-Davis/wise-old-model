@@ -12,13 +12,14 @@ import { SourceError } from '../http/requester.ts';
 import {
   canRequestUpdate,
   efficiencyTypeFor,
+  fetchAchievementsText,
   fetchPlayerText,
-  getAchievements,
   getCachedRates,
   getEfficiencyRates,
   getGains,
   getNameChanges,
   getPlayer,
+  parseAchievements,
   parsePlayer,
   updatePlayer,
 } from './wom.ts';
@@ -53,7 +54,8 @@ describe('players', () => {
     });
     expect(player?.ehp).toBeCloseTo(563.78, 2);
     expect(player?.bosses.tempoross).toEqual({ kills: 72, rank: 140153 });
-    expect(player?.raw).toEqual(JSON.parse(fixture('player-phil03.json')));
+    // The snapshot itself isn't kept: its boss kills are.
+    expect(player).not.toHaveProperty('latestSnapshot');
   });
 
   it("is null for a player Wise Old Man doesn't track", async () => {
@@ -237,7 +239,7 @@ describe('getGains', () => {
   });
 });
 
-describe('getNameChanges and getAchievements', () => {
+describe('getNameChanges and the achievements', () => {
   it('finds changes from or to a name by searching, since an old name no longer finds the player', async () => {
     const { req, urls } = answering({
       '/names': fixture('name-search-full-sender.json'),
@@ -293,7 +295,7 @@ describe('getNameChanges and getAchievements', () => {
         },
       ]),
     });
-    expect(await getAchievements(req, 'phil03')).toEqual([
+    expect(parseAchievements(JSON.parse(await fetchAchievementsText(req, 'phil03')))).toEqual([
       { name: '99 Mining', metric: 'mining', createdAt: '2026-10-20T10:00:00.000Z' },
     ]);
   });
@@ -330,15 +332,13 @@ describe('efficiency', () => {
       '/efficiency/rates': fixture('efficiency-rates-main.json'),
     });
     const now = new Date('2026-10-28T12:00:00.000Z');
-    const later = (ms: number) => new Date(now.getTime() + ms);
-    const rates = await getCachedRates(db, req, 'main', now);
-    expect(rates.value.find((rate) => rate.skill === 'mining')?.methods[0]?.description).toBe(
-      'Quests',
-    );
-    await getCachedRates(db, req, 'main', later(DAY_MS - 1));
+    const at = (ms: number) => ({ req, db, now: () => new Date(now.getTime() + ms) });
+    const rates = await getCachedRates(at(0), 'main');
+    expect(rates.find((rate) => rate.skill === 'mining')?.methods[0]?.description).toBe('Quests');
+    await getCachedRates(at(DAY_MS - 1), 'main');
     expect(urls).toEqual([`${BASE}/efficiency/rates?metric=ehp&type=main`]);
-    await getCachedRates(db, req, 'ironman', later(DAY_MS - 1));
-    await getCachedRates(db, req, 'main', later(DAY_MS));
+    await getCachedRates(at(DAY_MS - 1), 'ironman');
+    await getCachedRates(at(DAY_MS), 'main');
     expect(urls).toEqual([
       `${BASE}/efficiency/rates?metric=ehp&type=main`,
       `${BASE}/efficiency/rates?metric=ehp&type=ironman`,

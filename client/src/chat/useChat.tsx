@@ -6,7 +6,6 @@ import {
   ChatSessionSchema,
   type ChatUsage,
   parseSse,
-  type SourceKind,
 } from '@wom/shared';
 import {
   createContext,
@@ -88,6 +87,26 @@ const Ignored = z.unknown();
 /** What a page needs of the chat: to send it a question, and why it can't when it can't. */
 export type ChatAsk = { ask(text: string, note: string): void; why: string | undefined };
 
+/** The tools that add or change goals: once one has run, the goals pages reload. */
+const GOAL_TOOLS = new Set(['add_goal', 'update_goal']);
+
+/** Reads a stream of chat events as they come, handing each to `onEvent`. */
+async function readEvents(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: ChatEvent) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let carry = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return;
+    const parsed = parseSse(decoder.decode(value, { stream: true }), carry);
+    carry = parsed.carry;
+    for (const event of parsed.events) onEvent(event);
+  }
+}
+
 /**
  * An account's chat: its earlier chats, the one open (the latest, until New chat or Earlier
  * chats picks another), its messages, and the turn being answered. `send` streams the answer
@@ -145,6 +164,8 @@ export function useChat(accountId: string, enabled = true) {
       hangUp.current = controller;
       let id = chatId;
       let finished = false;
+      // Whether the turn completed goals (its file check) or added or changed some.
+      let goalsChanged = false;
       try {
         if (!id) {
           id = (await apiSend('POST', `/api/accounts/${accountId}/chats`, {}, ChatSessionSchema))
@@ -164,23 +185,18 @@ export function useChat(accountId: string, enabled = true) {
           failWith(refusalOf(res.status, res.statusText, body).message);
           return;
         }
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let carry = '';
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const parsed = parseSse(decoder.decode(value, { stream: true }), carry);
-          carry = parsed.carry;
-          for (const event of parsed.events) {
-            if (event.type === 'done') finished = true;
-            // The files the turn read: the pages reading them reload.
-            if (event.type === 'files') {
-              void reloadPagesReading(queryClient, accountId, event.changed as SourceKind[]);
-            }
-            update((answer) => withEvent(answer, event));
+        await readEvents(res.body, (event) => {
+          if (event.type === 'done') finished = true;
+          // The files the turn read: the pages reading them reload.
+          if (event.type === 'files') {
+            void reloadPagesReading(queryClient, accountId, event.changed);
+            if (event.goalsCompleted > 0) goalsChanged = true;
           }
-        }
+          if (event.type === 'tool' && GOAL_TOOLS.has(event.name) && event.status === 'done') {
+            goalsChanged = true;
+          }
+          update((answer) => withEvent(answer, event));
+        });
         if (!finished) failWith(CUT_OFF);
       } catch (error) {
         if (controller.signal.aborted) return;
@@ -190,8 +206,7 @@ export function useChat(accountId: string, enabled = true) {
         // A finished answer is stored: the chat shows it as stored, and only then takes another
         // message. An answer that couldn't be had stays on screen with why.
         if (finished && id) {
-          // A turn can complete goals (the chat checks them first) and add or change them.
-          void reloadGoals(queryClient, accountId).catch(() => {});
+          if (goalsChanged) void reloadGoals(queryClient, accountId).catch(() => {});
           await reloadChats().catch(() => {});
           await queryClient.fetchQuery({ ...messagesQuery(id), staleTime: 0 }).catch(() => {});
           setLive(null);

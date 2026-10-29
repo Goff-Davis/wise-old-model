@@ -16,7 +16,7 @@ import { listenLocal } from '../src/http/listen.ts';
 import { NotFoundError, type Requester, SourceError } from '../src/http/requester.ts';
 import type { AccountDeps } from '../src/services/accounts.ts';
 import { createFreshnessMemory } from '../src/services/freshness.ts';
-import type { WikiCtx } from '../src/sources/wiki.ts';
+import type { CacheRead, WikiCtx } from '../src/sources/wiki.ts';
 import { saveSource } from '../src/store/sourceState.ts';
 
 /** A file from `server/test/fixtures` (say `wom/player-phil03.json`), as text. */
@@ -26,6 +26,10 @@ export function fixture(file: string): string {
 
 /** One of Sample Name's Character Export files (say `bank.json`), as text. */
 export const exportFixture = (file: string) => fixture(`character-export/Sample Name/${file}`);
+
+/** Sample Name's Character Export `files` as fixtures, by file name: for writeExportFiles. */
+export const exportFixtures = (files: string[]) =>
+  Object.fromEntries(files.map((file) => [file, exportFixture(file)]));
 
 /**
  * Character Export's folder `folder` in `runeliteDir`, holding `files` (file name → text), each
@@ -131,8 +135,6 @@ export function fakeRequester(
   }
   const req: Requester = {
     text: (url, init) => respondText(init?.method ?? 'GET', url),
-    json: async <T>(url: string, init?: { method?: 'GET' | 'POST' }) =>
-      JSON.parse(await respondText(init?.method ?? 'GET', url)) as T,
     bytes: async (url) => {
       const result = await respond('GET', url);
       if (typeof result === 'string') throw new Error(`GET ${url} was answered with text`);
@@ -140,6 +142,53 @@ export function fakeRequester(
     },
   };
   return { req, requests, urls };
+}
+
+const RATES = 'https://api.wiseoldman.net/v2/efficiency/rates?metric=ehp&type=';
+const PRICES = 'https://prices.runescape.wiki/api/v2/osrs';
+
+/**
+ * The shared data's answers from the fixtures, by URL: Wise Old Man's rates, the wiki's prices,
+ * Temple's categories, and the wiki's search, Bucket tables, templates and pages (Quests/List,
+ * the Ardougne Diary, Dragon Slayer II, God blessing and God capes). Undefined for anything else.
+ */
+export function sharedDataAnswer(url: string): FakeAnswer | undefined {
+  const wiki = (name: string) => fixture(`wiki/${name}.json`);
+  if (url.startsWith(RATES)) return fixture('wom/efficiency-rates-main.json');
+  if (url === `${PRICES}/mapping`) return fixture('prices/mapping-sample.json');
+  if (url === `${PRICES}/latest`) return fixture('prices/latest-sample.json');
+  if (url === 'https://templeosrs.com/api/collection-log/categories.php') {
+    return fixture('temple/categories.json');
+  }
+  if (!url.startsWith('https://oldschool.runescape.wiki/')) return undefined;
+  const params = new URL(url).searchParams;
+  if (params.get('list') === 'search') return wiki('search-dragon-slayer-ii');
+  if (params.get('action') === 'bucket') {
+    const query = params.get('query') ?? '';
+    if (query.includes("bucket('quest')")) return wiki('quest-dragon-slayer-ii');
+    if (query.includes('recommended_equipment')) return wiki('recommended-vorkath');
+    if (query.includes('infobox_bonuses')) return wiki('bonuses-abyssal-whip');
+    if (query.includes('dropsline')) return wiki('drops-draconic-visage');
+    return wiki('bucket-unknown');
+  }
+  if (params.get('action') === 'expandtemplates') return wiki('expandtemplates-ca-thresholds');
+  if (params.get('action') === 'parse') {
+    const page = params.get('page');
+    if (page === 'Quests/List') return wiki('parse-quests-list');
+    if (page === 'Ardougne Diary') {
+      const wikitext = fixture('wiki/diary-ardougne.wikitext');
+      return JSON.stringify({ parse: { title: 'Ardougne Diary', revid: 1, wikitext } });
+    }
+    if (page === 'Dragon Slayer II' || page === 'DS2') {
+      return params.has('section')
+        ? wiki('section-1-dragon-slayer-ii')
+        : wiki('sections-dragon-slayer-ii');
+    }
+    if (page === 'God blessing') return wiki('page-god-blessing');
+    if (page === 'God capes') return wiki('page-god-capes');
+    return wiki('parse-missing-page');
+  }
+  return undefined;
 }
 
 /** The error the requester gives for a 404 from `site`. */
@@ -210,17 +259,20 @@ export async function testDb(
 }
 
 /**
- * A wiki context whose requests `answer` answers, its clock at 2026-10-28 12:00 UTC: `urls` lists
- * the requests, and `later` moves the clock on.
+ * A wiki context whose requests `answer` answers, its clock at 2026-10-28 12:00 UTC: `urls` and
+ * `requests` list the requests, `reads` what each cached answer used said about its age and
+ * errors, and `later` moves the clock on.
  */
 export async function testWikiCtx(answer: (url: URL) => FakeAnswer | Promise<FakeAnswer>) {
   const db = await testDb();
   let now = new Date('2026-10-28T12:00:00.000Z');
   const fake = fakeRequester(({ url }) => answer(new URL(url)));
-  const ctx: WikiCtx = { req: fake.req, db, now: () => now };
+  const reads: CacheRead[] = [];
+  const ctx: WikiCtx = { req: fake.req, db, now: () => now, noteRead: (read) => reads.push(read) };
   return {
     ctx,
-    urls: fake.urls,
+    ...fake,
+    reads,
     later: (ms: number) => {
       now = new Date(now.getTime() + ms);
     },

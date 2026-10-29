@@ -110,9 +110,9 @@ describe('findUpgrades', () => {
       slot: 'head',
       current: 'Crystal helm',
       upgrades: [
-        { name: 'Masori mask (f)', price: null, buyable: false, group: false },
-        { name: 'Void ranger helm', price: null, buyable: false, group: false },
-        { name: 'Masori mask', price: 30_000_000, buyable: true, group: false },
+        { name: 'Masori mask (f)', price: null, buyable: false },
+        { name: 'Void ranger helm', price: null, buyable: false },
+        { name: 'Masori mask', price: 30_000_000, buyable: true },
       ],
     });
   });
@@ -136,7 +136,6 @@ describe('findUpgrades', () => {
       name: 'Masori mask',
       price: 30_000_000,
       buyable: false,
-      group: false,
     });
   });
 
@@ -199,7 +198,7 @@ describe('findUpgrades', () => {
     expect(slots[4]).toEqual({
       slot: 'body',
       current: null,
-      upgrades: [{ name: 'Masori body', price: null, buyable: false, group: false }],
+      upgrades: [{ name: 'Masori body', price: null, buyable: false }],
     });
   });
 
@@ -257,13 +256,13 @@ describe('findUpgrades', () => {
     expect(ammo({ groupItems })).toEqual({
       slot: 'ammo',
       current: 'Unholy blessing',
-      upgrades: [{ name: "Rada's blessing 4", price: null, buyable: false, group: false }],
+      upgrades: [{ name: "Rada's blessing 4", price: null, buyable: false }],
     });
-    // A group offered is marked as one.
-    expect(ammo({})?.upgrades.map((item) => [item.name, item.group])).toEqual([
-      ["Rada's blessing 4", false],
-      ['God blessing', true],
-      ["Rada's blessing 3", false],
+    // Without one, the group is offered among the upgrades.
+    expect(ammo({})?.upgrades.map((item) => item.name)).toEqual([
+      "Rada's blessing 4",
+      'God blessing',
+      "Rada's blessing 3",
     ]);
   });
 

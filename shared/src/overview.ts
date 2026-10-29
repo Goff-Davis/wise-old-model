@@ -27,8 +27,7 @@ export const OverviewSchema = z.object({
   skills: z.array(
     z.object({ name: z.string(), level: z.number().nullable(), xp: z.number().nullable() }),
   ),
-  /** The five highest boss kill counts, most first; `allKills` has every boss with kills. */
-  topKills: z.array(KillCountSchema),
+  /** Every boss with kills, most first (the page shows the five highest until asked for all). */
   allKills: z.array(KillCountSchema),
   progress: z.object({
     quests: z.object({ done: z.number(), total: z.number() }).nullable(),

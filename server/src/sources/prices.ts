@@ -7,7 +7,7 @@ import { cachedFor, type WikiCtx } from './wiki.ts';
 const BASE = 'https://prices.runescape.wiki/api/v2/osrs';
 const SITE = 'OSRS Wiki';
 
-/** An item the Grand Exchange trades. The wiki leaves out a limit, alch value or value it doesn't know. */
+/** An item the Grand Exchange trades. The wiki leaves out a limit or value it doesn't know. */
 export type MappingItem = {
   id: number;
   name: string;
@@ -15,10 +15,6 @@ export type MappingItem = {
   /** How many can be bought every 4 hours. */
   limit: number | null;
   value: number | null;
-  highalch: number | null;
-  lowalch: number | null;
-  /** The wiki image's file name, e.g. `Abyssal whip.png`. */
-  icon: string;
 };
 
 const MappingSchema = z.array(
@@ -28,9 +24,6 @@ const MappingSchema = z.array(
     members: z.boolean(),
     limit: z.number().optional(),
     value: z.number().optional(),
-    highalch: z.number().optional(),
-    lowalch: z.number().optional(),
-    icon: z.string(),
   }),
 );
 
@@ -45,9 +38,6 @@ export async function getMapping(ctx: WikiCtx): Promise<MappingItem[]> {
       members: item.members,
       limit: item.limit ?? null,
       value: item.value ?? null,
-      highalch: item.highalch ?? null,
-      lowalch: item.lowalch ?? null,
-      icon: item.icon,
     }));
   });
 }

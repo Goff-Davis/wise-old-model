@@ -24,7 +24,12 @@ import {
   type CeQuests,
   CeQuestsSchema,
 } from '../sources/characterExport.schemas.ts';
-import { mergeDiaryHistory, readSnapshots, tierDone } from '../sources/characterExport.ts';
+import {
+  type Diaries,
+  mergeDiaryHistory,
+  readSnapshots,
+  tierDone,
+} from '../sources/characterExport.ts';
 import { parseHiscores } from '../sources/hiscores.ts';
 import { readSavedLog } from '../sources/temple.ts';
 import {
@@ -198,8 +203,6 @@ function questsDone(before: CeQuests, after: CeQuests, at: string): Progress[] {
     .filter((quest) => quest.state === 'FINISHED' && !finished.has(quest.name))
     .map((quest) => ({ kind: 'quest', title: `Completed ${quest.name}`, at }));
 }
-
-type Diaries = ReturnType<typeof mergeDiaryHistory>[number];
 
 /**
  * The diary tiers done in `after` that weren't in `before`, by tierDone, each with the task names

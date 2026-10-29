@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { Account, AccountStatus } from '@wom/shared';
+import { type Account, type AccountStatus, NAME_MAX_LENGTH } from '@wom/shared';
 import { type JSX, useId, useRef, useState } from 'react';
 import {
   accountStatusQuery,
@@ -40,7 +40,7 @@ function RenameForm(props: { account: Account; onDone: () => void }): JSX.Elemen
           ref={focusOnShow}
           aria-label="New name"
           value={name}
-          maxLength={12}
+          maxLength={NAME_MAX_LENGTH}
           onChange={(event) => setName(event.target.value)}
         />
         <button type="submit" disabled={rename.isPending || name.trim() === ''}>

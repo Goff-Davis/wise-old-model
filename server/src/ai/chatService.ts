@@ -21,7 +21,7 @@ import type { ExpressionBuilder, Kysely } from 'kysely';
 import type { AccountRow, DB } from '../db/schema.ts';
 import { checkFilesAndGoals } from '../goals/goalsService.ts';
 import { HttpError } from '../http/errors.ts';
-import type { AccountDeps } from '../services/accounts.ts';
+import { type AccountDeps, accountRow } from '../services/accounts.ts';
 import { getSettings } from '../settings/settingsRepo.ts';
 import { withinLimit } from '../store/cache.ts';
 import { buildSystemPrompt, composeMessage } from './instructions.ts';
@@ -110,11 +110,7 @@ export function createChatService(deps: ChatDeps) {
   ): Promise<void> {
     const { signal } = turn.controller;
     const startedAt = now();
-    const row = await db
-      .selectFrom('accounts')
-      .selectAll()
-      .where('id', '=', session.account_id)
-      .executeTakeFirstOrThrow();
+    const row = await accountRow(db, session.account_id);
     const settings = await getSettings(db);
     const timeZone = effectiveTimeZone(settings);
     await db

@@ -203,14 +203,37 @@ export function createClaudeProvider(deps: {
     return env;
   };
 
+  /** With API key billing but no key in .env, Claude Code isn't started at all. */
+  const keyMissing = (billing: TurnInput['settings']['billing']) =>
+    billing === 'api_key' && !deps.apiKey;
+
+  /**
+   * What every start of Claude Code shares: its own folder (made when first needed), no built-in
+   * tools, none of the user's settings or other MCP servers, and the billing's environment.
+   */
+  const baseOptions = (
+    billing: TurnInput['settings']['billing'],
+    abortController: AbortController,
+  ) => {
+    mkdirSync(deps.cwd, { recursive: true });
+    return {
+      cwd: deps.cwd,
+      tools: [],
+      settingSources: [],
+      // Only the servers passed here: none of the user's connectors, plugins or .mcp.json.
+      strictMcpConfig: true,
+      env: envFor(billing),
+      abortController,
+    } satisfies Options;
+  };
+
   return {
     /**
      * The models Claude Code offers this sign-in (or key), with each one's effort levels:
      * started as a turn would be, asked about itself, and closed, with no prompt ever sent.
      */
     async models(billing) {
-      if (billing === 'api_key' && !deps.apiKey) throw new Error(NO_API_KEY);
-      mkdirSync(deps.cwd, { recursive: true });
+      if (keyMissing(billing)) throw new Error(NO_API_KEY);
       const abortController = new AbortController();
       // The prompt that never comes: it ends when Claude Code is closed.
       const prompt = (async function* (): AsyncGenerator<never> {
@@ -218,17 +241,7 @@ export function createClaudeProvider(deps: {
           abortController.signal.addEventListener('abort', resolve, { once: true }),
         );
       })();
-      const session = deps.query({
-        prompt,
-        options: {
-          cwd: deps.cwd,
-          tools: [],
-          settingSources: [],
-          strictMcpConfig: true,
-          env: envFor(billing),
-          abortController,
-        },
-      });
+      const session = deps.query({ prompt, options: baseOptions(billing, abortController) });
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const listed = await Promise.race([
@@ -253,12 +266,10 @@ export function createClaudeProvider(deps: {
 
     async *runTurn(input) {
       const { settings } = input;
-      if (settings.billing === 'api_key' && !deps.apiKey) {
+      if (keyMissing(settings.billing)) {
         yield { type: 'error', message: NO_API_KEY };
         return;
       }
-      mkdirSync(deps.cwd, { recursive: true });
-      const env = envFor(settings.billing);
 
       const byName = new Map(input.tools.map((def) => [def.name, def]));
       // Every tool call comes here, as none is pre-approved (an allowedTools entry would skip it).
@@ -291,16 +302,13 @@ export function createClaudeProvider(deps: {
       input.signal.addEventListener('abort', abort, { once: true });
       if (input.signal.aborted) abort();
       const options: Options = {
+        ...baseOptions(settings.billing, abortController),
         systemPrompt: input.systemPrompt,
-        tools: [],
-        settingSources: [],
         includePartialMessages: true,
         model: settings.model,
         effort: settings.effort as EffortLevel,
         maxTurns: settings.maxTurns,
-        cwd: deps.cwd,
         ...(input.providerSessionId ? { resume: input.providerSessionId } : {}),
-        abortController,
         mcpServers: {
           [SERVER]: {
             ...createSdkMcpServer({
@@ -313,10 +321,7 @@ export function createClaudeProvider(deps: {
               .map((def) => ({ name: def.name, permission_policy: 'always_ask' as const })),
           },
         },
-        // Only the servers passed here: none of the user's connectors, plugins or .mcp.json.
-        strictMcpConfig: true,
         canUseTool,
-        env,
         ...(settings.billing === 'api_key' && settings.budgetUsd !== null
           ? { maxBudgetUsd: settings.budgetUsd }
           : {}),

@@ -380,10 +380,10 @@ function pagePart<T>(
     const saved = await readCache(ctx.db, key);
     // A saved part without a revision is known to be out of date.
     const known = saved?.revision !== null ? saved : null;
-    if (known && isFresh(known.fetchedAt, DAY_MS, now)) return savedEntry<T>(known, null);
+    if (known && isFresh(known.fetchedAt, DAY_MS, now)) return savedEntry<T>(ctx.db, known, null);
     try {
       if (known && (await stillCurrent(ctx, known, now))) {
-        return savedEntry<T>(known, null, now.toISOString());
+        return savedEntry<T>(ctx.db, known, null, now.toISOString());
       }
       const { revision, value } = await download();
       const fetchedAt = now.toISOString();
@@ -396,7 +396,7 @@ function pagePart<T>(
       });
       return { value, fetchedAt, error: null };
     } catch (error) {
-      if (saved && error instanceof SourceError) return savedEntry<T>(saved, error.message);
+      if (saved && error instanceof SourceError) return savedEntry<T>(ctx.db, saved, error.message);
       throw error;
     }
   });
@@ -422,10 +422,7 @@ export async function getSections(
       SectionsSchema,
     );
     // Kept as the wiki sends them (a name can hold HTML), and made plain when read.
-    return {
-      revision: answer.parse.revid,
-      value: answer.parse.sections.map(({ index, line }) => ({ index, line })),
-    };
+    return { revision: answer.parse.revid, value: answer.parse.sections };
   });
   return noted(ctx, PAGE_KIND, entry).map((section) => ({
     index: section.index,
@@ -480,8 +477,8 @@ const SectionTextSchema = z.object({
   parse: z.object({ title: z.string(), revid: z.number(), text: z.string() }),
 });
 
-// A section's index: `1`, or `T-1` for one taken in from a template.
-const SECTION_INDEX = /^(T-)?\d+$/;
+/** A section's index: `1`, or `T-1` for one taken in from a template (rather than its name). */
+export const SECTION_INDEX = /^(T-)?\d+$/;
 
 /**
  * One section of a page as plain text, with its URL. A section over 4,000 characters is cut

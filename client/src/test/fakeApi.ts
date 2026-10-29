@@ -188,10 +188,6 @@ export function testOverview(account: Account = LUMBY_PETE, changes: Partial<Ove
       { name: 'Hitpoints', level: 99, xp: 13_034_431 },
       { name: 'Sailing', level: null, xp: null },
     ],
-    topKills: [
-      { name: 'Vorkath', kills: 2_000 },
-      { name: 'Zulrah', kills: 1_500 },
-    ],
     allKills: [
       { name: 'Vorkath', kills: 2_000 },
       { name: 'Zulrah', kills: 1_500 },

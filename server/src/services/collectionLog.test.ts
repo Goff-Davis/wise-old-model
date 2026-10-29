@@ -5,10 +5,10 @@ import {
   fixture,
   insertAccount,
   outage,
+  saveFor,
   testAccountDeps,
   testDb,
 } from '../../test/helpers.ts';
-import { saveSource } from '../store/sourceState.ts';
 import { getCollectionLogView } from './collectionLog.ts';
 
 const TEMPLE = 'https://templeosrs.com/api/collection-log';
@@ -23,13 +23,7 @@ async function setup(opts: { savedAt?: string; log?: FakeAnswer; categories?: Fa
   const db = await testDb();
   const row = await insertAccount(db, { name: 'Lumby Pete' });
   if (opts.savedAt) {
-    await saveSource(db, {
-      accountId: row.id,
-      kind: 'temple_clog',
-      data: fixture('temple/clog-mikael.json'),
-      fetchedAt: opts.savedAt,
-      timeZone: 'UTC',
-    });
+    await saveFor(db, row.id)('temple_clog', fixture('temple/clog-mikael.json'), opts.savedAt);
   }
   const fake = fakeRequester(({ url }) => {
     const { pathname } = new URL(url);

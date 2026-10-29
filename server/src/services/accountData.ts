@@ -11,7 +11,7 @@ import {
 } from '@wom/shared';
 import type { Kysely } from 'kysely';
 import { ceTier, perTier } from '../calc/combatAchievements.ts';
-import { COMBAT_LEVEL, type QuestState } from '../calc/requirements.ts';
+import { COMBAT_LEVEL, type QuestStatus } from '../calc/requirements.ts';
 import type { AccountRow, DB } from '../db/schema.ts';
 import { readSavedSource } from '../sources/answers.ts';
 import {
@@ -25,8 +25,8 @@ import {
 } from '../sources/characterExport.schemas.ts';
 import {
   type CeKind,
-  type DiaryTier,
-  type DiaryTierData,
+  type Diaries,
+  ownedItems,
   readExportFile,
   savedDiaries,
 } from '../sources/characterExport.ts';
@@ -34,7 +34,7 @@ import { parseHiscores } from '../sources/hiscores.ts';
 import { readSavedLog } from '../sources/temple.ts';
 import { getSource } from '../store/sourceState.ts';
 
-export type QuestStatus = Exclude<QuestState, 'unknown'>;
+export type { QuestStatus } from '../calc/requirements.ts';
 
 export type CaTask = { id: number; name: string; tier: CaTier; complete: boolean };
 
@@ -55,7 +55,7 @@ export type AccountData = {
   /** Each quest's state, by the game's name for it. */
   quests: Record<string, QuestStatus> | null;
   /** Each area's tiers, keyed in lowercase as Character Export keys them (see mergeDiaryNames). */
-  diaries: Record<string, Record<DiaryTier, DiaryTierData>> | null;
+  diaries: Diaries | null;
   /**
    * Each tier's tasks done and in all, and whether it's complete (the game's own flag, which is
    * its reward reached by points: Sample Name's Easy tier is complete with 4 of 41 tasks done),
@@ -152,18 +152,7 @@ export async function loadAccountData(db: Kysely<DB>, row: AccountRow): Promise<
       continue;
     }
     anyPlace = true;
-    for (const item of file.items) {
-      // A bank placeholder holds none of the item.
-      if (item.quantity <= 0) continue;
-      owned.push({
-        id: item.id,
-        name: item.name,
-        quantity: item.quantity,
-        where,
-        slot: item.slot,
-        unitPrice: null,
-      });
-    }
+    owned.push(...ownedItems(file.items, where));
   }
 
   const quests = readExportFile(await saved('ce_quests'), CeQuestsSchema);

@@ -1,4 +1,5 @@
 import {
+  type AccountType,
   AccountTypeSchema,
   type FileCheck,
   type Goal,
@@ -29,6 +30,7 @@ import { findName } from '../items/itemNames.ts';
 import { type AccountData, loadAccountData } from '../services/accountData.ts';
 import {
   type AccountDeps,
+  accountRow,
   checkAccountFiles,
   freshenAccount,
   wikiCtx,
@@ -77,50 +79,56 @@ async function listGoals(db: Kysely<DB>, accountId: number): Promise<Goal[]> {
 
 /**
  * The shared data the targets' progress needs, each part only when a target reads it: every
- * quest's requirements and the account's quest points for a quest goal, each diary goal's page,
- * the combat achievement thresholds for a tier goal, and Wise Old Man's rates for a skill goal.
- * A part that can't be had (with nothing kept) is left out, and `errors` says why.
+ * quest's requirements and the quest points table for a quest goal, each diary goal's page, the
+ * combat achievement thresholds for a tier goal, and Wise Old Man's rates for a skill goal. The
+ * parts are asked for at once (the wiki's queue keeps its own pace, and Wise Old Man has its
+ * own). A part that can't be had (with nothing kept) is left out, and `errors` says why.
  */
 async function loadSharedData(
   deps: AccountDeps,
-  data: AccountData,
+  type: AccountType,
   targets: GoalTarget[],
   now: Date,
-): Promise<SharedData> {
+): Promise<{ shared: Omit<SharedData, 'questPoints'>; points: Map<string, number> | null }> {
   const ctx = wikiCtx(deps, now);
-  const errors = new Map<string, string>();
-  const part = async <T>(what: string, load: Promise<T>): Promise<T | null> => {
-    const { value, error } = await orSourceFailure(load, null);
-    if (error) errors.set(what, error);
-    return value;
-  };
   const any = (kind: GoalTarget['kind']) => targets.some((target) => target.kind === kind);
-  const quests = any('quest') ? await part('quests', loadAllQuestRequirements(ctx)) : null;
-  const points =
-    any('quest') && data.quests ? await part('quest points', loadQuestPoints(ctx)) : null;
+  const when = <T>(needed: boolean, load: () => Promise<T>) =>
+    needed ? orSourceFailure(load(), null) : Promise.resolve({ value: null, error: null });
+  const areas = [
+    ...new Set(targets.flatMap((target) => (target.kind === 'diary' ? [target.area] : []))),
+  ];
+  const [quests, points, pages, caThresholds, rates] = await Promise.all([
+    when(any('quest'), () => loadAllQuestRequirements(ctx)),
+    when(any('quest'), () => loadQuestPoints(ctx)),
+    Promise.all(areas.map((area) => orSourceFailure(loadDiaryPage(ctx, area), null))),
+    when(
+      targets.some((target) => target.kind === 'combat_achievement' && target.tier !== undefined),
+      () => getCaThresholds(ctx),
+    ),
+    when(any('skill'), () => getCachedRates(ctx, efficiencyTypeFor(type))),
+  ]);
+  // Why each part couldn't be had, in the order the parts are listed.
+  const errors = new Map<string, string>();
+  const note = <T>(what: string, part: { value: T | null; error: string | null }) => {
+    if (part.error) errors.set(what, part.error);
+    return part.value;
+  };
   const diaries = new Map<string, DiaryTask[]>();
-  for (const area of new Set(
-    targets.flatMap((target) => (target.kind === 'diary' ? [target.area] : [])),
-  )) {
-    const tasks = await part(area, loadDiaryPage(ctx, area));
+  const questReqs = note('quests', quests);
+  const pointsTable = note('quest points', points);
+  for (const [i, area] of areas.entries()) {
+    const tasks = note(area, pages[i] ?? { value: null, error: null });
     if (tasks) diaries.set(area, tasks);
   }
-  const caThresholds = targets.some(
-    (target) => target.kind === 'combat_achievement' && target.tier !== undefined,
-  )
-    ? await part('combat achievements', getCaThresholds(ctx))
-    : null;
-  const type = efficiencyTypeFor(AccountTypeSchema.parse(data.account.type));
-  const rates = any('skill')
-    ? await part('rates', getCachedRates(deps.db, deps.req, type, now))
-    : null;
   return {
-    quests,
-    diaries,
-    caThresholds,
-    questPoints: points && data.quests ? questPointsOf(data.quests, points) : null,
-    rates: rates?.value ?? null,
-    errors,
+    shared: {
+      quests: questReqs,
+      diaries,
+      caThresholds: note('combat achievements', caThresholds),
+      rates: note('rates', rates),
+      errors,
+    },
+    points: pointsTable,
   };
 }
 
@@ -190,19 +198,25 @@ export async function getGoalsView(
   row: AccountRow,
   now: Date,
 ): Promise<GoalsView> {
-  const freshness = await freshenAccount(deps, row, ['hiscores', 'temple_clog'], {
-    force: false,
-    now,
-  });
+  // The shared data comes from other sites than the account's own, so it's asked for while those
+  // are refreshed, for the goals that were active as the page opened.
+  const before = await listGoals(deps.db, row.id);
+  const targets = before.filter((goal) => goal.status === 'active').map((goal) => goal.target);
+  const [freshness, { shared, points }] = await Promise.all([
+    freshenAccount(deps, row, ['hiscores', 'temple_clog'], { force: false, now }),
+    loadSharedData(deps, AccountTypeSchema.parse(row.type), targets, now),
+  ]);
   const data = await loadAccountData(deps.db, row);
-  await completeReached(deps.db, await listGoals(deps.db, row.id), data, now);
+  await completeReached(deps.db, before, data, now);
   const goals = await listGoals(deps.db, row.id);
-  const targets = goals.filter((goal) => goal.status === 'active').map((goal) => goal.target);
-  const shared = await loadSharedData(deps, data, targets, now);
+  const questPoints = points && data.quests ? questPointsOf(data.quests, points) : null;
   return {
     goals: goals.map((goal) => ({
       ...goal,
-      progress: goal.status === 'active' ? goalProgress(goal.target, data, shared) : null,
+      progress:
+        goal.status === 'active'
+          ? goalProgress(goal.target, data, { ...shared, questPoints })
+          : null,
     })),
     freshness,
   };
@@ -437,11 +451,7 @@ export async function changeGoal(
   if (changes.status !== undefined && changes.status !== goal.status) {
     if (changes.status === 'active') {
       if (goal.target.kind !== 'custom') {
-        const account = await db
-          .selectFrom('accounts')
-          .selectAll()
-          .where('id', '=', goalRow.account_id)
-          .executeTakeFirstOrThrow();
+        const account = await accountRow(db, goalRow.account_id);
         if (goalProgress(goal.target, await loadAccountData(db, account)).done) {
           throw new HttpError(409, `"${goal.title}" is reached, so it stays done.`);
         }

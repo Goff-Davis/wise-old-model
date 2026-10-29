@@ -1,7 +1,7 @@
 import { fireEvent, within } from '@testing-library/react';
 import type { CollectionLogView } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
-import { LUMBY_PETE, refusal, testCollectionLogView } from '../../test/fakeApi.ts';
+import { LUMBY_PETE, minutesAgo, refusal, testCollectionLogView } from '../../test/fakeApi.ts';
 import { renderApp } from '../../test/renderApp.tsx';
 import styles from './CollectionLog.module.css';
 
@@ -244,7 +244,7 @@ describe('CollectionLog', () => {
       testCollectionLogView({
         freshness: {
           kind: 'temple_clog',
-          fetchedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+          fetchedAt: minutesAgo(3 * 60),
           stale: true,
           error: 'Temple: server error (500)',
           notFound: false,

@@ -4,10 +4,9 @@
  * Old Man when its RateLimit headers run low, and retries 429s, 5xx errors and lost connections.
  */
 
-import { MINUTE_MS } from '@wom/shared';
+import { MINUTE_MS, plural } from '@wom/shared';
 
 export type Requester = {
-  json<T = unknown>(url: string, init?: { method?: 'GET' | 'POST'; body?: unknown }): Promise<T>;
   text(url: string, init?: { method?: 'GET' | 'POST' }): Promise<string>;
   bytes(url: string): Promise<Uint8Array>;
 };
@@ -67,7 +66,7 @@ type Host = {
 /** "1 minute", "10 minutes", "20 hours": a wait the person has to sit out. */
 function duration(ms: number): string {
   const minutes = Math.max(1, Math.ceil(ms / MINUTE_MS));
-  if (minutes < 90) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  if (minutes < 90) return `${minutes} ${plural(minutes, 'minute')}`;
   return `${Math.round(minutes / 60)} hours`;
 }
 
@@ -245,29 +244,6 @@ export function createRequester(opts: {
   const headers = { 'user-agent': opts.userAgent };
 
   return {
-    json<T>(url: string, init: { method?: 'GET' | 'POST'; body?: unknown } = {}) {
-      const hasBody = init.body !== undefined;
-      return request(
-        url,
-        {
-          method: init.method ?? 'GET',
-          headers: {
-            ...headers,
-            accept: 'application/json',
-            ...(hasBody ? { 'content-type': 'application/json' } : {}),
-          },
-          body: hasBody ? JSON.stringify(init.body) : undefined,
-        },
-        async (res, site) => {
-          const body = await res.text();
-          try {
-            return JSON.parse(body) as T;
-          } catch {
-            throw new SourceError(site, res.status, `${site}: sent an answer that isn't JSON`);
-          }
-        },
-      );
-    },
     text(url: string, init: { method?: 'GET' | 'POST' } = {}) {
       return request(url, { method: init.method ?? 'GET', headers }, (res) => res.text());
     },

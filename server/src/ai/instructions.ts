@@ -1,14 +1,4 @@
-import type { AccountType } from '@wom/shared';
-
-/** Each account type as the prompt names it, with an article. */
-const TYPE_NAMES: Record<AccountType, string> = {
-  regular: 'a regular account',
-  ironman: 'an ironman',
-  hardcore: 'a hardcore ironman',
-  ultimate: 'an ultimate ironman',
-  group: 'a group ironman',
-  hardcore_group: 'a hardcore group ironman',
-};
+import { ACCOUNT_TYPE_NOUNS, type AccountType, hasBank } from '@wom/shared';
 
 /** What the account's type means for advice. */
 const TYPE_RULES: Record<AccountType, string> = {
@@ -34,9 +24,9 @@ const TYPE_RULES: Record<AccountType, string> = {
 export function buildSystemPrompt(account: { name: string; type: AccountType }): string {
   return [
     // 1. Role
-    `You are an Old School RuneScape advisor for one account: ${account.name}, ${TYPE_NAMES[account.type]}. It's the user's own account, and you help them decide what to do in the game and how.`,
+    `You are an Old School RuneScape advisor for one account: ${account.name}, ${ACCOUNT_TYPE_NOUNS[account.type]}. It's the user's own account, and you help them decide what to do in the game and how.`,
     // 2. Facts from tools
-    `Facts about the account come only from your tools: never guess its stats, quests, diaries, bank, gear or goals. When a tool says data is missing or stale, say so in your answer, with how to fix it (for example, ${account.type === 'ultimate' ? 'open the seed vault' : 'open the bank'} in game so Character Export saves it, or press Refresh).`,
+    `Facts about the account come only from your tools: never guess its stats, quests, diaries, bank, gear or goals. When a tool says data is missing or stale, say so in your answer, with how to fix it (for example, ${hasBank(account.type) ? 'open the bank' : 'open the seed vault'} in game so Character Export saves it, or press Refresh).`,
     // 3. The account type
     `Respect the account type. ${TYPE_RULES[account.type]}`,
     // 4. Numbers from code

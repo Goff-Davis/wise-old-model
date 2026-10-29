@@ -3,7 +3,8 @@ import type { CeKind } from './characterExport.ts';
 
 /**
  * Character Export's file formats, as of plugin v0.6.0. They belong to a third party, so the
- * schemas check only what the app reads and keep any other fields; the raw text is what's
+ * schemas check each file's header and the fields the app reads (and a few beside them, such as
+ * the character's world and game state) and keep any other fields; the raw text is what's
  * stored.
  */
 

@@ -6,20 +6,21 @@ import type { Kysely } from 'kysely';
 import { describe, expect, it, vi } from 'vitest';
 import {
   call,
-  exportFixture,
+  exportFixtures,
   type FakeAnswer,
   fakeRequester,
   fixture,
   insertAccount,
   notFound,
   outage,
+  saveFor,
   testConfig,
   testDb,
   writeExportFiles,
 } from '../../test/helpers.ts';
 import { createApp } from '../app.ts';
 import type { DB } from '../db/schema.ts';
-import { getSource, listSnapshots, saveSource } from '../store/sourceState.ts';
+import { getSource, listSnapshots } from '../store/sourceState.ts';
 
 const HISCORES = 'https://secure.runescape.com/m=hiscore_oldschool/index_lite.json?player=';
 const WOM = 'https://api.wiseoldman.net/v2';
@@ -57,11 +58,7 @@ async function setup(answers: Record<string, Answer> = {}) {
   const app = createApp({ config, db, req: fake.req });
   /** Gives the account (by its folder name) Character Export's files, from Sample Name's. */
   const exportFiles = (folder: string, files: string[]) =>
-    writeExportFiles(
-      config.runeliteDir,
-      folder,
-      Object.fromEntries(files.map((file) => [file, exportFixture(file)])),
-    );
+    writeExportFiles(config.runeliteDir, folder, exportFixtures(files));
   return { db, app, exportFiles, ...fake };
 }
 
@@ -74,13 +71,11 @@ describe('GET /api/accounts/status', () => {
     const written = new Date('2026-10-28T08:30:00.000Z');
     const folder = exportFiles('Lumby_Pete', ['quests.json']);
     utimesSync(path.join(folder, 'quests.json'), written, written);
-    await saveSource(db, {
-      accountId: mikael.id,
-      kind: 'temple_clog',
-      data: fixture('temple/clog-mikael.json'),
-      fetchedAt: '2026-10-28T09:00:00.000Z',
-      timeZone: 'UTC',
-    });
+    await saveFor(db, mikael.id)(
+      'temple_clog',
+      fixture('temple/clog-mikael.json'),
+      '2026-10-28T09:00:00.000Z',
+    );
     // Zezima's Collection log page found Temple has no log for the name.
     await call(app, { path: `/api/accounts/${zezima.id}/collection-log` });
     const asked = requests.length;
@@ -505,13 +500,7 @@ describe('GET, PATCH and DELETE /api/accounts', () => {
     const account = await insertAccount(db);
     // Fetched just now, so the goals page doesn't fetch them again.
     const fetchedAt = new Date().toISOString();
-    await saveSource(db, {
-      accountId: account.id,
-      kind: 'hiscores',
-      data: fixture('hiscores/lynx-titan.json'),
-      fetchedAt,
-      timeZone: 'UTC',
-    });
+    await saveFor(db, account.id)('hiscores', fixture('hiscores/lynx-titan.json'), fetchedAt);
     const goal = await call(app, {
       method: 'POST',
       path: `/api/accounts/${account.id}/goals`,
@@ -567,13 +556,7 @@ describe('GET, PATCH and DELETE /api/accounts', () => {
   it('deletes an account with all its data', async () => {
     const { db, app } = await setup();
     const account = await insertAccount(db);
-    await saveSource(db, {
-      accountId: account.id,
-      kind: 'hiscores',
-      data: '{}',
-      fetchedAt: '2026-10-27T12:00:00.000Z',
-      timeZone: 'UTC',
-    });
+    await saveFor(db, account.id)('hiscores', '{}', '2026-10-27T12:00:00.000Z');
     const res = await call(app, { method: 'DELETE', path: `/api/accounts/${account.id}` });
     expect(res.status).toBe(204);
     expect(await db.selectFrom('accounts').selectAll().execute()).toEqual([]);
@@ -860,13 +843,11 @@ describe('POST /api/accounts/:id/refresh', () => {
       type: 'ironman',
       created_at: '2026-10-01T00:00:00.000Z',
     });
-    await saveSource(db, {
-      accountId: account.id,
-      kind: 'hiscores',
-      data: fixture('hiscores/lynx-titan.json'),
-      fetchedAt: '2026-10-20T12:00:00.000Z',
-      timeZone: 'UTC',
-    });
+    await saveFor(db, account.id)(
+      'hiscores',
+      fixture('hiscores/lynx-titan.json'),
+      '2026-10-20T12:00:00.000Z',
+    );
     return account;
   }
 
@@ -1016,7 +997,7 @@ describe('GET /api/accounts/:id/overview', () => {
       account: { id: account.id, name: 'Lynx Titan', type: 'regular' },
       combatLevel: 126,
       totalLevel: 2278,
-      topKills: [{ name: 'TzTok-Jad', kills: 186 }],
+      allKills: [{ name: 'TzTok-Jad', kills: 186 }],
     });
     expect((res.body as { skills: unknown[] }).skills).toHaveLength(24);
     expect([...requests].sort()).toEqual([
@@ -1058,19 +1039,13 @@ describe('GET /api/accounts/:id/overview', () => {
       ['hiscores', fixture('hiscores/lynx-titan.json')],
       ['wom_player', womPlayer('Lynx Titan', 'regular')],
     ] as const) {
-      await saveSource(db, {
-        accountId: account.id,
-        kind,
-        data,
-        fetchedAt: lastWeek,
-        timeZone: 'UTC',
-      });
+      await saveFor(db, account.id)(kind, data, lastWeek);
     }
     const res = await call(app, { path: `/api/accounts/${account.id}/overview` });
     expect(res.status).toBe(200);
-    const body = res.body as { totalLevel: number; topKills: unknown[]; freshness: Freshness[] };
+    const body = res.body as { totalLevel: number; allKills: unknown[]; freshness: Freshness[] };
     expect(body.totalLevel).toBe(2278);
-    expect(body.topKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
+    expect(body.allKills).toEqual([{ name: 'TzTok-Jad', kills: 186 }]);
     expect(body.freshness.map((entry) => [entry.kind, entry.fetchedAt, entry.stale])).toEqual([
       ['hiscores', lastWeek, true],
       ['wom_player', lastWeek, true],

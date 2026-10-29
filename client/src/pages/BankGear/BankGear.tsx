@@ -1,5 +1,6 @@
 import { type UseQueryResult, useQuery } from '@tanstack/react-query';
 import {
+  BANK_PLACES,
   type BankView,
   capitalize,
   EQUIPMENT_SLOTS,
@@ -7,6 +8,8 @@ import {
   formatNumber,
   formatTime,
   type OwnedItem,
+  PLACE_NAMES,
+  SEARCH_MAX_LENGTH,
   type SourceKind,
 } from '@wom/shared';
 import { type JSX, memo, useId, useState } from 'react';
@@ -20,13 +23,6 @@ import styles from './BankGear.module.css';
 import { stackSize } from './stackSize.ts';
 
 const SEARCH_LABEL = 'Search bank, inventory, gear and seed vault';
-
-const WHERE: Record<OwnedItem['where'], string> = {
-  bank: 'In the bank',
-  seed_vault: 'In the seed vault',
-  inventory: 'In the inventory',
-  equipment: 'Worn',
-};
 
 /** The equipment screen: each slot's row and column in its 3 × 5 grid, and its name. */
 const EQUIPMENT_SCREEN = [
@@ -43,13 +39,11 @@ const EQUIPMENT_SCREEN = [
   { slot: 12, row: 5, column: 3 },
 ].map((place) => ({ ...place, name: capitalize(EQUIPMENT_SLOTS[place.slot]) }));
 
-/** Each place's name in a note about its latest file. */
-const PLACE_OF: Partial<Record<SourceKind, string>> = {
-  ce_bank: "The bank's",
-  ce_seed_vault: "The seed vault's",
-  ce_inventory: "The inventory's",
-  ce_equipment: "The worn gear's",
-};
+/** "The bank's": a place's name in a note about its latest file. */
+function placeOf(kind: SourceKind): string {
+  const place = BANK_PLACES.find((one) => one.kind === kind);
+  return place ? `${capitalize(PLACE_NAMES[place.where].place)}'s` : '';
+}
 
 const withQuantity = (item: OwnedItem) =>
   item.quantity > 1 ? `${item.name} ×${formatNumber(item.quantity)}` : item.name;
@@ -77,7 +71,7 @@ function FailedNote(props: { view: BankView; kind: SourceKind }) {
   if (!failed) return null;
   return (
     <p className={styles.stale}>
-      {PLACE_OF[props.kind]} latest file couldn't be read, so this is from before. {failed.error}
+      {placeOf(props.kind)} latest file couldn't be read, so this is from before. {failed.error}
     </p>
   );
 }
@@ -111,7 +105,9 @@ function ItemRow(props: { item: OwnedItem; showWhere?: boolean }) {
     <li className={props.showWhere ? styles.found : undefined}>
       <Icon kind="item" id={item.id} name={item.name} size={30} decorative />
       <span className={styles.name}>{withQuantity(item)}</span>
-      {props.showWhere && <span className={styles.where}>{WHERE[item.where]}</span>}
+      {props.showWhere && (
+        <span className={styles.where}>{capitalize(PLACE_NAMES[item.where].at)}</span>
+      )}
       {item.unitPrice !== null && (
         <span className={styles.worth}>{formatCompact(item.quantity * item.unitPrice)}</span>
       )}
@@ -252,7 +248,7 @@ function Search(props: { accountId: string }) {
           type="search"
           aria-label={SEARCH_LABEL}
           placeholder={SEARCH_LABEL}
-          maxLength={100}
+          maxLength={SEARCH_MAX_LENGTH}
           value={text}
           onChange={(event) => {
             setText(event.target.value);

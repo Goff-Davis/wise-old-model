@@ -1,9 +1,12 @@
 import {
+  CHAT_TITLE_MAX_LENGTH,
   type ChatMessage,
+  type ChatSession,
   type ChatUsage,
   errorMessage,
   formatCompact,
   formatTime,
+  MESSAGE_MAX_LENGTH,
   PROGRESS_ICONS,
   plural,
 } from '@wom/shared';
@@ -220,7 +223,6 @@ const StoredMessage = memo(function StoredMessage(props: { message: ChatMessage 
   );
 });
 
-/** Gives an element the focus as it's shown (the box a row turns into, the answer it asks for). */
 /** Earlier chats: newest first, each opened, renamed or deleted here. */
 function EarlierChats(props: { chat: Chat; onClose: () => void }): JSX.Element {
   const { chat } = props;
@@ -237,6 +239,89 @@ function EarlierChats(props: { chat: Chat; onClose: () => void }): JSX.Element {
     }
   };
   const list = chat.sessions.data ?? [];
+  /** A chat's row: its rename box, the question before deleting it, or its title and actions. */
+  const rowFor = (session: ChatSession): JSX.Element => {
+    const editing = renaming?.id === session.id ? renaming : null;
+    if (editing) {
+      return (
+        <form
+          className={styles.renameForm}
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            void attempt(async () => {
+              await chat.rename(session.id, editing.title);
+              setRenaming(null);
+            });
+          }}
+        >
+          <input
+            ref={focusOnShow}
+            aria-label="Chat title"
+            value={editing.title}
+            maxLength={CHAT_TITLE_MAX_LENGTH}
+            onChange={(event) => setRenaming({ id: session.id, title: event.target.value })}
+          />
+          <button type="submit">Save</button>
+          <button type="button" onClick={() => setRenaming(null)}>
+            Cancel
+          </button>
+        </form>
+      );
+    }
+    if (deleting === session.id) {
+      return (
+        <span className={styles.row}>
+          <span>Delete “{session.title}”?</span>
+          <button
+            type="button"
+            onClick={() =>
+              void attempt(async () => {
+                await chat.remove(session.id);
+                setDeleting(null);
+              })
+            }
+          >
+            Delete
+          </button>
+          <button type="button" ref={focusOnShow} onClick={() => setDeleting(null)}>
+            Keep
+          </button>
+        </span>
+      );
+    }
+    return (
+      <span className={styles.row}>
+        <button
+          type="button"
+          className={styles.open}
+          disabled={chat.busy}
+          onClick={() => {
+            chat.openChat(session.id);
+            props.onClose();
+          }}
+        >
+          {session.title}
+        </button>
+        <span className={styles.muted}>{formatTime(session.updatedAt, zone, 'relative')}</span>
+        <button
+          type="button"
+          className={styles.link}
+          aria-label={`Rename ${session.title}`}
+          onClick={() => setRenaming({ id: session.id, title: session.title })}
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          className={styles.link}
+          aria-label={`Delete ${session.title}`}
+          onClick={() => setDeleting(session.id)}
+        >
+          Delete
+        </button>
+      </span>
+    );
+  };
   return (
     <>
       {chat.sessions.isPending && <p className={styles.muted}>Loading…</p>}
@@ -247,81 +332,7 @@ function EarlierChats(props: { chat: Chat; onClose: () => void }): JSX.Element {
       <ul>
         {list.map((session) => (
           <li key={session.id} aria-current={session.id === chat.chatId ? 'true' : undefined}>
-            {renaming?.id === session.id ? (
-              <form
-                className={styles.renameForm}
-                onSubmit={(event: FormEvent) => {
-                  event.preventDefault();
-                  void attempt(async () => {
-                    await chat.rename(session.id, renaming.title);
-                    setRenaming(null);
-                  });
-                }}
-              >
-                <input
-                  ref={focusOnShow}
-                  aria-label="Chat title"
-                  value={renaming.title}
-                  maxLength={100}
-                  onChange={(event) => setRenaming({ id: session.id, title: event.target.value })}
-                />
-                <button type="submit">Save</button>
-                <button type="button" onClick={() => setRenaming(null)}>
-                  Cancel
-                </button>
-              </form>
-            ) : deleting === session.id ? (
-              <span className={styles.row}>
-                <span>Delete “{session.title}”?</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    void attempt(async () => {
-                      await chat.remove(session.id);
-                      setDeleting(null);
-                    })
-                  }
-                >
-                  Delete
-                </button>
-                <button type="button" ref={focusOnShow} onClick={() => setDeleting(null)}>
-                  Keep
-                </button>
-              </span>
-            ) : (
-              <span className={styles.row}>
-                <button
-                  type="button"
-                  className={styles.open}
-                  disabled={chat.busy}
-                  onClick={() => {
-                    chat.openChat(session.id);
-                    props.onClose();
-                  }}
-                >
-                  {session.title}
-                </button>
-                <span className={styles.muted}>
-                  {formatTime(session.updatedAt, zone, 'relative')}
-                </span>
-                <button
-                  type="button"
-                  className={styles.link}
-                  aria-label={`Rename ${session.title}`}
-                  onClick={() => setRenaming({ id: session.id, title: session.title })}
-                >
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  className={styles.link}
-                  aria-label={`Delete ${session.title}`}
-                  onClick={() => setDeleting(session.id)}
-                >
-                  Delete
-                </button>
-              </span>
-            )}
+            {rowFor(session)}
           </li>
         ))}
       </ul>
@@ -364,6 +375,14 @@ function ChatOptions(props: { busy: boolean }): JSX.Element {
   );
 }
 
+/** What the message box says while it waits, or what it asks for. */
+function placeholderFor(chat: Chat, name: string): string {
+  if (chat.sessions.isPending) return 'Loading the chat…';
+  if (chat.waiting) return 'Waiting for your approval…';
+  if (chat.busy) return 'Answering…';
+  return `Ask about ${name}`;
+}
+
 /** The message box: Enter sends, Shift+Enter starts a line; Stop while answering. */
 function Composer(props: { chat: Chat; name: string }): JSX.Element {
   const { chat } = props;
@@ -376,13 +395,6 @@ function Composer(props: { chat: Chat; name: string }): JSX.Element {
     void chat.send(text);
     setText('');
   };
-  const placeholder = loading
-    ? 'Loading the chat…'
-    : chat.waiting
-      ? 'Waiting for your approval…'
-      : chat.busy
-        ? 'Answering…'
-        : `Ask about ${props.name}`;
   return (
     <form
       className={styles.composer}
@@ -397,8 +409,8 @@ function Composer(props: { chat: Chat; name: string }): JSX.Element {
         aria-describedby={hintId}
         rows={2}
         value={text}
-        maxLength={4000}
-        placeholder={placeholder}
+        maxLength={MESSAGE_MAX_LENGTH}
+        placeholder={placeholderFor(chat, props.name)}
         // Read-only rather than disabled, so the box keeps the focus for the next message.
         readOnly={chat.busy || loading}
         aria-disabled={chat.busy || loading ? true : undefined}

@@ -5,6 +5,7 @@ import {
   DIARY_TIER_NAMES,
   GOAL_KIND_LABELS,
   GOAL_KINDS,
+  GOAL_TITLE_MAX_LENGTH,
   type GoalKind,
   type GoalOptions,
   goalTitle,
@@ -414,7 +415,7 @@ function AddGoalForm(props: { accountId: string; onDone: () => void }): JSX.Elem
             type="text"
             value={fields.title}
             placeholder={placeholder}
-            maxLength={200}
+            maxLength={GOAL_TITLE_MAX_LENGTH}
             onChange={(event) => set({ title: event.target.value })}
           />
         )}

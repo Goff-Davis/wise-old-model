@@ -5,14 +5,18 @@ import type { AccountDeps } from '../../services/accounts.ts';
 import { getItemInfo } from '../../services/itemInfo.ts';
 import { orSourceFailure } from '../../sources/answers.ts';
 import { getLatestPrices, getMapping, latestTrade } from '../../sources/prices.ts';
-import { getSections, getSectionText, pageTitle, searchWiki, wikiUrl } from '../../sources/wiki.ts';
+import {
+  getSections,
+  getSectionText,
+  pageTitle,
+  SECTION_INDEX,
+  searchWiki,
+  wikiUrl,
+} from '../../sources/wiki.ts';
 import type { ToolDef } from '../provider.ts';
 import { defineTool, type Stale, toolWiki } from './define.ts';
 
 const ItemNameSchema = z.string().trim().min(1).max(100);
-
-/** A section given by its index ('1') rather than its name. */
-const SECTION_INDEX = /^(T-)?\d+$/;
 
 /** The game knowledge tools: the OSRS Wiki and its prices, every page read noted as a source. */
 export function knowledgeTools(deps: AccountDeps): ToolDef[] {

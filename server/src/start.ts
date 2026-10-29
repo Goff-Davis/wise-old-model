@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { errorMessage } from '@wom/shared';
 import type { Kysely } from 'kysely';
 import type { ChatProvider } from './ai/provider.ts';
 import { createApp } from './app.ts';
@@ -35,7 +36,7 @@ export async function startServer(
     throw new StartError(
       code === 'EADDRINUSE'
         ? `Port ${config.port} is already in use. Close the program using it, or set PORT in .env.`
-        : `Couldn't start on 127.0.0.1:${config.port}: ${(error as Error).message}`,
+        : `Couldn't start on 127.0.0.1:${config.port}: ${errorMessage(error)}`,
     );
   }
 
@@ -45,9 +46,7 @@ export async function startServer(
   } catch (error) {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
-    throw new StartError(
-      `Couldn't open the database in ${config.dataDir}: ${(error as Error).message}`,
-    );
+    throw new StartError(`Couldn't open the database in ${config.dataDir}: ${errorMessage(error)}`);
   }
 
   server.off('request', startingUp);

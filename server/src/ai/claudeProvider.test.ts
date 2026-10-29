@@ -101,7 +101,6 @@ describe('Claude provider', () => {
       tools: [],
       settingSources: [],
       includePartialMessages: true,
-      allowedTools: ['mcp__osrs__*'],
       model: 'claude-opus-5-5',
       effort: 'medium',
       maxTurns: 20,
@@ -110,6 +109,8 @@ describe('Claude provider', () => {
       strictMcpConfig: true,
     });
     expect(first?.options.canUseTool).toBeTypeOf('function');
+    // Nothing is pre-approved, so every tool call reaches canUseTool (an allowed one never would).
+    expect(first?.options).not.toHaveProperty('allowedTools');
     expect(first?.options.abortController).toBeInstanceOf(AbortController);
     expect(first?.options).not.toHaveProperty('resume');
     expect(second?.options.resume).toBe('session-1');
@@ -311,7 +312,7 @@ describe('Claude provider', () => {
     );
   });
 
-  it('asks the user before a change, and refuses anything but our own tools', async () => {
+  it('runs our lookups, asks the user before a change, and refuses anything else', async () => {
     const fake = fakeQuery();
     const answers = [false, true];
     const asked: { toolName: string; summary: string }[] = [];
@@ -331,6 +332,11 @@ describe('Claude provider', () => {
     const options = { signal: new AbortController().signal, toolUseID: 'toolu_9' } as Parameters<
       typeof canUseTool
     >[2];
+    // A lookup runs as asked, unasked.
+    expect(await canUseTool('mcp__osrs__get_quests', { status: 'done' }, options)).toEqual({
+      behavior: 'allow',
+      updatedInput: { status: 'done' },
+    });
     const input = { title: 'Clean the bank' };
     expect(await canUseTool('mcp__osrs__add_goal', input, options)).toEqual({
       behavior: 'deny',
@@ -352,7 +358,7 @@ describe('Claude provider', () => {
     for (const name of [
       'Bash',
       'mcp__other__add_goal',
-      'mcp__osrs__get_quests',
+      'mcp__other__get_quests',
       'mcp__osrs__nope',
     ]) {
       expect(await canUseTool(name, {}, options)).toMatchObject({ behavior: 'deny' });
@@ -574,9 +580,12 @@ describe('Claude provider', () => {
       toolUseID: 'toolu_9',
       mcpServer: { name: 'osrs', source: 'user' },
     } as Parameters<typeof canUseTool>[2];
-    expect(await canUseTool('mcp__osrs__add_goal', { title: 'x' }, options)).toMatchObject({
-      behavior: 'deny',
-    });
+    for (const [name, args] of [
+      ['mcp__osrs__add_goal', { title: 'x' }],
+      ['mcp__osrs__get_quests', {}],
+    ] as const) {
+      expect(await canUseTool(name, args, options)).toMatchObject({ behavior: 'deny' });
+    }
   });
 
   it("lists Claude Code's own models and their effort levels, asking it nothing", async () => {

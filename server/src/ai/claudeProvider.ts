@@ -261,6 +261,7 @@ export function createClaudeProvider(deps: {
       const env = envFor(settings.billing);
 
       const byName = new Map(input.tools.map((def) => [def.name, def]));
+      // Every tool call comes here, as none is pre-approved (an allowedTools entry would skip it).
       const canUseTool: CanUseTool = async (toolName, toolInput, { mcpServer }) => {
         // Only our own server's tools (one of the same name elsewhere is someone else's).
         const ours = !mcpServer || mcpServer.source === 'sdk';
@@ -268,7 +269,8 @@ export function createClaudeProvider(deps: {
           ours && toolName.startsWith(PREFIX)
             ? byName.get(toolName.slice(PREFIX.length))
             : undefined;
-        // Only a tool that changes data has a summary to ask about; the others are pre-approved.
+        // A lookup runs unasked; a change is asked about by its summary.
+        if (def?.readOnly) return { behavior: 'allow', updatedInput: toolInput };
         if (!def?.summary) {
           return { behavior: 'deny', message: "That tool isn't available in this chat." };
         }
@@ -311,7 +313,6 @@ export function createClaudeProvider(deps: {
               .map((def) => ({ name: def.name, permission_policy: 'always_ask' as const })),
           },
         },
-        allowedTools: [`${PREFIX}*`],
         // Only the servers passed here: none of the user's connectors, plugins or .mcp.json.
         strictMcpConfig: true,
         canUseTool,

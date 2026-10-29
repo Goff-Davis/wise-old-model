@@ -910,14 +910,14 @@ Spec: AI layer → Claude runs through the Claude Agent SDK, Agent SDK setup, De
 - Produces: `export function createClaudeProvider(deps: { query: typeof query; cwd: string; env: NodeJS.ProcessEnv; apiKey: string | null }): ChatProvider;` (`query` is injected so tests never reach Claude).
 - `query` options per turn:
   - `systemPrompt` (string from Task 30), `tools: []`, `settingSources: []`, `includePartialMessages: true`, `model`, `effort`, `maxTurns`, `cwd`, `resume: providerSessionId` when set, `abortController` (aborted on the turn's signal)
-  - `mcpServers: { osrs: { ...createSdkMcpServer({ name: 'osrs', version, tools: sdkTools, alwaysLoad: true }), tools: [{ name: 'add_goal', permission_policy: 'always_ask' }, { name: 'update_goal', permission_policy: 'always_ask' }] } }`, `allowedTools: ['mcp__osrs__*']`
+  - `mcpServers: { osrs: { ...createSdkMcpServer({ name: 'osrs', version, tools: sdkTools, alwaysLoad: true }), tools: [{ name: 'add_goal', permission_policy: 'always_ask' }, { name: 'update_goal', permission_policy: 'always_ask' }] } }`, no `allowedTools` (an entry there would skip `canUseTool`, which allows the read-only tools)
   - each `ToolDef` becomes `tool(name, description, input, handler, { annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly } })`; the handler returns `{ content: [{ type: 'text', text: JSON.stringify(result) }] }`, or `isError: true` with the message on failure
   - `canUseTool(toolName, input)`: for `mcp__osrs__add_goal` / `mcp__osrs__update_goal`, `requestApproval({ toolName, summary })` → `{ behavior: 'allow', updatedInput: input }` or `{ behavior: 'deny', message: 'The user declined this change.' }`; anything else → deny
   - `env`: billing `plan` → a copy of `env` without `ANTHROPIC_API_KEY`; `api_key` → `env` plus `ANTHROPIC_API_KEY` and `CLAUDE_CODE_PROMPT_CACHE_TTL: '1h'`, and `maxBudgetUsd: budgetUsd` when set
 - Message mapping: `system`/`init` → `session` (with `session_id`); `stream_event` with a `content_block_delta` / `text_delta` → `text`; `assistant` `tool_use` blocks → `tool_started`; `user` `tool_result` blocks → `tool_finished` (`is_error`); `result` → `usage` (`usage.input_tokens`, `usage.output_tokens`, `usage.cache_read_input_tokens`, `total_cost_usd`), and error subtypes → `error` with `errors.join('; ')`.
 
 - [x] **Step 1: Write the failing tests** with a fake `query` that records its options and yields scripted SDK messages:
-  - options include `tools: []`, `settingSources: []`, `allowedTools: ['mcp__osrs__*']`, `model: 'claude-opus-5-5'`, `effort: 'medium'`, `maxTurns: 20`, the given `cwd`, and `resume` only when a session id exists
+  - options include `tools: []`, `settingSources: []`, no `allowedTools`, `model: 'claude-opus-5-5'`, `effort: 'medium'`, `maxTurns: 20`, the given `cwd`, and `resume` only when a session id exists
   - billing `plan` with `ANTHROPIC_API_KEY` in `env` → the passed `env` has no `ANTHROPIC_API_KEY`; billing `api_key` → it's present and `maxBudgetUsd` equals the setting
   - the scripted stream maps to `session`, `text` × n, `tool_started`, `tool_finished`, `usage` in order
   - `canUseTool('mcp__osrs__add_goal', …)` with approval false → `{ behavior: 'deny', … }`; with true → allow with the same input
@@ -925,7 +925,7 @@ Spec: AI layer → Claude runs through the Claude Agent SDK, Agent SDK setup, De
 - [x] **Step 2: Run**. Expected: FAIL.
 - [x] **Step 3: Implement.**
 - [x] **Step 4: Run**: PASS.
-- [ ] **Step 5: Manual check (ask the user first; it uses their plan):** in `npm run dev`, ask "What should I work on next?" for a real account; tools run, the answer cites wiki pages, usage shows "on your plan". Check that Claude Code's session for it (`<session id>.jsonl`) is in Claude Code's project for the working folder `<dataDir>/claude`, which is `~/.claude/projects/` (or `$CLAUDE_CONFIG_DIR/projects/`) and that folder's path with every character that isn't a letter or digit as `-` (on Linux, `-home-<user>--local-share-wise-old-model-claude`), not in a coding project's.
+- [x] **Step 5: Manual check (ask the user first; it uses their plan):** in `npm run dev`, ask "What should I work on next?" for a real account; tools run, the answer cites wiki pages, usage shows "on your plan". Check that Claude Code's session for it (`<session id>.jsonl`) is in Claude Code's project for the working folder `<dataDir>/claude`, which is `~/.claude/projects/` (or `$CLAUDE_CONFIG_DIR/projects/`) and that folder's path with every character that isn't a letter or digit as `-` (on Linux, `-home-<user>--local-share-wise-old-model-claude`), not in a coding project's.
 - [x] **Step 6: Checkpoint.**
 
 ### Task 32: Chat UI and Suggest goals
@@ -943,7 +943,7 @@ Spec: Frontend → Chat column; Goals → Page (Suggest goals); the approved cha
 - [x] **Step 1: Write the failing tests**: `parseSse` handles an event split across two chunks and two events in one chunk; tool events collapse to "Looked at 4 things" and expand to the labels; an approval row's Approve posts `{ approve: true }`; while waiting the input reads "Waiting for your approval…" and Stop is shown; usage renders `8.2k tokens on your plan` for 8,200 tokens; a new chat shows the four starter questions; an error event shows its `fix` text.
 - [x] **Step 2: Run**. Expected: FAIL.
 - [x] **Step 3: Implement** per the mockup: header (account name, New chat, Earlier chats with rename and delete), collapsed tool activity with icons, serif answers, approval rows, sources and usage under each answer, input with "Enter to send, Shift+Enter for a new line", Stop while answering.
-- [ ] **Step 4: Run**: PASS; in the app, Suggest goals posts into the chat and approvals add goals that appear on the Goals page.
+- [x] **Step 4: Run**: PASS; in the app, Suggest goals posts into the chat and approvals add goals that appear on the Goals page.
 - [x] **Step 5: Checkpoint.**
 
 ---

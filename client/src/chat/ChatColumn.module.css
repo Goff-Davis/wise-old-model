@@ -210,6 +210,39 @@
   padding: 8px 10px;
 }
 
+/*
+ * Tables in the pages' sans with even-width numbers, as wide as their cells need up to the
+ * column's width, then scrolling sideways rather than widening the chat.
+ */
+.answerText table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0 0 8px;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.answerText th,
+.answerText td {
+  padding: 4px 12px 4px 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+}
+
+.answerText th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.answerText tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .approval {
   display: flex;
   flex-wrap: wrap;

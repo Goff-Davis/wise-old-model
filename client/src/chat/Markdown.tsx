@@ -58,10 +58,14 @@ function lines(texts: Line[]): ReactNode[] {
 /** A list's item, with the bullets indented under it. */
 type Item = Line & { children: Line[] };
 
+/** A table's column: its place, its heading and how its cells line up. */
+type Column = { col: number; text: string; align: 'left' | 'center' | 'right' | null };
+
 type Block =
   | { kind: 'heading'; at: number; depth: number; text: string }
   | { kind: 'paragraph'; at: number; lines: Line[] }
   | { kind: 'list'; at: number; ordered: boolean; start: number; items: Item[] }
+  | { kind: 'table'; at: number; columns: Column[]; rows: { at: number; cells: string[] }[] }
   | { kind: 'code'; at: number; text: string };
 
 const HEADING = /^(#{1,6})\s+(.*)$/;
@@ -69,6 +73,27 @@ const BULLET = /^\s*[-*+]\s+(.*)$/;
 const NUMBERED = /^\s*(\d+)[.)]\s+(.*)$/;
 const INDENTED = /^\s{2,}/;
 const FENCE = /^\s*```/;
+const DIVIDER_CELL = /^:?-+:?$/;
+
+/** A table row's cells: split at each bar that isn't escaped (`\|`), the outer bars dropped. */
+function cellsOf(line: string): string[] {
+  const row = line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/(?<!\\)\|$/, '');
+  return row.split(/(?<!\\)\|/).map((cell) => cell.trim().replaceAll('\\|', '|'));
+}
+
+/** How each column of a table lines up, from its divider row (`|---|:---:|`); null for another line. */
+function dividerOf(line: string | undefined): Column['align'][] | null {
+  if (!line?.includes('|')) return null;
+  const cells = cellsOf(line);
+  if (!cells.every((cell) => DIVIDER_CELL.test(cell))) return null;
+  return cells.map((cell) => {
+    if (cell.startsWith(':')) return cell.endsWith(':') ? 'center' : 'left';
+    return cell.endsWith(':') ? 'right' : null;
+  });
+}
 
 function blocksOf(text: string): Block[] {
   const blocks: Block[] = [];
@@ -87,6 +112,21 @@ function blocksOf(text: string): Block[] {
     const heading = HEADING.exec(line);
     if (heading) {
       blocks.push({ kind: 'heading', at, depth: heading[1]?.length ?? 1, text: heading[2] ?? '' });
+      continue;
+    }
+    // A table: its header row, then a divider row with as many columns, even straight after a
+    // paragraph's line.
+    const head = line.includes('|') ? cellsOf(line) : [];
+    const divider = head.length > 0 ? dividerOf(source[at + 1]) : null;
+    if (divider && divider.length === head.length) {
+      const start = at;
+      const columns = head.map((text, col) => ({ col, text, align: divider[col] ?? null }));
+      const rows: { at: number; cells: string[] }[] = [];
+      // Its rows go on to a line without a bar (a blank one, say).
+      for (at += 2; source[at]?.includes('|'); at++)
+        rows.push({ at, cells: cellsOf(source[at] ?? '') });
+      at--;
+      blocks.push({ kind: 'table', at: start, columns, rows });
       continue;
     }
     const bullet = BULLET.exec(line);
@@ -145,6 +185,34 @@ function renderBlock(block: Block): JSX.Element {
         </List>
       );
     }
+    case 'table': {
+      // A row's cells by column: one it lacks is empty, and any past the last column are left out.
+      const align = (column: Column) => (column.align ? { textAlign: column.align } : undefined);
+      return (
+        <table key={block.at}>
+          <thead>
+            <tr>
+              {block.columns.map((column) => (
+                <th key={column.col} scope="col" style={align(column)}>
+                  {inline(column.text, `${block.at}:${column.col}`)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row) => (
+              <tr key={row.at}>
+                {block.columns.map((column) => (
+                  <td key={column.col} style={align(column)}>
+                    {inline(row.cells[column.col] ?? '', `${row.at}:${column.col}`)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
     case 'code':
       return (
         <pre key={block.at}>
@@ -156,8 +224,8 @@ function renderBlock(block: Block): JSX.Element {
 
 /**
  * An answer's Markdown: headings (under the chat's own), paragraphs, bulleted and numbered
- * lists, bold, italics, code and links, which open in a new tab (only web addresses). HTML is
- * shown as the text it is, never run.
+ * lists, tables, bold, italics, code and links, which open in a new tab (only web addresses).
+ * HTML is shown as the text it is, never run.
  */
 export function Markdown(props: { text: string }): JSX.Element {
   return <>{blocksOf(props.text).map(renderBlock)}</>;

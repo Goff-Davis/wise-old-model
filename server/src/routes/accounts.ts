@@ -2,18 +2,17 @@ import {
   AccountChangesSchema,
   AccountNameSchema,
   BankSearchSchema,
-  type FileCheck,
   GainsRangeSchema,
   NewAccountSchema,
 } from '@wom/shared';
 import { Router } from 'express';
-import { syncGoalCompletion } from '../goals/goalsService.ts';
+import type { AccountRow } from '../db/schema.ts';
+import { checkFilesAndGoals, syncGoalCompletion } from '../goals/goalsService.ts';
 import { parseInput } from '../http/errors.ts';
 import {
   type AccountDeps,
   addAccount,
   changeAccount,
-  checkAccountFiles,
   deleteAccount,
   findAccount,
   listAccounts,
@@ -25,7 +24,11 @@ import { getCollectionLogView } from '../services/collectionLog.ts';
 import { buildGains } from '../services/gains.ts';
 import { getOverview } from '../services/overview.ts';
 
-export function accountRoutes(deps: AccountDeps): Router {
+/** `beforeDelete` runs before an account is deleted (the chat stops its answers). */
+export function accountRoutes(
+  deps: AccountDeps,
+  hooks: { beforeDelete?(row: AccountRow): Promise<void> } = {},
+): Router {
   const { db } = deps;
   const router = Router();
 
@@ -48,7 +51,9 @@ export function accountRoutes(deps: AccountDeps): Router {
   });
 
   router.delete('/accounts/:id', async (req, res) => {
-    await deleteAccount(db, await findAccount(db, req.params.id));
+    const row = await findAccount(db, req.params.id);
+    await hooks.beforeDelete?.(row);
+    await deleteAccount(db, row);
     res.status(204).end();
   });
 
@@ -77,11 +82,7 @@ export function accountRoutes(deps: AccountDeps): Router {
   // Goals the new data shows reached are marked done, when a file changed.
   router.post('/accounts/:id/files/check', async (req, res) => {
     const row = await findAccount(db, req.params.id);
-    const found = await checkAccountFiles(deps, row);
-    const completed =
-      found.changed.length > 0 ? await syncGoalCompletion(deps, row, new Date()) : [];
-    const answer: FileCheck = { ...found, goalsCompleted: completed.length };
-    res.json(answer);
+    res.json(await checkFilesAndGoals(deps, row, new Date()));
   });
 
   router.post('/accounts/:id/refresh', async (req, res) => {

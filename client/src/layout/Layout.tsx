@@ -76,7 +76,15 @@ export function Layout(props: { chat: ReactNode; page: ReactNode; menu: ReactNod
           </button>
         </div>
       )}
-      <section aria-label="Chat" className={styles.chat}>
+      {/* Going into the chat (a page sending it a question moves the focus there) closes the
+        panel over it. */}
+      <section
+        aria-label="Chat"
+        className={styles.chat}
+        onFocus={() => {
+          if (narrow && open) setOpen(false);
+        }}
+      >
         {props.chat}
       </section>
       <div id={panelId} className={styles.side} hidden={narrow && !open}>

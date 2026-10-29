@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { capitalize } from './format.ts';
 import { isTimeZone } from './time.ts';
 
 /** Settings changed in the app; secrets and paths stay in .env. */
@@ -18,13 +19,30 @@ export const SettingsSchema = z.object({
   runeliteMode: z.enum(['automatic', 'manual']),
   pollSeconds: z.number().int().min(2).max(300),
   billing: z.enum(['plan', 'api_key']),
-  model: z.string().min(1),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
+  /** As the provider names it: an alias that follows the latest of a line (opus), or a model's id. */
+  model: z.string().min(1).max(100),
+  /** One of the levels the provider lists for the model (low, medium, high, …). */
+  effort: z.string().regex(/^[a-z][a-z0-9_-]{0,19}$/, 'An effort level is a word such as medium.'),
   maxTurns: z.number().int().min(1).max(100),
   budgetUsd: z.number().positive().nullable(),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
+
+/** The effort levels known by name; any other the provider lists is named from its id. */
+const EFFORT_NAMES: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  xhigh: 'Extra high',
+  max: 'Max',
+};
+
+/** An effort level as the chat bar names it: "Extra high effort". */
+export function effortLabel(level: string): string {
+  const name = EFFORT_NAMES[level] ?? capitalize(level);
+  return `${name} effort`;
+}
 
 /**
  * Settings as the server sends them. Zones aren't checked again here: a browser may not know a
@@ -46,7 +64,8 @@ export const defaultSettings: Settings = {
   runeliteMode: 'automatic',
   pollSeconds: 5,
   billing: 'plan',
-  model: 'claude-opus-5-5',
+  // Claude Code's alias for its latest Opus, so the default moves on with new releases.
+  model: 'opus',
   effort: 'medium',
   maxTurns: 20,
   budgetUsd: null,

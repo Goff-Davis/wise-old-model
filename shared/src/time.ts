@@ -95,6 +95,22 @@ export function dayStart(dayKey: string, timeZone: string): string {
   return new Date(wallMidnight - zoneOffset(start, timeZone)).toISOString();
 }
 
+/** The calendar day after one ('YYYY-MM-DD'). */
+const nextDay = (day: string) =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+
+/**
+ * Two calendar days ('YYYY-MM-DD', the first not after the last) as a range of ISO times: from
+ * the start of the first to the end of the last, in the zone.
+ */
+export function dayRange(
+  first: string,
+  last: string,
+  timeZone: string,
+): { start: string; end: string } {
+  return { start: dayStart(first, timeZone), end: dayStart(nextDay(last), timeZone) };
+}
+
 /** When the zone's calendar day that `now` falls on began, as an ISO time. */
 export function startOfLocalDay(now: Date, timeZone: string): string {
   return dayStart(localDayKey(now.toISOString(), timeZone), timeZone);

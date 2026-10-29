@@ -47,8 +47,14 @@
   font-size: 1.2rem;
 }
 
+/*
+ * One grid for every row, so the counts line up just after the longest name (rather than at
+ * the far edge of a wide page); the last column takes what's left, carrying each row's rule.
+ */
 .kills {
   display: grid;
+  grid-template-columns: 30px minmax(0, max-content) auto minmax(0, 1fr);
+  column-gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -56,8 +62,8 @@
 
 .kills li {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   min-height: 34px;
   border-bottom: 1px solid var(--rule);
@@ -74,6 +80,7 @@
 }
 
 .count {
+  justify-self: end;
   font-variant-numeric: tabular-nums;
 }
 

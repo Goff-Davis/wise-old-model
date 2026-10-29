@@ -5,7 +5,7 @@ import {
   useQuery,
 } from '@tanstack/react-query';
 import type { Account } from '@wom/shared';
-import { type JSX, useId, useState } from 'react';
+import { type JSX, type ReactNode, useId, useState } from 'react';
 import {
   type createBrowserRouter,
   Navigate,
@@ -15,7 +15,9 @@ import {
 } from 'react-router';
 import { RouterProvider } from 'react-router/dom';
 import styles from './App.module.css';
-import { accountsQuery } from './api/accounts.ts';
+import { accountsQuery, useAccountName } from './api/accounts.ts';
+import { ChatColumn } from './chat/ChatColumn.tsx';
+import { ChatProviders, useChat } from './chat/useChat.tsx';
 import { AddAccountForm } from './components/AddAccountDialog.tsx';
 import { Menu } from './components/Menu.tsx';
 import { AccountsProblem } from './components/Problem.tsx';
@@ -30,9 +32,22 @@ import { Settings } from './pages/Settings/Settings.tsx';
 import { ThisWeek } from './pages/ThisWeek/ThisWeek.tsx';
 import { useApplySettings } from './settings/useSettings.ts';
 
-// A placeholder until the chat arrives in a later task.
-function ChatPlaceholder(): JSX.Element {
-  return <p className={styles.placeholder}>The chat goes here.</p>;
+/** The chat column before there's an account to chat about. */
+function NoChat(): JSX.Element {
+  return <p className={styles.placeholder}>The chat opens once an account is added.</p>;
+}
+
+/**
+ * The account's chat, shared by the chat column and the pages that ask it things (Goals); none
+ * until the account is known to exist, so nothing is asked about one that isn't there.
+ */
+function AccountChat(props: {
+  accountId: string;
+  exists: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  const chat = useChat(props.accountId, props.exists);
+  return <ChatProviders chat={props.exists ? chat : null}>{props.children}</ChatProviders>;
 }
 
 /** What a page shows while the account list loads, or when it couldn't; null once it has. */
@@ -61,7 +76,7 @@ function Home(): JSX.Element {
       <AddAccountForm onDone={(account) => navigate(pagePath(account.id, 'overview'))} />
     </section>
   );
-  return <Layout chat={<ChatPlaceholder />} page={page} menu={<Menu />} />;
+  return <Layout chat={<NoChat />} page={page} menu={<Menu />} />;
 }
 
 /** Each page beside the chat, by its URL id. */
@@ -77,6 +92,7 @@ const PAGE_VIEWS: Record<PageId, () => JSX.Element> = {
 function AccountPage(): JSX.Element {
   const { accountId = '', page = '' } = useParams();
   const accounts = useQuery(accountsQuery);
+  const name = useAccountName(accountId);
   const exists = accounts.data?.some((account) => String(account.id) === accountId) ?? false;
   useFileCheck(exists ? accountId : null);
   const current = PAGES.find((p) => p.id === page);
@@ -89,12 +105,15 @@ function AccountPage(): JSX.Element {
   // page, so nothing shown for one (a rename suggestion, say) carries over to the next.
   const Page = PAGE_VIEWS[current.id];
   const content = accountsNotReady(accounts) ?? <Page key={accountId} />;
+  // Each account has its own chat; switching accounts hangs up on an answer in progress.
   return (
-    <Layout
-      chat={<ChatPlaceholder />}
-      page={content}
-      menu={<Menu accountId={accountId} page={current.id} />}
-    />
+    <AccountChat accountId={accountId} exists={exists}>
+      <Layout
+        chat={exists ? <ChatColumn key={accountId} name={name} /> : <NoChat />}
+        page={content}
+        menu={<Menu accountId={accountId} page={current.id} />}
+      />
+    </AccountChat>
   );
 }
 

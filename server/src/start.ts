@@ -1,5 +1,6 @@
 import type http from 'node:http';
 import type { Kysely } from 'kysely';
+import type { ChatProvider } from './ai/provider.ts';
 import { createApp } from './app.ts';
 import type { Config } from './config.ts';
 import { openAppDatabase } from './db/open.ts';
@@ -20,10 +21,11 @@ const startingUp: http.RequestListener = (_req, res) => {
 /**
  * Claims the port first, so a second copy stops there before it can touch (and migrate) the
  * database under the copy that's already running; then opens the database and hands the port
- * to the app.
+ * to the app, its chat answered by `deps.provider`.
  */
 export async function startServer(
   config: Config,
+  deps: { provider?: ChatProvider } = {},
 ): Promise<{ server: http.Server; db: Kysely<DB> }> {
   let server: http.Server;
   try {
@@ -49,6 +51,6 @@ export async function startServer(
   }
 
   server.off('request', startingUp);
-  server.on('request', createApp({ config, db }));
+  server.on('request', createApp({ config, db, provider: deps.provider }));
   return { server, db };
 }

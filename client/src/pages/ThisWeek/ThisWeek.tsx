@@ -1,7 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
-  DAY_MS,
-  dayStart,
+  dayRange,
   formatNumber,
   formatTime,
   type Gains,
@@ -38,10 +37,6 @@ const KIND_LABELS: Record<Gains['progress'][number]['kind'], string> = {
   goal: 'Goal',
 };
 
-/** The calendar day after one ('YYYY-MM-DD'). */
-const nextDay = (day: string) =>
-  new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
-
 /**
  * Two days picked: the range runs from the start of the first to the end of the last, in the
  * settings' zone. Show is offered once they're in order.
@@ -56,7 +51,7 @@ function CustomRange(props: { onShow: (range: GainsRange) => void }): JSX.Elemen
       className={styles.custom}
       onSubmit={(event) => {
         event.preventDefault();
-        if (ready) props.onShow({ start: dayStart(from, zone), end: dayStart(nextDay(to), zone) });
+        if (ready) props.onShow(dayRange(from, to, zone));
       }}
     >
       <label>

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { GOAL_KIND_LABELS, type GoalOptions, type GoalsView } from '@wom/shared';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ChatAskProvider } from '../../chat/useChat.tsx';
 import {
   fakeApi,
   LUMBY_PETE,
@@ -121,7 +122,7 @@ describe('Goals', () => {
     ]);
   });
 
-  it("lists what a quest still needs, with each one's status, and offers a plan from the AI once it's set up", async () => {
+  it("lists what a quest still needs, with each one's status, and offers a plan from the AI", async () => {
     const page = renderGoals();
     const quest = (await within(page).findByText('Complete Dragon Slayer II')).closest(
       'li',
@@ -133,17 +134,15 @@ describe('Goals', () => {
         .map((item) => item.textContent),
     ).toEqual(['75 Magic (you have 71) (not met)', 'Dream Mentor (under way)']);
     const plan = within(quest).getByRole('button', { name: 'Ask the AI for a plan' });
-    expect(plan.getAttribute('aria-disabled')).toBe('true');
-    expect(plan.getAttribute('title')).toBe('Available once the chat is set up');
+    expect(plan.getAttribute('aria-disabled')).toBeNull();
     // Only quest and diary goals offer one.
     expect(within(page).getAllByRole('button', { name: 'Ask the AI for a plan' })).toHaveLength(1);
   });
 
-  it('offers Suggest goals once the chat is set up', async () => {
+  it('offers Suggest goals, the chat being there', async () => {
     const page = renderGoals();
     const suggest = await within(page).findByRole('button', { name: 'Suggest goals' });
-    expect(suggest.getAttribute('aria-disabled')).toBe('true');
-    expect(suggest.getAttribute('title')).toBe('Available once the chat is set up');
+    expect(suggest.getAttribute('aria-disabled')).toBeNull();
   });
 
   it('moves a goal up with Alt+↑ on its handle, saving the new order', async () => {
@@ -627,20 +626,23 @@ describe('AddGoalDialog', () => {
 });
 
 describe('Goals with the chat', () => {
-  it('asks the chat for goals, and for a plan for a goal', async () => {
+  it('asks the chat for goals, and for a plan for a goal, each with its note', async () => {
     fakeApi({
       routes: {
         'GET /api/accounts': () => [LUMBY_PETE],
         'GET /api/accounts/1/goals': () => testGoalsView(),
       },
     });
-    const suggest = vi.fn();
-    const plan = vi.fn();
+    const ask = vi.fn();
     const router = createMemoryRouter(
       [
         {
           path: '/:accountId/goals',
-          element: <Goals onSuggestGoals={suggest} onAskForPlan={plan} />,
+          element: (
+            <ChatAskProvider value={{ ask, why: undefined }}>
+              <Goals />
+            </ChatAskProvider>
+          ),
         },
       ],
       { initialEntries: ['/1/goals'] },
@@ -655,10 +657,76 @@ describe('Goals with the chat', () => {
     expect(suggestButton.getAttribute('aria-disabled')).toBeNull();
     expect(suggestButton.getAttribute('title')).toBeNull();
     fireEvent.click(suggestButton);
-    expect(suggest).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Ask the AI for a plan' }));
-    expect(plan).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 1, title: 'Complete Dragon Slayer II' }),
+    expect(ask).toHaveBeenLastCalledWith(
+      'Suggest a few goals for Lumby Pete based on my progress and current goals.',
+      'From Suggest goals',
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the AI for a plan' }));
+    expect(ask).toHaveBeenLastCalledWith(
+      'Make me a plan for this goal: Complete Dragon Slayer II.',
+      'From Goals',
+    );
+  });
+
+  it("says the chat's buttons wait for it outside a chat", async () => {
+    fakeApi({
+      routes: {
+        'GET /api/accounts': () => [LUMBY_PETE],
+        'GET /api/accounts/1/goals': () => testGoalsView(),
+      },
+    });
+    const router = createMemoryRouter([{ path: '/:accountId/goals', element: <Goals /> }], {
+      initialEntries: ['/1/goals'],
+    });
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('list', { name: 'Active goals' });
+    for (const name of ['Suggest goals', 'Ask the AI for a plan']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.getAttribute('title')).toBe('Available once the chat is set up');
+    }
+  });
+
+  it.each([
+    ['answering', 'The chat is answering. Wait for it, or press Stop.'],
+    ['loading', 'The chat is still loading.'],
+  ])('says the chat is %s, while it is', async (_state, why) => {
+    fakeApi({
+      routes: {
+        'GET /api/accounts': () => [LUMBY_PETE],
+        'GET /api/accounts/1/goals': () => testGoalsView(),
+      },
+    });
+    const ask = vi.fn();
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/:accountId/goals',
+          element: (
+            <ChatAskProvider value={{ ask, why }}>
+              <Goals />
+            </ChatAskProvider>
+          ),
+        },
+      ],
+      { initialEntries: ['/1/goals'] },
+    );
+    render(
+      <QueryClientProvider client={testQueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('list', { name: 'Active goals' });
+    for (const name of ['Suggest goals', 'Ask the AI for a plan']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(button.getAttribute('title')).toBe(why);
+      fireEvent.click(button);
+    }
+    expect(ask).not.toHaveBeenCalled();
   });
 });

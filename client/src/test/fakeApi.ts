@@ -28,16 +28,28 @@ export const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
  */
 export type FakeRoute = (request: { url: URL; body: unknown }) => unknown;
 
-// An open account checks its Character Export files in Automatic mode.
-const FILE_CHECK = /^\/api\/accounts\/\d+\/files\/check$/;
+/**
+ * What every open account asks for by itself, answered unless `routes` answers it: its file
+ * check (Automatic mode) finds nothing changed, and its chat has no earlier chats and no models
+ * to pick from. Each is its method and a pattern for its path.
+ */
+const BACKGROUND: [method: string, path: RegExp, answer: unknown][] = [
+  [
+    'POST',
+    /^\/api\/accounts\/\d+\/files\/check$/,
+    { changed: [], missing: [], errors: [], goalsCompleted: 0 },
+  ],
+  ['GET', /^\/api\/accounts\/\d+\/chats$/, []],
+  ['GET', /^\/api\/chat\/models$/, { models: [], error: null }],
+];
 
 /**
  * Stands in for the server: `routes`, keyed by method and path without the query ("GET
  * /api/accounts"), and the settings routes, which every page uses, recording every change sent
  * to them (and refusing each with `refuse`, when given). Settings start at the defaults plus
- * `settings`, with this browser's zone already saved, so the app has nothing to report. An
- * account's file check finds nothing changed unless `routes` answers it. Any other request
- * fails the test once it finishes: inside the app it would only turn into an error message.
+ * `settings`, with this browser's zone already saved, so the app has nothing to report. What an
+ * open account asks for by itself is answered as BACKGROUND says. Any other request fails the
+ * test once it finishes: inside the app it would only turn into an error message.
  */
 export function fakeApi(
   opts: { settings?: Partial<Settings>; refuse?: string; routes?: Record<string, FakeRoute> } = {},
@@ -56,9 +68,10 @@ export function fakeApi(
         const answer = await route({ url, body });
         return answer instanceof Response ? answer : Response.json(answer);
       }
-      if (method === 'POST' && FILE_CHECK.test(url.pathname)) {
-        return Response.json({ changed: [], missing: [], errors: [], goalsCompleted: 0 });
-      }
+      const background = BACKGROUND.find(
+        ([asked, path]) => asked === method && path.test(url.pathname),
+      );
+      if (background) return Response.json(background[2]);
       if (url.pathname !== '/api/settings' || (method !== 'GET' && method !== 'PATCH')) {
         unexpected.push(`${method} ${String(input)}`);
         return Response.json({ error: 'Not found' }, { status: 404 });

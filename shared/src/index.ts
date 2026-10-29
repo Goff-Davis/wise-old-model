@@ -1,5 +1,6 @@
 export * from './accounts.ts';
 export * from './bank.ts';
+export * from './chat.ts';
 export * from './collectionLog.ts';
 export * from './errors.ts';
 export * from './format.ts';

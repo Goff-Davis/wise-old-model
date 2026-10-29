@@ -12,22 +12,27 @@ export class ApiError extends Error {
   }
 }
 
+export const UNREACHABLE = "Can't reach the Wise Old Model server. Is it still running?";
+
+/** A refusal's error: the server's own sentence, or its status when it gave none. */
+export function refusalOf(status: number, statusText: string, body: unknown): ApiError {
+  const answer = ErrorAnswerSchema.safeParse(body);
+  return new ApiError(
+    status,
+    answer.success ? answer.data.error : `The server answered ${status} ${statusText}.`.trim(),
+  );
+}
+
 /** Sends a request and checks the answer against `schema`; an empty answer (204) reads as null. */
 async function request<T>(path: string, init: RequestInit, schema: z.ZodType<T>): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, init);
   } catch {
-    throw new ApiError(0, "Can't reach the Wise Old Model server. Is it still running?");
+    throw new ApiError(0, UNREACHABLE);
   }
   const body: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    const answer = ErrorAnswerSchema.safeParse(body);
-    throw new ApiError(
-      res.status,
-      answer.success ? answer.data.error : `The server answered ${res.status} ${res.statusText}.`,
-    );
-  }
+  if (!res.ok) throw refusalOf(res.status, res.statusText, body);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     throw new ApiError(

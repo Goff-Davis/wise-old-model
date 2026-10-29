@@ -1,5 +1,6 @@
 import {
   AccountTypeSchema,
+  type FileCheck,
   type Goal,
   type GoalChanges,
   type GoalOptions,
@@ -26,7 +27,12 @@ import type { AccountRow, DB, GoalsTable } from '../db/schema.ts';
 import { HttpError } from '../http/errors.ts';
 import { findName } from '../items/itemNames.ts';
 import { type AccountData, loadAccountData } from '../services/accountData.ts';
-import { type AccountDeps, freshenAccount, wikiCtx } from '../services/accounts.ts';
+import {
+  type AccountDeps,
+  checkAccountFiles,
+  freshenAccount,
+  wikiCtx,
+} from '../services/accounts.ts';
 import { orSourceFailure } from '../sources/answers.ts';
 import { efficiencyTypeFor, getCachedRates, savedBossMetrics } from '../sources/wom.ts';
 import { goalProgress, LEVELS_FIX, NOT_KNOWN, type SharedData } from './progress.ts';
@@ -142,6 +148,20 @@ async function completeReached(
     }
   }
   return completed;
+}
+
+/**
+ * Reads the account's Character Export files that changed and, when one did, marks the goals
+ * its data shows reached as done: what the file check route and each chat turn run.
+ */
+export async function checkFilesAndGoals(
+  deps: AccountDeps,
+  row: AccountRow,
+  now: Date,
+): Promise<FileCheck> {
+  const found = await checkAccountFiles(deps, row);
+  const completed = found.changed.length > 0 ? await syncGoalCompletion(deps, row, now) : [];
+  return { ...found, goalsCompleted: completed.length };
 }
 
 /**

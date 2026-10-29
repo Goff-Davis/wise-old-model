@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { Account } from '@wom/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   type FakeRoute,
   LUMBY_PETE,
@@ -210,5 +210,53 @@ describe('routes', () => {
     ).toBeTruthy();
     expect(within(page).getByRole('textbox', { name: 'Name' })).toBeTruthy();
     expect(router.state.location.pathname).toBe('/');
+  });
+});
+
+describe('the chat in the app', () => {
+  /** An answer's stream that stays open. */
+  const openStream = () =>
+    new Response(new ReadableStream({ start() {} }), {
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  const routes = (sent: unknown[]): Record<string, FakeRoute> => ({
+    'POST /api/accounts/1/chats': () => ({
+      id: 'c1',
+      title: 'New chat',
+      createdAt: '2026-10-27T12:00:00.000Z',
+      updatedAt: '2026-10-27T12:00:00.000Z',
+    }),
+    'POST /api/chats/c1/messages': ({ body }) => {
+      sent.push(body);
+      return openStream();
+    },
+  });
+
+  it('asks the chat from Goals: the message goes with its note, and shows with it in the chat', async () => {
+    const sent: unknown[] = [];
+    renderAt('/1/goals', [LUMBY_PETE], routes(sent));
+    const page = screen.getByRole('region', { name: 'Page' });
+    fireEvent.click(await within(page).findByRole('button', { name: 'Suggest goals' }));
+    const text = 'Suggest a few goals for Lumby Pete based on my progress and current goals.';
+    await waitFor(() => expect(sent).toEqual([{ text, note: 'From Suggest goals' }]));
+    const chat = screen.getByRole('region', { name: 'Chat' });
+    const note = await within(chat).findByText('From Suggest goals');
+    expect(note.tagName).toBe('SMALL');
+    expect(note.parentElement?.textContent).toBe(`${text}From Suggest goals`);
+  });
+
+  it('closes the page panel on a narrow window when a page asks the chat, so the answer shows', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 999px)',
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    renderAt('/1/goals', [LUMBY_PETE], routes([]));
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const page = screen.getByRole('region', { name: 'Page' });
+    fireEvent.click(await within(page).findByRole('button', { name: 'Suggest goals' }));
+    expect(screen.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
   });
 });

@@ -10,6 +10,7 @@ import { type JSX, type KeyboardEvent, useId, useState } from 'react';
 import { useParams } from 'react-router';
 import { useAccountName, useRefreshAccount } from '../../api/accounts.ts';
 import { goalsQuery, useChangeGoal, useReorderGoals } from '../../api/goals.ts';
+import { useChatAsk } from '../../chat/useChat.tsx';
 import { Icon } from '../../components/Icon.tsx';
 import { pageStates } from '../../components/PageStates.tsx';
 import { Problem } from '../../components/Problem.tsx';
@@ -74,6 +75,8 @@ function ActiveGoal(props: {
   ticking: boolean;
   onChange: (changes: { status: 'done' | 'dropped' }) => void;
   onAskForPlan?: () => void;
+  /** Why there's no plan to ask for: the chat isn't there, or is answering. */
+  chatWaits?: string;
 }): JSX.Element {
   const { goal } = props;
   const progress = goal.progress;
@@ -164,7 +167,7 @@ function ActiveGoal(props: {
             type="button"
             className={styles.ask}
             aria-disabled={props.onAskForPlan ? undefined : true}
-            title={props.onAskForPlan ? undefined : NEEDS_CHAT}
+            title={props.chatWaits}
             onClick={() => props.onAskForPlan?.()}
           >
             Ask the AI for a plan
@@ -193,12 +196,11 @@ function moved(ids: number[], from: number, to: number): number[] {
 /**
  * The account's goals: Add goal and Suggest goals; the active goals in the user's order, each
  * with its progress, moved by dragging or by Alt+↑ and Alt+↓ on its handle; and the goals done,
- * with their dates. A dropped goal is kept but not shown. `onSuggestGoals` and `onAskForPlan`
- * come from the chat; until it's there, their buttons say they're waiting for it.
+ * with their dates. A dropped goal is kept but not shown. Suggest goals and each goal's "Ask the
+ * AI for a plan" send their question to the account's chat, with a note saying where it came
+ * from; outside a chat, their buttons say they're waiting for it.
  */
-export function Goals(
-  props: { onSuggestGoals?: () => void; onAskForPlan?: (goal: GoalWithProgress) => void } = {},
-): JSX.Element {
+export function Goals(): JSX.Element {
   const { accountId = '' } = useParams();
   const zone = useTimeZone();
   const query = useQuery(goalsQuery(accountId));
@@ -214,6 +216,20 @@ export function Goals(
   const doneId = useId();
   const state = pageStates(query, 'the goals');
   const name = useAccountName(accountId);
+  const chat = useChatAsk();
+  // Why the chat's buttons wait: there's no chat, or it says why (loading, answering).
+  const chatWaits = chat ? chat.why : NEEDS_CHAT;
+  const ask = chatWaits ? undefined : chat?.ask;
+  const suggestGoals =
+    ask &&
+    (() =>
+      ask(
+        `Suggest a few goals for ${name} based on my progress and current goals.`,
+        'From Suggest goals',
+      ));
+  const askForPlan =
+    ask &&
+    ((goal: GoalWithProgress) => ask(`Make me a plan for this goal: ${goal.title}.`, 'From Goals'));
 
   const goals = 'data' in state ? state.data.goals : [];
   const active = goals
@@ -250,9 +266,9 @@ export function Goals(
           </button>
           <button
             type="button"
-            aria-disabled={props.onSuggestGoals ? undefined : true}
-            title={props.onSuggestGoals ? undefined : NEEDS_CHAT}
-            onClick={() => props.onSuggestGoals?.()}
+            aria-disabled={suggestGoals ? undefined : true}
+            title={chatWaits}
+            onClick={() => suggestGoals?.()}
           >
             Suggest goals
           </button>
@@ -325,7 +341,8 @@ export function Goals(
                         },
                       )
                     }
-                    onAskForPlan={props.onAskForPlan && (() => props.onAskForPlan?.(goal))}
+                    onAskForPlan={askForPlan && (() => askForPlan(goal))}
+                    chatWaits={chatWaits}
                   />
                 ))}
               </ul>

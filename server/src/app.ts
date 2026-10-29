@@ -4,12 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { VITE_DEV_PORT } from '@wom/shared';
 import express, { type Express, type RequestHandler, Router } from 'express';
 import type { Kysely } from 'kysely';
+import { createChatService } from './ai/chatService.ts';
+import type { ChatProvider, ToolDef } from './ai/provider.ts';
+import { buildTools } from './ai/tools/index.ts';
 import { type Config, userAgent } from './config.ts';
 import type { DB } from './db/schema.ts';
 import { HttpError, jsonErrors } from './http/errors.ts';
 import { localOnly } from './http/localOnly.ts';
 import { createRequester, type Requester } from './http/requester.ts';
 import { accountRoutes } from './routes/accounts.ts';
+import { chatRoutes } from './routes/chats.ts';
 import { goalRoutes } from './routes/goals.ts';
 import { iconRoutes } from './routes/icons.ts';
 import { settingsRoutes } from './routes/settings.ts';
@@ -23,6 +27,16 @@ export type AppDeps = {
   clientDist?: string;
   /** How the server talks to other sites; tests pass a fake. */
   req?: Requester;
+  /** The AI behind the chat, and the tools it may use (by default, all of them). */
+  provider?: ChatProvider;
+  tools?: ToolDef[];
+};
+
+/** The chat's AI until one is set up: every answer says so. */
+const NO_PROVIDER: ChatProvider = {
+  async *runTurn() {
+    yield { type: 'error', message: "The AI isn't set up in this copy of Wise Old Model." };
+  },
 };
 
 const DEFAULT_CLIENT_DIST = fileURLToPath(new URL('../../client/dist', import.meta.url));
@@ -86,8 +100,14 @@ export function createApp(deps: AppDeps): Express {
     memory: createFreshnessMemory(),
     runeliteDir: config.runeliteDir,
   };
-  app.use('/api', accountRoutes(accountDeps));
+  const chats = createChatService({
+    ...accountDeps,
+    provider: deps.provider ?? NO_PROVIDER,
+    tools: deps.tools ?? buildTools(accountDeps),
+  });
+  app.use('/api', accountRoutes(accountDeps, { beforeDelete: (row) => chats.stopAccount(row.id) }));
   app.use('/api', goalRoutes(accountDeps));
+  app.use('/api', chatRoutes(deps.db, chats));
   app.use('/api', iconRoutes(createIconStore(req, config.dataDir)));
 
   app.use('/api', (_req, _res, next) => {

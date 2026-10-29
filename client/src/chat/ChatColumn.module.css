@@ -1,0 +1,345 @@
+/*
+ * The chat fills its column: its header, the messages (which scroll, taking the space left),
+ * then the message box, each in its own row; Earlier chats and the status line float over it.
+ */
+.column {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  padding: 16px 20px;
+  gap: 10px;
+}
+
+.top {
+  grid-row: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.top strong {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 1.3rem;
+}
+
+.topActions {
+  display: flex;
+  gap: 14px;
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 0.92rem;
+}
+
+.link:disabled {
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.failed {
+  color: var(--not-started);
+}
+
+/* Earlier chats opens over the chat, under its button, as the mockup has it. */
+.earlier {
+  position: absolute;
+  top: 48px;
+  right: 20px;
+  z-index: 2;
+  width: min(340px, calc(100% - 40px));
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
+  font-size: 0.92rem;
+}
+
+.earlier ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.earlier li {
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.earlier li[aria-current="true"] {
+  background: var(--raised);
+}
+
+.row,
+.renameForm {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.open {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.renameForm input {
+  flex: 1;
+  min-width: 0;
+}
+
+.messages {
+  grid-row: 2;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* The user's messages to the right, narrower; answers take the column's width. */
+.user {
+  max-width: 44%;
+  margin: 0 0 10px auto;
+  padding: 7px 11px;
+  border-radius: 7px;
+  background: var(--raised);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.user small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.answer {
+  margin-bottom: 14px;
+}
+
+.lookups {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.lookupLine {
+  margin: 0;
+}
+
+.lookupList {
+  margin: 4px 0 0 14px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--rule);
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.lookupList li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 1px 0;
+}
+
+.noIcon {
+  width: 15px;
+  height: 15px;
+}
+
+/* Answers in the serif. */
+.answerText {
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.answerText p,
+.answerText ul,
+.answerText ol,
+.answerText pre {
+  margin: 0 0 8px;
+}
+
+.answerText ul,
+.answerText ol {
+  padding-left: 20px;
+}
+
+.answerText h3,
+.answerText h4,
+.answerText h5 {
+  margin: 10px 0 6px;
+  font-size: 1.15rem;
+}
+
+.answerText code {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--raised);
+  font-size: 0.85em;
+}
+
+.answerText pre {
+  overflow-x: auto;
+}
+
+.answerText pre code {
+  display: block;
+  padding: 8px 10px;
+}
+
+.approval {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.approvalButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.yes {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.approved {
+  color: var(--done);
+}
+
+.declined {
+  color: var(--muted);
+}
+
+.problem {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--not-started);
+  border-radius: 6px;
+}
+
+.problem p {
+  margin: 4px 0 0;
+}
+
+.stopped {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.empty {
+  margin: 6px 0 0;
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+}
+
+.starters ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.starters button {
+  border-radius: 14px;
+}
+
+.composer {
+  grid-row: 3;
+  display: grid;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+/* Under the box: the hint, then the model, effort and Send (or Stop), wrapping when narrow. */
+.composerBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.controls select {
+  padding: 3px 6px;
+  font-size: 0.88rem;
+}
+
+.composer textarea {
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--text);
+  resize: none;
+  font: inherit;
+}
+
+.composer textarea:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.stop {
+  border-color: var(--not-started);
+  color: var(--not-started);
+}

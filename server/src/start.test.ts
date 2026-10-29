@@ -4,7 +4,8 @@ import type http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { tempDir, testConfig } from '../test/helpers.ts';
+import { insertAccount, tempDir, testConfig } from '../test/helpers.ts';
+import { createFakeProvider } from './ai/fakeProvider.ts';
 import { listenLocal } from './http/listen.ts';
 import { startServer } from './start.ts';
 
@@ -54,5 +55,28 @@ describe('startServer', () => {
       `Couldn't open the database in ${dataDir}`,
     );
     (await holdPort(port)).close();
+  });
+
+  it('answers the chat with the AI provider it is given', async () => {
+    const config = testConfig({ port: await freePort() });
+    const { provider } = createFakeProvider([{ type: 'text', delta: 'Hello from the provider.' }]);
+    const { server, db } = await startServer(config, { provider });
+    try {
+      const row = await insertAccount(db);
+      const base = `http://127.0.0.1:${config.port}`;
+      const headers = { origin: base, 'content-type': 'application/json' };
+      const chat = (await (
+        await fetch(`${base}/api/accounts/${row.id}/chats`, { method: 'POST', headers })
+      ).json()) as { id: string };
+      const answer = await fetch(`${base}/api/chats/${chat.id}/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text: 'Hi' }),
+      });
+      expect(await answer.text()).toContain('"delta":"Hello from the provider."');
+    } finally {
+      server.close();
+      await db.destroy();
+    }
   });
 });

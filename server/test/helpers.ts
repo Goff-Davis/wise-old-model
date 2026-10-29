@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { buffer } from 'node:stream/consumers';
-import { DEFAULT_PORT, nameKey, type SourceKind } from '@wom/shared';
+import { type ChatEvent, DEFAULT_PORT, nameKey, parseSse, type SourceKind } from '@wom/shared';
 import type { Express } from 'express';
 import type { Insertable, Kysely } from 'kysely';
 import { onTestFinished } from 'vitest';
@@ -243,24 +243,25 @@ function parseJson(raw: string): unknown {
   }
 }
 
+type CallOptions = {
+  method?: string;
+  path: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+  appPort?: number;
+};
+
 /**
- * Sends one real HTTP request to the app on a random port. By default it looks like our
- * own page on `appPort` (the config's port, DEFAULT_PORT unless a test changes it): Host
- * localhost:<appPort> and, for writes, Origin http://localhost:<appPort>.
+ * Opens one real HTTP request to the app on a random port, as `call` describes, and gives the
+ * answer as it starts arriving with the server, to close once the answer is read.
  */
-export async function call(
+async function openRequest(
   app: Express,
-  opts: {
-    method?: string;
-    path: string;
-    headers?: Record<string, string>;
-    body?: unknown;
-    appPort?: number;
-  },
-): Promise<CallResult> {
+  opts: CallOptions,
+  method: string,
+): Promise<{ res: http.IncomingMessage; server: http.Server }> {
   const server = await listenLocal(app, 0);
   const { port } = server.address() as AddressInfo;
-  const method = opts.method ?? 'GET';
   const appPort = opts.appPort ?? DEFAULT_PORT;
   const payload = opts.body === undefined ? undefined : JSON.stringify(opts.body);
   const headers: Record<string, string> = {
@@ -281,6 +282,21 @@ export async function call(
         .on('error', reject)
         .end(payload);
     });
+    return { res, server };
+  } catch (error) {
+    server.close();
+    throw error;
+  }
+}
+
+/**
+ * Sends one real HTTP request to the app on a random port. By default it looks like our
+ * own page on `appPort` (the config's port, DEFAULT_PORT unless a test changes it): Host
+ * localhost:<appPort> and, for writes, Origin http://localhost:<appPort>.
+ */
+export async function call(app: Express, opts: CallOptions): Promise<CallResult> {
+  const { res, server } = await openRequest(app, opts, opts.method ?? 'GET');
+  try {
     const bytes = await buffer(res);
     const raw = bytes.toString('utf8');
     return {
@@ -293,4 +309,57 @@ export async function call(
   } finally {
     server.close();
   }
+}
+
+/**
+ * Sends a request answered with server-sent events, read as they arrive (with the page's own
+ * parser), like `call` otherwise: `next` waits for the next event (null once the stream has
+ * ended), `rest` for every event still to come, and `close` hangs up.
+ */
+export async function callEvents(
+  app: Express,
+  opts: CallOptions,
+): Promise<{
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  next(): Promise<ChatEvent | null>;
+  rest(): Promise<ChatEvent[]>;
+  /** Hangs up, as a browser closing the page does. */
+  close(): void;
+}> {
+  const { res, server } = await openRequest(app, opts, opts.method ?? 'POST');
+  const events: ChatEvent[] = [];
+  const waiting: (() => void)[] = [];
+  let ended = false;
+  let carry = '';
+  const wake = () => {
+    for (const resolve of waiting.splice(0)) resolve();
+  };
+  res.setEncoding('utf8');
+  res.on('data', (chunk: string) => {
+    const parsed = parseSse(chunk, carry);
+    carry = parsed.carry;
+    events.push(...parsed.events);
+    wake();
+  });
+  res.on('end', () => {
+    ended = true;
+    server.close();
+    wake();
+  });
+  const next = async (): Promise<ChatEvent | null> => {
+    while (events.length === 0 && !ended)
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    return events.shift() ?? null;
+  };
+  const rest = async (): Promise<ChatEvent[]> => {
+    const all: ChatEvent[] = [];
+    for (let event = await next(); event !== null; event = await next()) all.push(event);
+    return all;
+  };
+  const close = () => {
+    res.destroy();
+    server.close();
+  };
+  return { status: res.statusCode ?? 0, headers: res.headers, next, rest, close };
 }

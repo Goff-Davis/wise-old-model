@@ -848,7 +848,7 @@ Spec: AI layer (Provider interface, Streaming, Writes need approval, Sources, Co
 - Error fixes: a provider error mentioning `login`, `not logged in` or `authentication` → `fix: 'Claude Code isn't signed in on this computer. Open a terminal, run claude, then type /login and sign in with your Claude plan. Or switch billing to an API key in Settings.'`.
 - Stop aborts the turn's `AbortController` and declines any pending approvals.
 
-- [ ] **Step 1: Write the failing tests** (with `fakeProvider`, which plays a scripted list of `ProviderEvent`s and calls `requestApproval` when told to):
+- [x] **Step 1: Write the failing tests** (with `fakeProvider`, which plays a scripted list of `ProviderEvent`s and calls `requestApproval` when told to):
   - text deltas reach the SSE stream in order and the stored message's `text` is their concatenation
   - a tool that calls `ctx.addSource` twice for the same page yields one `sources` entry
   - an approval request emits `approval`; posting `{ approve: true }` resolves it and emits `approval_resolved`
@@ -856,10 +856,10 @@ Spec: AI layer (Provider interface, Streaming, Writes need approval, Sources, Co
   - a provider `error` "Not logged in · Please run /login" → `ChatEvent` error with the fix text above
   - a turn runs `checkFiles` first (spy), and a tool reading a failed source still lets the turn finish (Review Focus 4)
   - the session title is the first message cut to 60 characters
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 29: Tools
 
@@ -873,11 +873,11 @@ Spec: AI layer → Tools (every tool and "Rules for every tool").
 - Every result is an object with `asOf` (ISO) and, when relevant, `stale` (`{ kind, error }[]`) and `missing` (`{ kind, fix }[]`). Knowledge tools call `ctx.addSource` for every page they read. `get_wiki_page` with no `section` returns the section list.
 - Labels: `get_quests` → `Checking your quests…`, `get_wiki_page` → `Reading wiki: <title>…`, `check_quest_requirements` → `Checking requirements for <quest>…`; the others follow the same pattern.
 
-- [ ] **Step 1: Write the failing tests**: the tool names and order match the list; every tool's input schema is a Zod object; for a fixture account each read tool's JSON is under 8,000 characters (a 900-item bank included: `get_bank` without `search` returns only the summary); `get_wiki_page` adds a source; `get_account_overview` with no bank lists `missing: [{ kind: 'ce_bank', fix: 'Open your bank in game so Character Export saves it.' }]`; `check_quest_requirements('Dragon Slayer II')` returns `met: false` with the Magic and Dream Mentor gaps; `calc_xp` returns the XP and hours from Task 22.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: the tool names and order match the list; every tool's input schema is a Zod object; for a fixture account each read tool's JSON is under 8,000 characters (a 900-item bank included: `get_bank` without `search` returns only the summary); `get_wiki_page` adds a source; `get_account_overview` with no bank lists `missing: [{ kind: 'ce_bank', fix: 'Open your bank in game so Character Export saves it.' }]`; `check_quest_requirements('Dragon Slayer II')` returns `met: false` with the Magic and Dream Mentor gaps; `calc_xp` returns the XP and hours from Task 22.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 30: Instructions
 
@@ -889,15 +889,15 @@ Spec: AI layer → Instructions.
 - Produces:
   ```ts
   export function buildSystemPrompt(account: { name: string; type: AccountType }): string; // the 9 rules of ARCHITECTURE.md → Instructions, as plain prose
-  export function turnHeader(now: Date, timeZone: string): string; // 'Local time: Tuesday 27 October 2026, 17:00 (America/Chicago)'
+  export function turnHeader(now: Date, timeZone: string): string; // 'Local time: Tuesday 27 October 2026, 17:00 (America/Chicago, GMT-05:00)'
   export function composeMessage(now: Date, timeZone: string, text: string): string; // header, blank line, text
   ```
 
-- [ ] **Step 1: Write the failing tests**: the prompt names the account and its type; it mentions the Grand Exchange restriction, citing wiki pages, asking before guessing, declining botting and real-world trading, and approval before adding goals; it contains no date or time (`not.toMatch(/\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}/)`, so the cached prefix stays stable); it's identical across two calls; `turnHeader(new Date('2026-10-27T22:00:00Z'), 'America/Chicago')` equals the example above.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 1: Write the failing tests**: the prompt names the account and its type; it mentions the Grand Exchange restriction, citing wiki pages, asking before guessing, declining botting and real-world trading, and approval before adding goals; it contains no date or time (`not.toMatch(/\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}/)`, so the cached prefix stays stable); it's identical across two calls; `turnHeader(new Date('2026-10-27T22:00:00Z'), 'America/Chicago')` equals the example above.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [x] **Step 5: Checkpoint.**
 
 ### Task 31: Claude provider (Agent SDK)
 
@@ -916,17 +916,17 @@ Spec: AI layer → Claude runs through the Claude Agent SDK, Agent SDK setup, De
   - `env`: billing `plan` → a copy of `env` without `ANTHROPIC_API_KEY`; `api_key` → `env` plus `ANTHROPIC_API_KEY` and `CLAUDE_CODE_PROMPT_CACHE_TTL: '1h'`, and `maxBudgetUsd: budgetUsd` when set
 - Message mapping: `system`/`init` → `session` (with `session_id`); `stream_event` with a `content_block_delta` / `text_delta` → `text`; `assistant` `tool_use` blocks → `tool_started`; `user` `tool_result` blocks → `tool_finished` (`is_error`); `result` → `usage` (`usage.input_tokens`, `usage.output_tokens`, `usage.cache_read_input_tokens`, `total_cost_usd`), and error subtypes → `error` with `errors.join('; ')`.
 
-- [ ] **Step 1: Write the failing tests** with a fake `query` that records its options and yields scripted SDK messages:
+- [x] **Step 1: Write the failing tests** with a fake `query` that records its options and yields scripted SDK messages:
   - options include `tools: []`, `settingSources: []`, `allowedTools: ['mcp__osrs__*']`, `model: 'claude-opus-5-5'`, `effort: 'medium'`, `maxTurns: 20`, the given `cwd`, and `resume` only when a session id exists
   - billing `plan` with `ANTHROPIC_API_KEY` in `env` → the passed `env` has no `ANTHROPIC_API_KEY`; billing `api_key` → it's present and `maxBudgetUsd` equals the setting
   - the scripted stream maps to `session`, `text` × n, `tool_started`, `tool_finished`, `usage` in order
   - `canUseTool('mcp__osrs__add_goal', …)` with approval false → `{ behavior: 'deny', … }`; with true → allow with the same input
   - aborting the turn's signal aborts the `abortController` passed to `query`
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run**: PASS.
-- [ ] **Step 5: Manual check (ask the user first; it uses their plan):** in `npm run dev`, ask "What should I work on next?" for a real account; tools run, the answer cites wiki pages, usage shows "on your plan". Check that Claude Code's session for it appears under the `<dataDir>/claude` project, not a coding project.
-- [ ] **Step 6: Checkpoint.**
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run**: PASS.
+- [ ] **Step 5: Manual check (ask the user first; it uses their plan):** in `npm run dev`, ask "What should I work on next?" for a real account; tools run, the answer cites wiki pages, usage shows "on your plan". Check that Claude Code's session for it (`<session id>.jsonl`) is in Claude Code's project for the working folder `<dataDir>/claude`, which is `~/.claude/projects/` (or `$CLAUDE_CONFIG_DIR/projects/`) and that folder's path with every character that isn't a letter or digit as `-` (on Linux, `-home-<user>--local-share-wise-old-model-claude`), not in a coding project's.
+- [x] **Step 6: Checkpoint.**
 
 ### Task 32: Chat UI and Suggest goals
 
@@ -940,11 +940,11 @@ Spec: Frontend → Chat column; Goals → Page (Suggest goals); the approved cha
 - A goal's "Ask the AI for a plan" sends: `Make me a plan for this goal: <goal title>.` with the note "From Goals".
 - Usage text: plan → `8.2k tokens on your plan`; API key → `$0.04 with your API key`.
 
-- [ ] **Step 1: Write the failing tests**: `parseSse` handles an event split across two chunks and two events in one chunk; tool events collapse to "Looked at 4 things" and expand to the labels; an approval row's Approve posts `{ approve: true }`; while waiting the input reads "Waiting for your approval…" and Stop is shown; usage renders `8.2k tokens on your plan` for 8,200 tokens; a new chat shows the four starter questions; an error event shows its `fix` text.
-- [ ] **Step 2: Run**. Expected: FAIL.
-- [ ] **Step 3: Implement** per the mockup: header (account name, New chat, Earlier chats with rename and delete), collapsed tool activity with icons, serif answers, approval rows, sources and usage under each answer, input with "Enter to send, Shift+Enter for a new line", Stop while answering.
+- [x] **Step 1: Write the failing tests**: `parseSse` handles an event split across two chunks and two events in one chunk; tool events collapse to "Looked at 4 things" and expand to the labels; an approval row's Approve posts `{ approve: true }`; while waiting the input reads "Waiting for your approval…" and Stop is shown; usage renders `8.2k tokens on your plan` for 8,200 tokens; a new chat shows the four starter questions; an error event shows its `fix` text.
+- [x] **Step 2: Run**. Expected: FAIL.
+- [x] **Step 3: Implement** per the mockup: header (account name, New chat, Earlier chats with rename and delete), collapsed tool activity with icons, serif answers, approval rows, sources and usage under each answer, input with "Enter to send, Shift+Enter for a new line", Stop while answering.
 - [ ] **Step 4: Run**: PASS; in the app, Suggest goals posts into the chat and approvals add goals that appear on the Goals page.
-- [ ] **Step 5: Checkpoint.**
+- [x] **Step 5: Checkpoint.**
 
 ---
 

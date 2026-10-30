@@ -43,8 +43,6 @@ The app keeps its own history of your stats, independent of third-party sites, a
    npm install
    ```
 
-   Run it again if you move one checkout between WSL and Windows (some tools ship a binary per OS).
-
 2. Create your configuration from the example and fill in `CONTACT` (see Configuration):
 
    ```sh
@@ -65,7 +63,7 @@ Settings that rarely change, and secrets, live in `.env` in the repo root. It's 
 | `CONTACT` | Yes | (none) | Your Discord name or email. It's sent in the User-Agent so Wise Old Man, Temple and the wiki can reach you if something goes wrong. Plain ASCII only. |
 | `PORT` | No | `4747` | The port the server listens on (on `127.0.0.1` only). |
 | `DATA_DIR` | No | Your OS's app-data folder | Where the database, backups, icons and (with Claude) Claude Code's working folder go. |
-| `RUNELITE_DIR` | No | `~/.runelite` | Where RuneLite keeps Character Export's files. On WSL with RuneLite on Windows: `/mnt/c/Users/<you>/.runelite`. |
+| `RUNELITE_DIR` | No | `~/.runelite` | Where RuneLite keeps Character Export's files. |
 | `ANTHROPIC_API_KEY` | No | (none) | Claude only: used if you switch Claude's billing to an API key in Settings. |
 | `OPENAI_COMPAT_BASE_URL` | No | (none) | Turns on an OpenAI-compatible AI: its API's address, such as `https://api.openai.com/v1`. |
 | `OPENAI_COMPAT_API_KEY` | No | (none) | Its key. A local server (Ollama, LM Studio) needs none. |

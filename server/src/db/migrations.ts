@@ -113,7 +113,31 @@ const initial: Migration = {
   },
 };
 
+/**
+ * The chat can use other providers than Claude: the model and effort become Claude's own (each
+ * provider keeps its pick), and each chat records the provider whose session it holds, so
+ * another provider never resumes it. A chat with a session so far holds Claude Code's.
+ */
+const aiProviders: Migration = {
+  async up(db) {
+    await db.schema.alterTable('chat_sessions').addColumn('provider', 'text').execute();
+    await db
+      .updateTable('chat_sessions')
+      .set({ provider: 'claude' })
+      .where('provider_session_id', 'is not', null)
+      .execute();
+    for (const key of ['model', 'effort']) {
+      await db
+        .updateTable('settings')
+        .set({ key: `${key}:claude` })
+        .where('key', '=', key)
+        .execute();
+    }
+  },
+};
+
 /** Every migration, by name; names sort in the order they run. */
 export const migrations: Record<string, Migration> = {
   '001_initial': initial,
+  '002_ai_providers': aiProviders,
 };

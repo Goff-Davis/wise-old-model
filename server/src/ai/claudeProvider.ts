@@ -12,6 +12,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { errorMessage } from '@wom/shared';
 import type { ChatProvider, ProviderEvent, ToolContext, ToolDef, TurnInput } from './provider.ts';
+import { mayRun, runTool, tooManyRounds } from './toolCalls.ts';
 
 /** The in-process MCP server the tools are on, and the prefix Claude Code gives their names. */
 const SERVER = 'osrs';
@@ -61,11 +62,8 @@ export function sdkToolsFor(
       def.description,
       def.input,
       async (args) => {
-        try {
-          return { content: [{ type: 'text', text: JSON.stringify(await def.run(args, ctx)) }] };
-        } catch (error) {
-          return { content: [{ type: 'text', text: errorMessage(error) }], isError: true };
-        }
+        const { text, isError } = await runTool(def, args, ctx);
+        return { content: [{ type: 'text', text }], ...(isError ? { isError } : {}) };
       },
       { annotations: { readOnlyHint: def.readOnly, destructiveHint: !def.readOnly } },
     ),
@@ -80,13 +78,28 @@ function resultError(
   if ('errors' in message && message.errors.length > 0) return message.errors.join('; ');
   switch (message.subtype) {
     case 'error_max_turns':
-      return `It used the most tool rounds allowed for one question (${settings.maxTurns}). Ask it to go on, or raise the limit in Settings.`;
+      return tooManyRounds(settings.maxTurns);
     case 'error_max_budget_usd':
       return `It reached the spending cap for one question ($${(settings.budgetUsd ?? 0).toFixed(2)}). Ask it to go on, or raise the cap in Settings.`;
     default:
       return `Claude Code stopped with an error (${message.subtype}).`;
   }
 }
+
+/**
+ * A message that starts a new session in a chat already under way (another AI answered its
+ * last turn, so there's no session of Claude's to resume): the chat so far, then the message.
+ */
+function withHistory(history: TurnInput['history'], message: string): string {
+  if (history.length === 0) return message;
+  const earlier = history
+    .map(({ role, text }) => `${role === 'user' ? 'The user' : 'You'}: ${text}`)
+    .join('\n\n');
+  return `Earlier in this chat (another AI may have answered):\n\n${earlier}\n\n---\n\n${message}`;
+}
+
+/** The keys kept out of Claude Code's environment, by their names in capitals. */
+const KEPT_OUT = new Set(['ANTHROPIC_API_KEY', 'OPENAI_COMPAT_API_KEY', 'GEMINI_API_KEY']);
 
 /** Where Claude Code finds an API key; any but these means it would bill a key, not the plan. */
 const PLAN_SIGN_IN = new Set(['none', 'oauth']);
@@ -165,7 +178,9 @@ function* eventsOf(
         inputTokens: message.usage.input_tokens,
         outputTokens: message.usage.output_tokens,
         cacheReadTokens: message.usage.cache_read_input_tokens,
-        costUsd: message.total_cost_usd,
+        // On the plan, what Claude Code works out it would have cost is never charged.
+        costUsd: settings.billing === 'plan' ? null : message.total_cost_usd,
+        billing: settings.billing,
       };
       if (message.subtype !== 'success') {
         yield errorEvent(resultError(message, settings), settings.billing);
@@ -190,12 +205,12 @@ export function createClaudeProvider(deps: {
   /**
    * Claude Code's environment: on the plan, its own sign-in, so an API key in the environment
    * is kept out (in any case: Windows' environment doesn't mind it); with an API key, the key
-   * from .env and the hour-long prompt cache.
+   * from .env and the hour-long prompt cache. The other AIs' keys from .env never go in.
    */
   const envFor = (billing: TurnInput['settings']['billing']) => {
     const env: Record<string, string | undefined> = { ...deps.env };
     for (const key of Object.keys(env)) {
-      if (key.toUpperCase() === 'ANTHROPIC_API_KEY') delete env[key];
+      if (KEPT_OUT.has(key.toUpperCase())) delete env[key];
     }
     if (billing === 'api_key') {
       Object.assign(env, { ANTHROPIC_API_KEY: deps.apiKey, CLAUDE_CODE_PROMPT_CACHE_TTL: '1h' });
@@ -228,6 +243,8 @@ export function createClaudeProvider(deps: {
   };
 
   return {
+    info: { id: 'claude', name: 'Claude', choosesBilling: true, defaultModel: null },
+
     /**
      * The models Claude Code offers this sign-in (or key), with each one's effort levels:
      * started as a turn would be, asked about itself, and closed, with no prompt ever sent.
@@ -280,21 +297,10 @@ export function createClaudeProvider(deps: {
           ours && toolName.startsWith(PREFIX)
             ? byName.get(toolName.slice(PREFIX.length))
             : undefined;
-        // A lookup runs unasked; a change is asked about by its summary.
-        if (def?.readOnly) return { behavior: 'allow', updatedInput: toolInput };
-        if (!def?.summary) {
-          return { behavior: 'deny', message: "That tool isn't available in this chat." };
-        }
-        let summary: string;
-        try {
-          summary = await def.summary(toolInput, input.toolContext);
-        } catch (error) {
-          // A change that can't be made isn't offered; the model reads why.
-          return { behavior: 'deny', message: errorMessage(error) };
-        }
-        return (await input.requestApproval({ toolName: def.name, summary }))
+        const may = await mayRun(def, toolInput, input.toolContext, input.requestApproval);
+        return may.allowed
           ? { behavior: 'allow', updatedInput: toolInput }
-          : { behavior: 'deny', message: 'The user declined this change.' };
+          : { behavior: 'deny', message: may.message };
       };
 
       const abortController = new AbortController();
@@ -328,7 +334,10 @@ export function createClaudeProvider(deps: {
       };
       const seen: Seen = { text: false, streamed: false, result: false };
       try {
-        for await (const message of deps.query({ prompt: input.message, options })) {
+        const prompt = input.providerSessionId
+          ? input.message
+          : withHistory(input.history, input.message);
+        for await (const message of deps.query({ prompt, options })) {
           if (
             settings.billing === 'plan' &&
             message.type === 'system' &&

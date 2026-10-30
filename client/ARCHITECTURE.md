@@ -15,7 +15,7 @@ The React app: a chat-first dashboard for one account at a time. See the [root A
 | `pages/` | One folder per page: `Overview`, `ThisWeek`, `Goals`, `BankGear`, `CollectionLog`, `Settings`; `pageList.ts` holds the menu order and URL ids |
 | `chat/` | `useChat.tsx` (the open account's chat and its streaming answer), `ChatColumn.tsx`, `Markdown.tsx` |
 | `data/` | `useFileCheck.ts`: in Automatic mode, checks the open account's Character Export files |
-| `settings/` | `useSettings.ts` (read and change settings, apply the theme, report the browser's time zone), `useModelChoice.ts` and `ModelOptions.tsx` (the model and effort pickers) |
+| `settings/` | `useSettings.ts` (read and change settings, apply the theme, report the browser's time zone), `useModelChoice.ts` and `ModelOptions.tsx` (the chosen AI's model and effort pickers) |
 | `theme/` | `tokens.css` (both themes' colors, fonts and form controls), `fonts.ts` |
 | `test/` | Test setup, `fakeApi.ts` (a stand-in for the server) and `renderApp.tsx` |
 
@@ -69,7 +69,7 @@ flowchart LR
 | Goals | Add goal and Suggest goals; active goals in your order (drag, or Alt+↑/↓ on the handle) with progress and what's still needed; Done with dates; Add goal as a dialog picking names from the account's own lists |
 | Bank and gear | The bank's value; one search across bank, seed vault, inventory and gear; worn gear in the equipment screen's grid; the 28-slot inventory with stack sizes as the game writes them; the priciest stacks |
 | Collection log | Totals and Temple's last sync; tabs like the in-game log; entries (complete ones in green) and the picked entry's items |
-| Settings | Accounts (rename, change type, delete after a question), Game data (RuneLite folder, Automatic or Manual and its interval), AI (billing, model, effort, limits), Display (theme, time zone), About (data folder, backups, `.env` settings, credits) |
+| Settings | Accounts (rename, change type, delete after a question), Game data (RuneLite folder, Automatic or Manual and its interval), AI (which AI answers, from those `.env` sets up, each other one saying what it needs; its model and effort; the most tool rounds; Claude's billing and spending cap), Display (theme, time zone), About (data folder, backups, `.env` settings with keys only as set or not, credits) |
 
 Each page gets all its data from one endpoint, already worked out by the server, and renders it.
 
@@ -90,7 +90,8 @@ stateDiagram-v2
 - `useChat(accountId)` holds the account's chat: the chat list, the open chat, its messages and the turn being answered. A message is posted with `fetch`, and its answer read as it streams (`readEvents` with the shared `parseSse`). While it streams, the answer is built from the events and shown as it will be stored; once done, the stored chat replaces it.
 - Pages ask the chat things through `useChatAsk()` (Suggest goals, Ask the AI for a plan), which also says why it can't yet ("The chat is answering."). Asking moves the focus into the chat, which closes the narrow window's panel so the answer shows.
 - **The column:** the account's name, New chat and Earlier chats (open, rename, delete); your messages with any note ("From Goals"); each answer's lookups as one line ("Looked at 4 things") that opens to each lookup with its icon; the answer's Markdown in the serif (`Markdown.tsx`: headings, lists, tables, bold, italics, code, and links that open in a new tab; HTML shown as text); Approve / Decline rows; problems with what to do; sources and token usage under each answer; and the message box (Enter sends, Shift+Enter for a new line) with the model and effort pickers and Stop.
-- The model and effort lists come from Claude Code through `GET /api/chat/models`, one list per billing (`useModelChoice`, shared with Settings → AI). Switching to a model without the current effort picks the nearest level it has.
+- The model and effort lists come from the chosen AI through `GET /api/chat/models?provider=&billing=`, one list per AI (Claude's per billing), so switching AI in Settings lists the new one's and shows the model and effort picked for it (`useModelChoice`, shared with Settings → AI). An AI with no model picked shows the one it answers with then. Switching to a model without the current effort picks the nearest level it has; a model with no effort setting has no effort picker.
+- A setup problem names the AI it came from ("Gemini isn't available yet", then what to do and what it said), and usage reads as Claude's billing has it ("8.2k tokens on your plan", "$0.04 with your API key") or, for another AI, its tokens and the cost when it gave one ("8.2k tokens ($0.03)").
 - After an answer that changed goals (it ran `add_goal` or `update_goal`, or its file check completed some), Goals and This week reload.
 
 ## Look and feel
@@ -116,6 +117,6 @@ stateDiagram-v2
 ## Testing
 
 - Component tests (Vitest with jsdom and Testing Library) cover pages and components with logic: streaming and approvals, goal progress, the pickers, settings.
-- `test/fakeApi.ts` stands in for the server: routes are keyed by method and path, settings are served and recorded, and any request a test didn't expect fails it. It also holds test data (`LUMBY_PETE`, `testOverview`, `testAbout`, `TEST_MODELS`, `minutesAgo`).
+- `test/fakeApi.ts` stands in for the server: routes are keyed by method and path, settings are served and recorded (each AI keeping its own model and effort, as on the server), and any request a test didn't expect fails it. It also holds test data (`LUMBY_PETE`, `testOverview`, `testAbout`, `TEST_MODELS`, `TEST_PROVIDERS`, `minutesAgo`).
 - `test/renderApp.tsx` renders the whole app at a path; tests use the app's own query client without retries.
 - jsdom can't check layout, so CSS-only changes are checked by eye.

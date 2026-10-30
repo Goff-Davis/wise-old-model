@@ -12,6 +12,11 @@ import {
   type GoalsView,
   type GoalWithProgress,
   type Overview,
+  PROVIDER_DEFAULTS,
+  PROVIDERS,
+  type ProviderId,
+  ProviderIdSchema,
+  type ProviderInfo,
   type Settings,
 } from '@wom/shared';
 import { onTestFinished, vi } from 'vitest';
@@ -30,10 +35,19 @@ export const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
  */
 export type FakeRoute = (request: { url: URL; body: unknown }) => unknown;
 
+/** The AIs as a .env setting up only Claude gives them. */
+export const TEST_PROVIDERS: ProviderInfo[] = ProviderIdSchema.options.map((id) => ({
+  id,
+  ...PROVIDERS[id],
+  configured: id === 'claude',
+  choosesBilling: id === 'claude',
+  setup: id === 'claude' ? null : PROVIDERS[id].setup,
+}));
+
 /**
  * What every open account asks for by itself, answered unless `routes` answers it: its file
- * check (Automatic mode) finds nothing changed, and its chat has no earlier chats and no models
- * to pick from. Each is its method and a pattern for its path.
+ * check (Automatic mode) finds nothing changed, its chat has no earlier chats and no models to
+ * pick from, and only Claude is set up. Each is its method and a pattern for its path.
  */
 const BACKGROUND: [method: string, path: RegExp, answer: unknown][] = [
   [
@@ -42,21 +56,24 @@ const BACKGROUND: [method: string, path: RegExp, answer: unknown][] = [
     { changed: [], missing: [], errors: [], goalsCompleted: 0 },
   ],
   ['GET', /^\/api\/accounts\/\d+\/chats$/, []],
-  ['GET', /^\/api\/chat\/models$/, { models: [], error: null }],
+  ['GET', /^\/api\/chat\/models$/, { models: [], defaultModel: null, error: null }],
+  ['GET', /^\/api\/chat\/providers$/, TEST_PROVIDERS],
 ];
 
 /**
  * Stands in for the server: `routes`, keyed by method and path without the query ("GET
  * /api/accounts"), and the settings routes, which every page uses, recording every change sent
  * to them (and refusing each with `refuse`, when given). Settings start at the defaults plus
- * `settings`, with this browser's zone already saved, so the app has nothing to report. What an
- * open account asks for by itself is answered as BACKGROUND says. Any other request fails the
- * test once it finishes: inside the app it would only turn into an error message.
+ * `settings`, with this browser's zone already saved, so the app has nothing to report; each
+ * provider keeps its own model and effort, as on the server. What an open account asks for by
+ * itself is answered as BACKGROUND says. Any other request fails the test once it finishes:
+ * inside the app it would only turn into an error message.
  */
 export function fakeApi(
   opts: { settings?: Partial<Settings>; refuse?: string; routes?: Record<string, FakeRoute> } = {},
 ): unknown[] {
   let saved: Settings = { ...defaultSettings, detectedTimeZone: browserZone, ...opts.settings };
+  const perProvider = new Map<ProviderId, Pick<Settings, 'model' | 'effort'>>();
   const patches: unknown[] = [];
   const unexpected: string[] = [];
   vi.stubGlobal(
@@ -81,7 +98,16 @@ export function fakeApi(
       if (method === 'PATCH') {
         patches.push(body);
         if (opts.refuse) return Response.json({ error: opts.refuse }, { status: 400 });
-        saved = { ...saved, ...(body as Partial<Settings>) };
+        const patch = body as Partial<Settings>;
+        // Switching AI brings back its own model and effort, before the patch's own.
+        if (patch.provider && patch.provider !== saved.provider) {
+          perProvider.set(saved.provider, { model: saved.model, effort: saved.effort });
+          saved = {
+            ...saved,
+            ...(perProvider.get(patch.provider) ?? PROVIDER_DEFAULTS[patch.provider]),
+          };
+        }
+        saved = { ...saved, ...patch };
       }
       return Response.json(saved);
     }),
@@ -155,6 +181,12 @@ export function testAbout(changes: Partial<About> = {}): About {
       DATA_DIR: null,
       RUNELITE_DIR: '~/.runelite',
       ANTHROPIC_API_KEY: 'not set',
+      OPENAI_COMPAT_BASE_URL: null,
+      OPENAI_COMPAT_API_KEY: 'not set',
+      OPENAI_COMPAT_NAME: null,
+      OPENAI_COMPAT_MODEL: null,
+      GEMINI_API_KEY: 'not set',
+      GEMINI_MODEL: null,
     },
     ...changes,
   };

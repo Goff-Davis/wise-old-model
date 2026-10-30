@@ -4,16 +4,24 @@ import {
   ChatTitleSchema,
   formatSse,
   NewChatMessageSchema,
+  type ProviderInfo,
   SettingsSchema,
 } from '@wom/shared';
 import { Router } from 'express';
 import type { Kysely } from 'kysely';
+import { z } from 'zod';
 import type { ChatService } from '../ai/chatService.ts';
 import type { DB } from '../db/schema.ts';
 import { parseInput } from '../http/errors.ts';
 import { findAccount } from '../services/accounts.ts';
 
-export function chatRoutes(db: Kysely<DB>, chats: ChatService): Router {
+/** What the model list may be asked about: a provider, and Claude's billing. */
+const ModelsQuerySchema = z.object({
+  provider: SettingsSchema.shape.provider.optional(),
+  billing: SettingsSchema.shape.billing.optional(),
+});
+
+export function chatRoutes(db: Kysely<DB>, chats: ChatService, providers: ProviderInfo[]): Router {
   const router = Router();
 
   router.get('/accounts/:id/chats', async (req, res) => {
@@ -67,10 +75,14 @@ export function chatRoutes(db: Kysely<DB>, chats: ChatService): Router {
     res.status(204).end();
   });
 
-  // The models depend on the billing: the one asked about, or the one set.
+  // Every AI, set up or not, for Settings → AI (never a key).
+  router.get('/chat/providers', (_req, res) => {
+    res.json(providers);
+  });
+
+  // The models depend on the provider and, for Claude, the billing: those asked about, or set.
   router.get('/chat/models', async (req, res) => {
-    const billing = parseInput(SettingsSchema.shape.billing.optional(), req.query.billing);
-    res.json(await chats.listModels(billing));
+    res.json(await chats.listModels(parseInput(ModelsQuerySchema, req.query)));
   });
 
   router.post('/chats/:id/stop', async (req, res) => {

@@ -2,6 +2,7 @@ import {
   ChatMessageSchema,
   ChatModelsAnswerSchema,
   ChatSessionSchema,
+  ProviderInfoSchema,
   type Settings,
 } from '@wom/shared';
 import { z } from 'zod';
@@ -17,7 +18,13 @@ export function messagesQuery(chatId: string) {
   return apiQuery(`/api/chats/${chatId}/messages`, z.array(ChatMessageSchema));
 }
 
-/** The models the chat can use with `billing`, as its provider lists them. */
-export function chatModelsQuery(billing: Settings['billing']) {
-  return apiQuery(`/api/chat/models?billing=${billing}`, ChatModelsAnswerSchema);
+/** The models `provider` offers (Claude's with `billing`), as it lists them. */
+export function chatModelsQuery(provider: Settings['provider'], billing: Settings['billing']) {
+  return apiQuery(
+    `/api/chat/models?provider=${provider}&billing=${billing}`,
+    ChatModelsAnswerSchema,
+  );
 }
+
+/** Every AI the chat can use, set up in .env or not. */
+export const chatProvidersQuery = apiQuery('/api/chat/providers', z.array(ProviderInfoSchema));

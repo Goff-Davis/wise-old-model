@@ -15,6 +15,17 @@ const onLinux = (env: Record<string, string> = {}) =>
 const onWindows = (env: Record<string, string> = {}) =>
   loadConfig({ ...contact, ...env }, 'win32', 'C:\\Users\\u');
 
+/** The non-secret settings, none of them set. */
+const UNSET = {
+  PORT: null,
+  DATA_DIR: null,
+  RUNELITE_DIR: null,
+  OPENAI_COMPAT_BASE_URL: null,
+  OPENAI_COMPAT_NAME: null,
+  OPENAI_COMPAT_MODEL: null,
+  GEMINI_MODEL: null,
+};
+
 describe('loadConfig', () => {
   it('requires CONTACT', () => {
     expect(() => loadConfig({}, 'linux', '/home/u')).toThrow(/CONTACT/);
@@ -22,17 +33,34 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ CONTACT: '   ' }, 'linux', '/home/u')).toThrow(/CONTACT/);
   });
 
-  it('keeps PORT, DATA_DIR and RUNELITE_DIR as they were set, for the About section', () => {
-    expect(onLinux().env).toEqual({ PORT: null, DATA_DIR: null, RUNELITE_DIR: null });
+  it('keeps the settings that are not secrets as they were set, for the About section', () => {
+    expect(onLinux().env).toEqual(UNSET);
     const config = onLinux({ PORT: ' 4800 ', DATA_DIR: '~/wom', RUNELITE_DIR: '/mnt/c/rl' });
-    expect(config.env).toEqual({ PORT: '4800', DATA_DIR: '~/wom', RUNELITE_DIR: '/mnt/c/rl' });
+    expect(config.env).toEqual({
+      ...UNSET,
+      PORT: '4800',
+      DATA_DIR: '~/wom',
+      RUNELITE_DIR: '/mnt/c/rl',
+    });
+    expect(
+      onLinux({
+        OPENAI_COMPAT_BASE_URL: 'http://localhost:11434/v1',
+        OPENAI_COMPAT_NAME: 'Ollama',
+        OPENAI_COMPAT_MODEL: 'qwen3:14b',
+        OPENAI_COMPAT_API_KEY: 'sk-or-secret',
+        GEMINI_API_KEY: 'AIza-secret',
+        GEMINI_MODEL: 'gemini-3-flash',
+      }).env,
+    ).toEqual({
+      ...UNSET,
+      OPENAI_COMPAT_BASE_URL: 'http://localhost:11434/v1',
+      OPENAI_COMPAT_NAME: 'Ollama',
+      OPENAI_COMPAT_MODEL: 'qwen3:14b',
+      GEMINI_MODEL: 'gemini-3-flash',
+    });
     expect(config.dataDir).toBe('/home/u/wom');
     // Empty counts as not set.
-    expect(onLinux({ PORT: '', DATA_DIR: ' ', RUNELITE_DIR: '' }).env).toEqual({
-      PORT: null,
-      DATA_DIR: null,
-      RUNELITE_DIR: null,
-    });
+    expect(onLinux({ PORT: '', DATA_DIR: ' ', RUNELITE_DIR: '' }).env).toEqual(UNSET);
   });
 
   it('defaults on Linux', () => {
@@ -117,11 +145,22 @@ describe('loadConfig', () => {
   });
 
   it('treats empty values like unset ones, as .env.example leaves them', () => {
-    const config = onLinux({ PORT: '', DATA_DIR: '', RUNELITE_DIR: '', ANTHROPIC_API_KEY: '' });
+    const config = onLinux({
+      PORT: '',
+      DATA_DIR: '',
+      RUNELITE_DIR: '',
+      ANTHROPIC_API_KEY: '',
+      OPENAI_COMPAT_BASE_URL: '',
+      OPENAI_COMPAT_API_KEY: '',
+      GEMINI_API_KEY: '',
+      GEMINI_MODEL: '',
+    });
     expect(config.port).toBe(4747);
     expect(config.dataDir).toBe('/home/u/.local/share/wise-old-model');
     expect(config.runeliteDir).toBe('/home/u/.runelite');
     expect(config.anthropicApiKey).toBeNull();
+    expect(config.openAiCompat).toBeNull();
+    expect(config.gemini).toBeNull();
   });
 
   it('rejects a bad PORT', () => {
@@ -135,6 +174,83 @@ describe('loadConfig', () => {
     expect(config.anthropicApiKey).toBe('sk-test');
     expect(config.isDev).toBe(true);
     expect(onLinux().isDev).toBe(false);
+  });
+
+  it('sets up an OpenAI-compatible API when its base URL is set, with its key, name and model', () => {
+    expect(onLinux().openAiCompat).toBeNull();
+    expect(onLinux({ OPENAI_COMPAT_BASE_URL: 'http://localhost:11434/v1/' }).openAiCompat).toEqual({
+      baseUrl: 'http://localhost:11434/v1',
+      apiKey: null,
+      name: 'OpenAI-compatible',
+      model: null,
+    });
+    expect(
+      onLinux({
+        OPENAI_COMPAT_BASE_URL: 'https://openrouter.ai/api/v1',
+        OPENAI_COMPAT_API_KEY: 'sk-or-v1-abc',
+        OPENAI_COMPAT_NAME: ' OpenRouter ',
+        OPENAI_COMPAT_MODEL: 'deepseek/deepseek-v4',
+      }).openAiCompat,
+    ).toEqual({
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-or-v1-abc',
+      name: 'OpenRouter',
+      model: 'deepseek/deepseek-v4',
+    });
+  });
+
+  it("refuses an OpenAI-compatible base URL that isn't a web address, or settings without one", () => {
+    for (const url of ['localhost:11434/v1', 'ftp://example.com/v1', 'not a url']) {
+      expect(() => onLinux({ OPENAI_COMPAT_BASE_URL: url })).toThrow(/OPENAI_COMPAT_BASE_URL/);
+    }
+    for (const key of ['OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_NAME', 'OPENAI_COMPAT_MODEL']) {
+      expect(() => onLinux({ [key]: 'x' })).toThrow(
+        new RegExp(`${key} is set, but OPENAI_COMPAT_BASE_URL isn't`),
+      );
+    }
+    expect(() =>
+      onLinux({
+        OPENAI_COMPAT_BASE_URL: 'http://localhost:1234/v1',
+        OPENAI_COMPAT_NAME: 'x'.repeat(41),
+      }),
+    ).toThrow(/OPENAI_COMPAT_NAME can be at most 40 characters/);
+    // A key in the address would be shown in Settings, and fetch refuses one anyway.
+    expect(() =>
+      onLinux({ OPENAI_COMPAT_BASE_URL: 'https://me:sk-secret@openrouter.ai/api/v1' }),
+    ).toThrow(/OPENAI_COMPAT_BASE_URL can't hold a user name or password/);
+    expect(() => onLinux({ OPENAI_COMPAT_BASE_URL: 'https://key@openrouter.ai/api/v1' })).toThrow(
+      /OPENAI_COMPAT_API_KEY/,
+    );
+  });
+
+  it('accepts a local address by name, IPv4 or IPv6, and a name of up to 40 characters', () => {
+    for (const url of [
+      'http://127.0.0.1:1234/v1',
+      'http://[::1]:11434/v1',
+      'http://lmstudio.local/v1',
+    ]) {
+      expect(onLinux({ OPENAI_COMPAT_BASE_URL: url }).openAiCompat?.baseUrl).toBe(url);
+    }
+    const name = 'x'.repeat(40);
+    expect(
+      onLinux({ OPENAI_COMPAT_BASE_URL: 'http://127.0.0.1:1234/v1', OPENAI_COMPAT_NAME: name })
+        .openAiCompat?.name,
+    ).toBe(name);
+  });
+
+  it('sets up Gemini when its key is set, refusing a model without a key', () => {
+    expect(onLinux().gemini).toBeNull();
+    expect(onLinux({ GEMINI_API_KEY: 'AIza-test' }).gemini).toEqual({
+      apiKey: 'AIza-test',
+      model: null,
+    });
+    expect(onLinux({ GEMINI_API_KEY: 'AIza-test', GEMINI_MODEL: 'gemini-3-pro' }).gemini).toEqual({
+      apiKey: 'AIza-test',
+      model: 'gemini-3-pro',
+    });
+    expect(() => onLinux({ GEMINI_MODEL: 'gemini-3-pro' })).toThrow(
+      /GEMINI_MODEL is set, but GEMINI_API_KEY isn't/,
+    );
   });
 
   it('reads the version from the root package.json', () => {

@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Never open the real data folder** (`~/.local/share/wise-old-model`, or `%LOCALAPPDATA%\wise-old-model` on Windows): not its database, backups or icons, not even to copy or measure. Manual and dev runs use a temp `DATA_DIR`, a temp `RUNELITE_DIR` and a spare `PORT`.
 - **Never read or print `.env`.**
 - Make live requests to Wise Old Man, Temple, the hiscores or the wiki only when the task needs them, one at a time. Tests use the captured fixtures in `server/test/fixtures`.
-- Ask before anything that uses the user's Claude plan (a real chat turn).
+- Ask before anything that uses the user's Claude plan or any AI provider's API (a real chat turn, a model list from a live API).
 - Subagents don't inherit these rules: paste them into every subagent prompt.
 
 ## Where things are documented
@@ -23,7 +23,7 @@ Built and in use. Start here, then read what the task touches:
 
 - `README.md`: what the app does (including the four questions the chat must answer well), what's out of scope, installation, configuration and usage.
 - `ARCHITECTURE.md`: the system as a whole, with diagrams: packages, how data flows in and out, the chat turn, key decisions and why, platforms, security.
-- `server/ARCHITECTURE.md`: the server's layers and folders, the outbound requester and each data source, freshness and caching, Character Export, the database schema, page services, goals, the AI layer (chat service, Claude provider, tools, instructions) and the API routes.
+- `server/ARCHITECTURE.md`: the server's layers and folders, the outbound requester and each data source, freshness and caching, Character Export, the database schema, page services, goals, the AI layer (chat service, the providers and their tool loop, tools, instructions) and the API routes.
 - `client/ARCHITECTURE.md`: routes, layout, the data layer (query keys, invalidation, the file check), pages, the chat, the look and its tokens, testing.
 - `shared/ARCHITECTURE.md`: the shared schemas and helpers, by module.
 
@@ -31,18 +31,18 @@ The docs describe the code as it is; keep them that way as the code changes.
 
 ## What this is
 
-A personal, single-user, locally-run OSRS account advisor: an Express + TypeScript backend aggregates data from OSRS Hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki (MediaWiki + prices APIs) and the JSON files written by the Character Export RuneLite plugin (Plugin Hub) into SQLite (Node's built-in `node:sqlite` through Kysely), and a React (Vite) frontend shows a per-account dashboard plus a chat panel backed by a remote LLM with tool calling. Top-level split: `/server`, `/client` and `/shared` (npm workspaces).
+A personal, single-user, locally-run OSRS account advisor: an Express + TypeScript backend aggregates data from OSRS Hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki (MediaWiki + prices APIs) and the JSON files written by the Character Export RuneLite plugin (Plugin Hub) into SQLite (Node's built-in `node:sqlite` through Kysely), and a React (Vite) frontend shows a per-account dashboard plus a chat panel backed by an LLM of the user's choice (Claude, any OpenAI-compatible API, or Gemini) with tool calling. Top-level split: `/server`, `/client` and `/shared` (npm workspaces).
 
-The backend exists for two reasons: Jagex hiscores send no CORS headers, and the LLM API key must never reach the browser.
+The backend exists for two reasons: Jagex hiscores send no CORS headers, and the LLM API keys must never reach the browser.
 
 ## Design rules
 
-- **LLM provider is behind an interface.** The user will use Claude but wants it swappable, so nothing outside that module should depend on a provider SDK.
+- **LLM provider is behind an interface.** Claude is the default; an OpenAI-compatible API and Gemini sit behind the same `ChatProvider` interface, all set up from `.env` and picked in Settings → AI without a restart. Nothing outside a provider's own module may depend on its SDK (Settings' list of AIs lives in the SDK-free `providerInfo.ts`). Each SDK client gets `.env`'s address and key explicitly, never the shell's environment.
 - **Claude runs through the Claude Agent SDK** so usage can bill to the user's Max plan. Never read, copy or store the Claude sign-in token or call the API with it; Claude Code handles sign-in itself (Anthropic's terms forbid apps from handling Claude.ai credentials). An API key is the optional alternative. See `server/ARCHITECTURE.md` → The AI layer.
 - **Do math in code, not in the model.** XP remaining, requirement checks, costs, and time estimates are computed in code and exposed as tools; the model only interprets results.
-- **Keep tool outputs small**: summarize the bank, return only the relevant wiki section. Everything a tool returns is sent to the remote LLM provider, so tools must not expose anything beyond account/game data.
+- **Keep tool outputs small**: summarize the bank, return only the relevant wiki section. Everything a tool returns is sent to the LLM provider, so tools must not expose anything beyond account/game data.
 - Advice must respect account type (e.g. ironmen can't use the GE); the system prompt carries the selected account's RSN and type. Answers cite wiki pages as links (wiki content is CC BY-NC-SA 3.0) and say when data is missing or stale. Refuse botting/RWT topics.
-- **All outbound HTTP goes through one shared request handler** that sets a descriptive `User-Agent` with the contact info from `.env` (the OSRS Wiki blocks generic UAs), sends one request at a time per site, obeys Wise Old Man's `RateLimit-*` headers (its 20/min, 500/h and 3,000/day per-IP limits are shared with the user's WOM RuneLite plugin), and retries 429/5xx with backoff. Only Refresh requests a WOM player update, and only when WOM's data is over an hour old. No background fetching or scheduled jobs. Details in `server/ARCHITECTURE.md` → Talking to other sites.
+- **All outbound HTTP to data sources goes through one shared request handler** (the AI providers are the exception: they use their own SDKs, as their answers stream past the handler's 20 s timeout and per-site queue) that sets a descriptive `User-Agent` with the contact info from `.env` (the OSRS Wiki blocks generic UAs), sends one request at a time per site, obeys Wise Old Man's `RateLimit-*` headers (its 20/min, 500/h and 3,000/day per-IP limits are shared with the user's WOM RuneLite plugin), and retries 429/5xx with backoff. Only Refresh requests a WOM player update, and only when WOM's data is over an hour old. No background fetching or scheduled jobs. Details in `server/ARCHITECTURE.md` → Talking to other sites.
 - **Use the wiki prices API v2** (`/api/v2/osrs`) with bulk requests, never one request per item.
 - **Store raw API responses** as snapshots (only when the data changed) so parsers can be improved later without losing history.
 - **Never hard-code the hiscores skill/boss list**; derive it from the response (new skills like Sailing get added). Hiscores use a different table per game mode (`hiscore_oldschool_ironman`, etc.).

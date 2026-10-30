@@ -236,9 +236,19 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     dataDir,
     runeliteDir: path.join(dataDir, '.runelite'),
     anthropicApiKey: null,
+    openAiCompat: null,
+    gemini: null,
     isDev: false,
     version: 'test-version',
-    env: { PORT: null, DATA_DIR: null, RUNELITE_DIR: null },
+    env: {
+      PORT: null,
+      DATA_DIR: null,
+      RUNELITE_DIR: null,
+      OPENAI_COMPAT_BASE_URL: null,
+      OPENAI_COMPAT_NAME: null,
+      OPENAI_COMPAT_MODEL: null,
+      GEMINI_MODEL: null,
+    },
     ...overrides,
   };
 }

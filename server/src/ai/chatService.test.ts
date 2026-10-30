@@ -16,7 +16,7 @@ import {
 } from '../../test/helpers.ts';
 import { updateSettings } from '../settings/settingsRepo.ts';
 import { createChatService } from './chatService.ts';
-import { createFakeProvider, type FakeStep } from './fakeProvider.ts';
+import { CLAUDE_INFO, createFakeProvider, type FakeStep } from './fakeProvider.ts';
 import { buildSystemPrompt, composeMessage } from './instructions.ts';
 import type { ChatProvider, ToolDef } from './provider.ts';
 import { defineTool } from './tools/define.ts';
@@ -46,7 +46,7 @@ async function setup(
   const row = await insertAccount(db);
   const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
   const fake = createFakeProvider(script);
-  const chats = createChatService({ ...deps, provider: provider ?? fake.provider, tools });
+  const chats = createChatService({ ...deps, providers: [provider ?? fake.provider], tools });
   const session = await chats.newChat(row);
   const send = async (text = 'What should I do next?') => {
     const events: ChatEvent[] = [];
@@ -206,15 +206,20 @@ describe('chat service', () => {
           : { type: 'throw', message: 'Claude Code crashed' },
     ]);
     expect((await send()).filter((event) => event.type === 'error')).toEqual([
-      { type: 'error', message: 'Not logged in', fix },
+      { type: 'error', message: 'Not logged in', fix, provider: 'Claude' },
     ]);
     expect((await send()).filter((event) => event.type === 'error')).toEqual([
-      { type: 'error', message: 'Overloaded', fix: null },
+      { type: 'error', message: 'Overloaded', fix: null, provider: 'Claude' },
     ]);
     // A provider that fails outright ends the turn the same way.
     const events = await send();
     expect(events.map((event) => event.type)).toEqual(['error', 'done']);
-    expect(events[0]).toEqual({ type: 'error', message: 'Claude Code crashed', fix: null });
+    expect(events[0]).toEqual({
+      type: 'error',
+      message: 'Claude Code crashed',
+      fix: null,
+      provider: 'Claude',
+    });
     expect((await chats.listMessages(session.id))[1]).toMatchObject({
       error: { message: 'Not logged in', fix },
     });
@@ -262,22 +267,19 @@ describe('chat service', () => {
     expect((await send()).some((event) => event.type === 'files')).toBe(false);
   });
 
-  it('gives the tokens used, with the cost only when billed to an API key', async () => {
-    const usage = {
-      type: 'usage',
-      inputTokens: 1200,
-      outputTokens: 800,
-      cacheReadTokens: 6200,
-      costUsd: 0.04,
-    } as const;
-    const { db, chats, session, send } = await setup([usage]);
+  it('stores the usage as the provider gives it: its tokens, billing and any cost', async () => {
+    const usage = { type: 'usage', inputTokens: 1200, outputTokens: 800, cacheReadTokens: 6200 };
+    const { chats, session, send } = await setup((turn) => [
+      turn === 0
+        ? { ...usage, type: 'usage', costUsd: null, billing: 'plan' }
+        : { ...usage, type: 'usage', costUsd: 0.04, billing: 'api_key' },
+    ]);
     expect((await send()).find((event) => event.type === 'usage')).toEqual({
       type: 'usage',
       tokens: 8200,
       costUsd: null,
       billing: 'plan',
     });
-    await updateSettings(db, { billing: 'api_key' });
     expect((await send()).find((event) => event.type === 'usage')).toEqual({
       type: 'usage',
       tokens: 8200,
@@ -361,6 +363,7 @@ describe('chat service', () => {
   it('declines a change still waiting when the provider fails, on the page and in the answer', async () => {
     const asked: Promise<boolean>[] = [];
     const provider: ChatProvider = {
+      info: CLAUDE_INFO,
       async *runTurn(input) {
         asked.push(
           input.requestApproval({
@@ -392,6 +395,7 @@ describe('chat service', () => {
   it("closes the provider's stream when the page can't take an event", async () => {
     let closed = false;
     const provider: ChatProvider = {
+      info: CLAUDE_INFO,
       async *runTurn() {
         try {
           yield { type: 'text', delta: 'One' };
@@ -413,13 +417,19 @@ describe('chat service', () => {
 
   it('turns a provider that fails at once into an answer with the error', async () => {
     const provider: ChatProvider = {
+      info: CLAUDE_INFO,
       runTurn() {
         throw new Error('Not logged in · Please run /login');
       },
     };
     const { chats, session, send } = await setup([], [], provider);
     expect(await send()).toEqual([
-      { type: 'error', message: 'Not logged in · Please run /login', fix: null },
+      {
+        type: 'error',
+        message: 'Not logged in · Please run /login',
+        fix: null,
+        provider: 'Claude',
+      },
       { type: 'done', messageId: expect.any(Number) },
     ]);
     expect(await chats.listMessages(session.id)).toMatchObject([
@@ -482,6 +492,17 @@ describe('chat service', () => {
         created_at: '2026-10-27T12:00:00.000Z',
       })
       .execute();
+    // One stored before the provider was kept with its error.
+    await db
+      .insertInto('chat_messages')
+      .values({
+        session_id: session.id,
+        role: 'assistant',
+        content: JSON.stringify({ text: '', error: { message: 'Not logged in', fix: 'Sign in.' } }),
+        usage: JSON.stringify({ tokens: 10, costUsd: null, billing: 'plan' }),
+        created_at: '2026-10-27T12:01:00.000Z',
+      })
+      .execute();
     expect(await chats.listMessages(session.id)).toMatchObject([
       {
         text: 'An old answer.',
@@ -490,6 +511,10 @@ describe('chat service', () => {
         sources: [],
         error: null,
         stopped: false,
+      },
+      {
+        error: { message: 'Not logged in', fix: 'Sign in.', provider: null },
+        usage: { tokens: 10, costUsd: null, billing: 'plan' },
       },
     ]);
   });
@@ -510,17 +535,17 @@ describe('chat service', () => {
     let now = new Date('2026-10-29T12:00:00.000Z');
     const db = await testDb();
     const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
-    const provider: ChatProvider = { runTurn: createFakeProvider([]).provider.runTurn, models };
-    const chats = createChatService({ ...deps, provider, tools: [], now: () => now });
-    expect(await chats.listModels()).toEqual({ models: [opus], error: null });
-    expect(await chats.listModels()).toEqual({ models: [opus], error: null });
+    const provider: ChatProvider = { ...createFakeProvider([]).provider, models };
+    const chats = createChatService({ ...deps, providers: [provider], tools: [], now: () => now });
+    expect(await chats.listModels()).toEqual({ models: [opus], defaultModel: 'opus', error: null });
+    expect(await chats.listModels()).toEqual({ models: [opus], defaultModel: 'opus', error: null });
     expect(models).toHaveBeenCalledTimes(1);
     // Each billing has its own list.
     await updateSettings(db, { billing: 'api_key' });
     expect((await chats.listModels()).models[0]?.id).toBe('claude-opus-5-5');
     expect(models).toHaveBeenLastCalledWith('api_key');
     // A billing asked about by name is listed whatever the setting, from the same lists.
-    expect((await chats.listModels('plan')).models).toEqual([opus]);
+    expect((await chats.listModels({ billing: 'plan' })).models).toEqual([opus]);
     expect(models).toHaveBeenCalledTimes(2);
     // An hour on, it's asked again; a failure says why, and isn't kept.
     await updateSettings(db, { billing: 'plan' });
@@ -528,16 +553,328 @@ describe('chat service', () => {
     fail = true;
     expect(await chats.listModels()).toEqual({
       models: [],
+      defaultModel: null,
       error: 'Not logged in · Please run /login',
     });
     fail = false;
-    expect(await chats.listModels()).toEqual({ models: [opus], error: null });
+    expect(await chats.listModels()).toEqual({ models: [opus], defaultModel: 'opus', error: null });
     // A provider that can't list its models has none to offer.
     const plain = createChatService({
       ...deps,
-      provider: createFakeProvider([]).provider,
+      providers: [createFakeProvider([]).provider],
       tools: [],
     });
-    expect(await plain.listModels()).toEqual({ models: [], error: null });
+    expect(await plain.listModels()).toEqual({ models: [], defaultModel: null, error: null });
+  });
+
+  it("answers with the AI Settings picks, using its model; one that isn't set up says what to add", async () => {
+    const db = await testDb();
+    const row = await insertAccount(db);
+    const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
+    const claude = createFakeProvider([{ type: 'text', delta: 'From Claude.' }]);
+    const ollama = createFakeProvider([{ type: 'text', delta: 'From Ollama.' }], {
+      id: 'openai',
+      name: 'Ollama',
+      choosesBilling: false,
+    });
+    const chats = createChatService({
+      ...deps,
+      providers: [claude.provider, ollama.provider],
+      tools: [],
+    });
+    const session = await chats.newChat(row);
+    const send = async () => {
+      const events: ChatEvent[] = [];
+      await chats.sendMessage(session.id, 'Hi', (event) => events.push(event));
+      return events;
+    };
+    await updateSettings(db, { provider: 'openai', model: 'qwen3:14b' });
+    expect((await send()).filter((event) => event.type === 'text')).toEqual([
+      { type: 'text', delta: 'From Ollama.' },
+    ]);
+    expect(ollama.turns[0]?.settings.model).toBe('qwen3:14b');
+    expect(claude.turns).toEqual([]);
+    // Saved before .env changed, say: the turn says what's missing.
+    await updateSettings(db, { provider: 'gemini' });
+    expect((await send()).filter((event) => event.type === 'error')).toEqual([
+      {
+        type: 'error',
+        message:
+          "Gemini isn't set up. Set GEMINI_API_KEY in .env, then restart Wise Old Model. Or pick another AI in Settings → AI.",
+        fix: null,
+        provider: 'Gemini',
+      },
+    ]);
+  });
+
+  it('sends the chat so far: each answered question and its answer, the latest within the limits', async () => {
+    const { chats, session, fake, send } = await setup((turn) =>
+      turn === 1
+        ? [{ type: 'error', message: 'Overloaded' }]
+        : [{ type: 'text', delta: turn === 2 ? 'x'.repeat(30_000) : ` Answer ${turn}. ` }],
+    );
+    await send('Question 0');
+    await send('Question 1');
+    expect(fake.turns[1]?.history).toEqual([
+      { role: 'user', text: 'Question 0' },
+      { role: 'assistant', text: 'Answer 0.' },
+    ]);
+    // Question 1 got no answer, so it's left out with it.
+    await send('Question 2');
+    expect(fake.turns[2]?.history.map((message) => message.text)).toEqual([
+      'Question 0',
+      'Answer 0.',
+    ]);
+    await send('Question 3');
+    // Answer 2 is long: with it, Answer 0's exchange is over 24,000 characters.
+    expect(fake.turns[3]?.history.map((message) => message.text.slice(0, 10))).toEqual([
+      'Question 2',
+      'xxxxxxxxxx',
+    ]);
+    // The newest exchange alone over the limit is cut short, not left out.
+    const cut = fake.turns[3]?.history[1]?.text ?? '';
+    expect(fake.turns[3]?.history[0]?.text.length).toBe(10);
+    expect(cut.length).toBe(24_000 - 'Question 2'.length);
+    expect(cut.endsWith('…')).toBe(true);
+    for (let turn = 4; turn < 16; turn++) await send(`Question ${turn}`);
+    const history = fake.turns[15]?.history ?? [];
+    expect(history).toHaveLength(20);
+    expect(history[0]).toEqual({ role: 'user', text: 'Question 5' });
+    expect(history.at(-1)).toEqual({ role: 'assistant', text: 'Answer 14.' });
+    expect((await chats.listMessages(session.id)).length).toBe(32);
+  });
+
+  it("resumes a provider's session only when the chat's last turn was its own", async () => {
+    const db = await testDb();
+    const row = await insertAccount(db);
+    const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
+    let sessions = 0;
+    const claude = createFakeProvider(() => [
+      { type: 'session', providerSessionId: `claude-${++sessions}` },
+      { type: 'text', delta: 'Claude here.' },
+    ]);
+    const gemini = createFakeProvider([{ type: 'text', delta: 'Gemini here.' }], {
+      id: 'gemini',
+      name: 'Gemini',
+      choosesBilling: false,
+      defaultModel: 'gemini-3-flash',
+    });
+    const chats = createChatService({
+      ...deps,
+      providers: [claude.provider, gemini.provider],
+      tools: [],
+    });
+    const session = await chats.newChat(row);
+    const send = (text: string) => chats.sendMessage(session.id, text, () => {});
+    const held = () =>
+      db
+        .selectFrom('chat_sessions')
+        .select(['provider', 'provider_session_id'])
+        .executeTakeFirstOrThrow();
+    await send('One');
+    await send('Two');
+    expect(claude.turns.map((turn) => turn.providerSessionId)).toEqual([null, 'claude-1']);
+    expect(await held()).toEqual({ provider: 'claude', provider_session_id: 'claude-2' });
+    await updateSettings(db, { provider: 'gemini' });
+    await send('Three');
+    expect(gemini.turns[0]?.providerSessionId).toBeNull();
+    expect(gemini.turns[0]?.history.map((message) => message.text)).toEqual([
+      'One',
+      'Claude here.',
+      'Two',
+      'Claude here.',
+    ]);
+    // Claude's session misses Gemini's answer, so it's let go.
+    expect(await held()).toEqual({ provider: null, provider_session_id: null });
+    await updateSettings(db, { provider: 'claude' });
+    await send('Four');
+    await send('Five');
+    expect(claude.turns.map((turn) => turn.providerSessionId)).toEqual([
+      null,
+      'claude-1',
+      null,
+      'claude-3',
+    ]);
+    expect(claude.turns[2]?.history.at(-1)).toEqual({ role: 'assistant', text: 'Gemini here.' });
+    // A turn that resumes a session isn't sent the chat so far: the session has it.
+    expect(claude.turns[3]?.history).toEqual([]);
+  });
+
+  it('keeps the session when another AI answered nothing, so nothing is missing from it', async () => {
+    const db = await testDb();
+    const row = await insertAccount(db);
+    const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
+    const claude = createFakeProvider([
+      { type: 'session', providerSessionId: 'claude-1' },
+      { type: 'text', delta: 'Claude here.' },
+    ]);
+    const gemini = createFakeProvider([{ type: 'error', message: 'API key not valid.' }], {
+      id: 'gemini',
+      name: 'Gemini',
+      choosesBilling: false,
+      defaultModel: 'gemini-3-flash',
+    });
+    const chats = createChatService({
+      ...deps,
+      providers: [claude.provider, gemini.provider],
+      tools: [],
+    });
+    const session = await chats.newChat(row);
+    await chats.sendMessage(session.id, 'One', () => {});
+    await updateSettings(db, { provider: 'gemini' });
+    await chats.sendMessage(session.id, 'Two', () => {});
+    await updateSettings(db, { provider: 'claude' });
+    await chats.sendMessage(session.id, 'Three', () => {});
+    expect(claude.turns.map((turn) => turn.providerSessionId)).toEqual([null, 'claude-1']);
+  });
+
+  it('adds up the costs a turn reports, and gives none when no report had one', async () => {
+    const usage = (costUsd: number | null): FakeStep => ({
+      type: 'usage',
+      inputTokens: 100,
+      outputTokens: 20,
+      cacheReadTokens: 0,
+      costUsd,
+      billing: null,
+    });
+    const { send } = await setup((turn) =>
+      turn === 0 ? [usage(0.01), usage(0.02)] : [usage(null), usage(null)],
+    );
+    const usageOf = async () => (await send()).find((event) => event.type === 'usage');
+    expect(await usageOf()).toEqual({ type: 'usage', tokens: 240, costUsd: 0.03, billing: null });
+    expect(await usageOf()).toEqual({ type: 'usage', tokens: 240, costUsd: null, billing: null });
+  });
+
+  it("answers with the model picked, or else the AI's own default, or says it has none", async () => {
+    const db = await testDb();
+    const row = await insertAccount(db);
+    const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
+    const model = (id: string) => ({
+      id,
+      resolvedId: null,
+      label: id,
+      description: '',
+      efforts: [],
+    });
+    let listed = [model('llama3.3:70b'), model('qwen3:14b')];
+    const models = vi.fn(async () => listed);
+    const ollama = createFakeProvider([{ type: 'text', delta: 'Hi.' }], {
+      id: 'openai',
+      name: 'Ollama',
+      choosesBilling: false,
+    });
+    let now = new Date('2026-10-29T12:00:00.000Z');
+    const chats = createChatService({
+      ...deps,
+      providers: [{ ...ollama.provider, models }],
+      tools: [],
+      now: () => now,
+    });
+    const session = await chats.newChat(row);
+    const send = async () => {
+      const events: ChatEvent[] = [];
+      await chats.sendMessage(session.id, 'Hi', (event) => events.push(event));
+      return events;
+    };
+    await updateSettings(db, { provider: 'openai' });
+    await send();
+    await send();
+    await updateSettings(db, { model: 'qwen3:14b' });
+    await send();
+    // The first listed, as Settings shows it, from the same list: it isn't asked for again.
+    expect(ollama.turns.map((turn) => turn.settings.model)).toEqual([
+      'llama3.3:70b',
+      'llama3.3:70b',
+      'qwen3:14b',
+    ]);
+    expect(models).toHaveBeenCalledTimes(1);
+    // .env's model comes before the list, which isn't asked for then.
+    const named = createChatService({
+      ...deps,
+      providers: [
+        {
+          ...ollama.provider,
+          info: { ...ollama.provider.info, defaultModel: 'gpt-oss:20b' },
+          models,
+        },
+      ],
+      tools: [],
+    });
+    await updateSettings(db, { model: '' });
+    await named.sendMessage(session.id, 'Hi', () => {});
+    expect(ollama.turns.at(-1)?.settings.model).toBe('gpt-oss:20b');
+    expect(models).toHaveBeenCalledTimes(1);
+    // None listed, or the list failing: the turn says so, named.
+    listed = [];
+    now = new Date('2026-10-29T13:00:01.000Z');
+    expect((await send()).filter((event) => event.type === 'error')).toEqual([
+      {
+        type: 'error',
+        message: 'Ollama lists no models, and none is picked.',
+        fix: 'Pick a model in Settings → AI, or name one in .env.',
+        provider: 'Ollama',
+      },
+    ]);
+    models.mockRejectedValueOnce(new Error("Couldn't reach Ollama at http://localhost:11434/v1."));
+    now = new Date('2026-10-29T14:00:02.000Z');
+    expect((await send()).filter((event) => event.type === 'error')).toEqual([
+      {
+        type: 'error',
+        message: "Couldn't reach Ollama at http://localhost:11434/v1.",
+        fix: null,
+        provider: 'Ollama',
+      },
+    ]);
+    expect(ollama.turns).toHaveLength(4);
+  });
+
+  it('lists the models of the provider asked about, with its default; one not set up says what to add', async () => {
+    const db = await testDb();
+    const deps = testAccountDeps(db, fakeRequester(() => outage('Some site')).req);
+    const model = (id: string) => ({
+      id,
+      resolvedId: null,
+      label: id,
+      description: '',
+      efforts: [],
+    });
+    const models = vi.fn(async () => [model('llama3.3:70b'), model('qwen3:14b')]);
+    const ollama = {
+      ...createFakeProvider([], { id: 'openai', name: 'Ollama', choosesBilling: false }).provider,
+      models,
+    };
+    const chats = createChatService({
+      ...deps,
+      providers: [createFakeProvider([]).provider, ollama],
+      tools: [],
+    });
+    expect(await chats.listModels({ provider: 'openai' })).toEqual({
+      models: [model('llama3.3:70b'), model('qwen3:14b')],
+      defaultModel: 'llama3.3:70b',
+      error: null,
+    });
+    // One list whatever the billing: only Claude's depends on it.
+    await chats.listModels({ provider: 'openai', billing: 'api_key' });
+    expect(models).toHaveBeenCalledTimes(1);
+    // .env's model is the default when it names one.
+    const named = createChatService({
+      ...deps,
+      providers: [{ ...ollama, info: { ...ollama.info, defaultModel: 'qwen3:14b' } }],
+      tools: [],
+    });
+    expect((await named.listModels({ provider: 'openai' })).defaultModel).toBe('qwen3:14b');
+    // The provider set is the one listed when none is asked about.
+    await updateSettings(db, { provider: 'openai' });
+    expect((await chats.listModels()).defaultModel).toBe('llama3.3:70b');
+    expect(await chats.listModels({ provider: 'gemini' })).toEqual({
+      models: [],
+      defaultModel: null,
+      error: 'Set GEMINI_API_KEY in .env, then restart Wise Old Model.',
+    });
+    // The same for the AI set, when .env no longer sets it up.
+    await updateSettings(db, { provider: 'gemini' });
+    expect((await chats.listModels()).error).toBe(
+      'Set GEMINI_API_KEY in .env, then restart Wise Old Model.',
+    );
   });
 });

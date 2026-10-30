@@ -13,6 +13,7 @@ import {
   errorMessage,
   HOUR_MS,
   NEW_CHAT_TITLE,
+  type ProviderId,
   type Settings,
   squeeze,
   UserContentSchema,
@@ -25,7 +26,15 @@ import { type AccountDeps, accountRow } from '../services/accounts.ts';
 import { getSettings } from '../settings/settingsRepo.ts';
 import { withinLimit } from '../store/cache.ts';
 import { buildSystemPrompt, composeMessage } from './instructions.ts';
-import type { ChatProvider, ProviderEvent, ToolDef, TurnInput } from './provider.ts';
+import type {
+  ChatProvider,
+  HistoryMessage,
+  ProviderEvent,
+  ProviderMeta,
+  ToolDef,
+  TurnInput,
+} from './provider.ts';
+import { notSetUp } from './providerInfo.ts';
 
 const NO_SUCH_CHAT = 'There is no such chat.';
 
@@ -35,8 +44,13 @@ const UNKNOWN_LOOKUP = 'Looking something up…';
 /** How long a title cut from the first message is. */
 const TITLE_LENGTH = 60;
 
+/** The most of the chat so far a turn sends again, in messages and in characters. */
+const HISTORY_MESSAGES = 20;
+const HISTORY_CHARS = 24_000;
+
 export type ChatDeps = AccountDeps & {
-  provider: ChatProvider;
+  /** The providers .env sets up; each turn uses the one Settings → AI picks. */
+  providers: ChatProvider[];
   tools: ToolDef[];
   now?: () => Date;
 };
@@ -83,6 +97,64 @@ async function findSession(db: Kysely<DB>, id: string) {
   return row;
 }
 
+/** A stored message's content, as its role has it. */
+function contentOf(row: { role: 'user' | 'assistant'; content: string }) {
+  const content: unknown = JSON.parse(row.content);
+  return row.role === 'user'
+    ? { role: 'user' as const, ...UserContentSchema.parse(content) }
+    : { role: 'assistant' as const, ...AssistantContentSchema.parse(content) };
+}
+
+/**
+ * The chat so far as text, for a provider that holds no session of it: each question that was
+ * answered, and its answer, without the lookups (it looks again for what it needs). Only the
+ * latest are sent, up to 20 messages or 24,000 characters; a latest answer longer than that
+ * alone is cut short rather than left out.
+ */
+async function historyOf(db: Kysely<DB>, sessionId: string): Promise<HistoryMessage[]> {
+  const rows = await db
+    .selectFrom('chat_messages')
+    .select(['role', 'content'])
+    .where('session_id', '=', sessionId)
+    .orderBy('id', 'desc')
+    .execute();
+  const kept: HistoryMessage[] = [];
+  let chars = 0;
+  // Newest first: each answer comes before its question.
+  let answer: string | null = null;
+  for (const row of rows) {
+    if (kept.length + 2 > HISTORY_MESSAGES) break;
+    const message = contentOf(row);
+    if (message.role === 'assistant') {
+      answer = message.text.trim();
+      continue;
+    }
+    const question = message.text;
+    // A question that got no answer (an error, or stopped at once) is left out with it.
+    if (answer) {
+      const room = HISTORY_CHARS - chars - question.length;
+      if (answer.length > room) {
+        if (kept.length > 0) break;
+        answer = `${answer.slice(0, Math.max(0, room - 1))}…`;
+      }
+      chars += question.length + answer.length;
+      kept.unshift({ role: 'user', text: question }, { role: 'assistant', text: answer });
+    }
+    answer = null;
+  }
+  return kept;
+}
+
+/** A stand-in for the AI picked, whose turn only says why it can't answer. */
+function failing(info: ProviderMeta, message: string, fix: string | null = null): ChatProvider {
+  return {
+    info,
+    async *runTurn() {
+      yield { type: 'error', message, fix };
+    },
+  };
+}
+
 /**
  * Chats with the AI about an account, one turn at a time per chat: a message goes to the
  * provider, and what it streams back (text, lookups, changes to approve, problems) goes to the
@@ -93,16 +165,70 @@ export function createChatService(deps: ChatDeps) {
   const now = deps.now ?? (() => new Date());
   const running = new Map<string, Turn>();
 
-  // Each billing's model list, kept an hour (they change with Claude Code's releases), shared by
-  // the requests that want it meanwhile; a failure isn't kept.
+  // Each provider's model list (Claude's per billing), kept an hour (they change with new
+  // releases), shared by the requests that want it meanwhile; a failure isn't kept.
   const modelLists = new Map<string, { at: number; models: Promise<ChatModel[]> }>();
+
+  /**
+   * The models `provider` offers with `billing` (Claude's list depends on it), and the one it
+   * answers with when none is picked: .env's model, or the first it lists; or none and why.
+   */
+  async function modelsOf(
+    provider: ChatProvider,
+    billing: Settings['billing'],
+  ): Promise<ChatModelsAnswer> {
+    const { models } = provider;
+    if (!models) return { models: [], defaultModel: provider.info.defaultModel, error: null };
+    const key = provider.info.choosesBilling ? `${provider.info.id}:${billing}` : provider.info.id;
+    let kept = modelLists.get(key);
+    if (!kept || !withinLimit(now().getTime() - kept.at, HOUR_MS)) {
+      kept = { at: now().getTime(), models: models.call(provider, billing) };
+      modelLists.set(key, kept);
+    }
+    try {
+      const listed = await kept.models;
+      const defaultModel = provider.info.defaultModel ?? listed[0]?.id ?? null;
+      return { models: listed, defaultModel, error: null };
+    } catch (error) {
+      if (modelLists.get(key) === kept) modelLists.delete(key);
+      return { models: [], defaultModel: null, error: errorMessage(error) };
+    }
+  }
+
+  /**
+   * The AI the settings pick and the model it answers with (the one picked, or else its own
+   * default, as Settings shows it); or a stand-in that says why it can't answer.
+   */
+  async function chosen(settings: Settings): Promise<{ provider: ChatProvider; model: string }> {
+    const provider = deps.providers.find((one) => one.info.id === settings.provider);
+    if (!provider) {
+      const { id, name, setup } = notSetUp(settings.provider);
+      const message = `${name} isn't set up. ${setup} Or pick another AI in Settings → AI.`;
+      const info = { id, name, choosesBilling: false, defaultModel: null };
+      return { provider: failing(info, message), model: '' };
+    }
+    const model = settings.model || provider.info.defaultModel;
+    if (model) return { provider, model };
+    const listed = await modelsOf(provider, settings.billing);
+    if (listed.defaultModel) return { provider, model: listed.defaultModel };
+    const none = failing(
+      provider.info,
+      listed.error ?? `${provider.info.name} lists no models, and none is picked.`,
+      listed.error ? null : 'Pick a model in Settings → AI, or name one in .env.',
+    );
+    return { provider: none, model: '' };
+  }
 
   /** The tool's status line for this input (none for a tool or input it doesn't know). */
   const labelFor = (name: string, input: unknown): string =>
     deps.tools.find((one) => one.name === name)?.label(input) ?? UNKNOWN_LOOKUP;
 
   async function runTurn(
-    session: SessionRow & { account_id: number; provider_session_id: string | null },
+    session: SessionRow & {
+      account_id: number;
+      provider: ProviderId | null;
+      provider_session_id: string | null;
+    },
     text: string,
     note: string | null,
     turn: Turn,
@@ -113,6 +239,12 @@ export function createChatService(deps: ChatDeps) {
     const row = await accountRow(db, session.account_id);
     const settings = await getSettings(db);
     const timeZone = effectiveTimeZone(settings);
+    const { provider, model } = await chosen(settings);
+    // A session is resumed only by its own provider: another one's answers aren't in it. A
+    // provider without one is sent the chat so far.
+    const providerSessionId =
+      session.provider === provider.info.id ? session.provider_session_id : null;
+    const history = providerSessionId ? [] : await historyOf(db, session.id);
     await db
       .insertInto('chat_messages')
       .values({
@@ -148,19 +280,26 @@ export function createChatService(deps: ChatDeps) {
 
     const content: AssistantContent = AssistantContentSchema.parse({ text: '' });
     const sources = new Map<string, { title: string; url: string }>();
-    // Tokens and cost over the turn's usage reports, if it had any.
-    const used = { reported: false, tokens: 0, costUsd: 0 };
+    // Tokens and cost over the turn's usage reports, if it had any (a cost only if one said).
+    const used = {
+      reported: false,
+      tokens: 0,
+      costUsd: null as number | null,
+      billing: null as Settings['billing'] | null,
+    };
+    let sessionGiven = false;
     const fail = (message: string, fix: string | null = null) => {
-      content.error = { message, fix };
+      content.error = { message, fix, provider: provider.info.name };
       emit({ type: 'error', ...content.error });
     };
 
     const handle = async (event: ProviderEvent) => {
       switch (event.type) {
         case 'session':
+          sessionGiven = true;
           await db
             .updateTable('chat_sessions')
-            .set({ provider_session_id: event.providerSessionId })
+            .set({ provider: provider.info.id, provider_session_id: event.providerSessionId })
             .where('id', '=', session.id)
             .execute();
           break;
@@ -189,7 +328,8 @@ export function createChatService(deps: ChatDeps) {
         case 'usage':
           used.reported = true;
           used.tokens += event.inputTokens + event.outputTokens + event.cacheReadTokens;
-          used.costUsd += event.costUsd;
+          if (event.costUsd !== null) used.costUsd = (used.costUsd ?? 0) + event.costUsd;
+          used.billing = event.billing;
           break;
         case 'error':
           fail(event.message, event.fix ?? null);
@@ -204,7 +344,8 @@ export function createChatService(deps: ChatDeps) {
     const input: TurnInput = {
       systemPrompt: buildSystemPrompt({ name: row.name, type: AccountTypeSchema.parse(row.type) }),
       message: composeMessage(startedAt, timeZone, text),
-      providerSessionId: session.provider_session_id,
+      history,
+      providerSessionId,
       tools: deps.tools,
       toolContext: {
         accountId: row.id,
@@ -214,7 +355,7 @@ export function createChatService(deps: ChatDeps) {
           if (!sources.has(page.url)) sources.set(page.url, { title: page.title, url: page.url });
         },
       },
-      settings,
+      settings: { ...settings, model },
       requestApproval: ({ toolName, summary }) => {
         if (signal.aborted) return Promise.resolve(false);
         const approval = {
@@ -238,7 +379,7 @@ export function createChatService(deps: ChatDeps) {
     let events: AsyncIterator<ProviderEvent> | undefined;
     let ended = false;
     try {
-      events = deps.provider.runTurn(input)[Symbol.asyncIterator]();
+      events = provider.runTurn(input)[Symbol.asyncIterator]();
       // Stop ends the turn at once, even while the provider is waiting on something.
       while (!signal.aborted) {
         const next = events.next();
@@ -268,12 +409,17 @@ export function createChatService(deps: ChatDeps) {
       emit({ type: 'tool', ...tool });
     }
     content.sources = [...sources.values()];
+    // An answer that gave no session (another AI's) is missing from the session the chat held,
+    // so that's let go. One that said nothing (failing at once, say) leaves nothing out of it.
+    if (content.text.trim() && !sessionGiven && session.provider !== null) {
+      await db
+        .updateTable('chat_sessions')
+        .set({ provider: null, provider_session_id: null })
+        .where('id', '=', session.id)
+        .execute();
+    }
     const shownUsage = used.reported
-      ? {
-          tokens: used.tokens,
-          costUsd: settings.billing === 'api_key' ? used.costUsd : null,
-          billing: settings.billing,
-        }
+      ? { tokens: used.tokens, costUsd: used.costUsd, billing: used.billing }
       : null;
     const stored = await db
       .insertInto('chat_messages')
@@ -362,19 +508,11 @@ export function createChatService(deps: ChatDeps) {
         .orderBy('id')
         .execute();
       return rows.map((row): ChatMessage => {
-        const content: unknown = JSON.parse(row.content);
-        if (row.role === 'user') {
-          return {
-            id: row.id,
-            role: 'user',
-            ...UserContentSchema.parse(content),
-            createdAt: row.created_at,
-          };
-        }
+        const message = contentOf(row);
+        if (message.role === 'user') return { id: row.id, ...message, createdAt: row.created_at };
         return {
           id: row.id,
-          role: 'assistant',
-          ...AssistantContentSchema.parse(content),
+          ...message,
           usage: row.usage === null ? null : ChatUsageSchema.parse(JSON.parse(row.usage)),
           createdAt: row.created_at,
         };
@@ -421,22 +559,18 @@ export function createChatService(deps: ChatDeps) {
       resolve(approve);
     },
 
-    /** The models the provider offers with `billing` (by default the one set), or none and why. */
-    async listModels(asked?: Settings['billing']): Promise<ChatModelsAnswer> {
-      const { models } = deps.provider;
-      if (!models) return { models: [], error: null };
-      const billing = asked ?? (await getSettings(db)).billing;
-      let kept = modelLists.get(billing);
-      if (!kept || !withinLimit(now().getTime() - kept.at, HOUR_MS)) {
-        kept = { at: now().getTime(), models: models.call(deps.provider, billing) };
-        modelLists.set(billing, kept);
-      }
-      try {
-        return { models: await kept.models, error: null };
-      } catch (error) {
-        if (modelLists.get(billing) === kept) modelLists.delete(billing);
-        return { models: [], error: errorMessage(error) };
-      }
+    /**
+     * The models a provider offers (by default the one set; Claude's with `billing`, by default
+     * the one set), and the one it answers with when none is picked; or none and why.
+     */
+    async listModels(
+      asked: { provider?: ProviderId; billing?: Settings['billing'] } = {},
+    ): Promise<ChatModelsAnswer> {
+      const settings = await getSettings(db);
+      const id = asked.provider ?? settings.provider;
+      const provider = deps.providers.find((one) => one.info.id === id);
+      if (!provider) return { models: [], defaultModel: null, error: notSetUp(id).setup };
+      return modelsOf(provider, asked.billing ?? settings.billing);
     },
 
     /** Stops the chat's answer, if it's answering. */

@@ -5,17 +5,33 @@ import { call, testConfig, testDb } from '../../test/helpers.ts';
 import { createApp } from '../app.ts';
 
 const KEY = 'sk-ant-api03-only-the-server-may-know-this';
+const OPENROUTER_KEY = 'sk-or-v1-also-the-servers-alone';
+const GEMINI_KEY = 'AIza-and-this-one-too';
 
 describe('about route', () => {
-  it("tells where the data and RuneLite folders are and what .env sets, never the API key's value", async () => {
+  it("tells where the data and RuneLite folders are and what .env sets, never an API key's value", async () => {
+    const shown = testConfig().env;
     const config = testConfig({
       anthropicApiKey: KEY,
-      env: { PORT: null, DATA_DIR: '~/wom-data', RUNELITE_DIR: null },
+      openAiCompat: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: OPENROUTER_KEY,
+        name: 'OpenRouter',
+        model: null,
+      },
+      gemini: { apiKey: GEMINI_KEY, model: 'gemini-3-pro' },
+      env: {
+        ...shown,
+        DATA_DIR: '~/wom-data',
+        OPENAI_COMPAT_BASE_URL: 'https://openrouter.ai/api/v1',
+        OPENAI_COMPAT_NAME: 'OpenRouter',
+        GEMINI_MODEL: 'gemini-3-pro',
+      },
     });
     const app = createApp({ config, db: await testDb() });
     const about = await call(app, { path: '/api/about' });
     expect(about.status).toBe(200);
-    expect(about.text).not.toContain(KEY);
+    for (const key of [KEY, OPENROUTER_KEY, GEMINI_KEY]) expect(about.text).not.toContain(key);
     expect(about.text).not.toContain('only-the-server');
     expect(about.body).toEqual({
       dataDir: config.dataDir,
@@ -29,12 +45,22 @@ describe('about route', () => {
         DATA_DIR: '~/wom-data',
         RUNELITE_DIR: null,
         ANTHROPIC_API_KEY: 'set',
+        OPENAI_COMPAT_BASE_URL: 'https://openrouter.ai/api/v1',
+        OPENAI_COMPAT_API_KEY: 'set',
+        OPENAI_COMPAT_NAME: 'OpenRouter',
+        OPENAI_COMPAT_MODEL: null,
+        GEMINI_API_KEY: 'set',
+        GEMINI_MODEL: 'gemini-3-pro',
       },
     });
 
     const keyless = createApp({ config: testConfig(), db: await testDb() });
     expect((await call(keyless, { path: '/api/about' })).body).toMatchObject({
-      env: { ANTHROPIC_API_KEY: 'not set' },
+      env: {
+        ANTHROPIC_API_KEY: 'not set',
+        OPENAI_COMPAT_API_KEY: 'not set',
+        GEMINI_API_KEY: 'not set',
+      },
     });
   });
 

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { type About, errorMessage, SettingsPatchSchema } from '@wom/shared';
+import { type About, errorMessage, type ProviderInfo, SettingsPatchSchema } from '@wom/shared';
 import { Router } from 'express';
 import type { Kysely } from 'kysely';
 import type { Config } from '../config.ts';
@@ -9,8 +9,14 @@ import { HttpError, parseInput } from '../http/errors.ts';
 import { getSettings, updateSettings } from '../settings/settingsRepo.ts';
 import { exportRoot } from '../sources/characterExport.ts';
 
-/** The settings, and what the Settings page says about the app: where things are, and backups. */
-export function settingsRoutes(db: Kysely<DB>, config: Config): Router {
+/** A key as the About section gives it: only whether it's set. */
+const setOrNot = (key: string | null | undefined) => (key ? 'set' : 'not set');
+
+/**
+ * The settings, and what the Settings page says about the app: where things are, and backups.
+ * Only an AI that .env sets up (in `providers`) can be picked.
+ */
+export function settingsRoutes(db: Kysely<DB>, config: Config, providers: ProviderInfo[]): Router {
   const router = Router();
 
   router.get('/settings', async (_req, res) => {
@@ -18,7 +24,12 @@ export function settingsRoutes(db: Kysely<DB>, config: Config): Router {
   });
 
   router.patch('/settings', async (req, res) => {
-    res.json(await updateSettings(db, parseInput(SettingsPatchSchema, req.body)));
+    const patch = parseInput(SettingsPatchSchema, req.body);
+    const picked = providers.find((one) => one.id === patch.provider);
+    if (picked && !picked.configured) {
+      throw new HttpError(400, `${picked.name} isn't set up. ${picked.setup}`);
+    }
+    res.json(await updateSettings(db, patch));
   });
 
   router.get('/about', (_req, res) => {
@@ -31,8 +42,10 @@ export function settingsRoutes(db: Kysely<DB>, config: Config): Router {
       env: {
         CONTACT: config.contact,
         ...config.env,
-        // Only whether it's set: the key never leaves the server.
-        ANTHROPIC_API_KEY: config.anthropicApiKey ? 'set' : 'not set',
+        // Only whether they're set: the keys never leave the server.
+        ANTHROPIC_API_KEY: setOrNot(config.anthropicApiKey),
+        OPENAI_COMPAT_API_KEY: setOrNot(config.openAiCompat?.apiKey),
+        GEMINI_API_KEY: setOrNot(config.gemini?.apiKey),
       },
     };
     res.json(about);

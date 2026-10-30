@@ -13,7 +13,7 @@ import {
   SIGN_IN_FIX,
   sdkToolsFor,
 } from './claudeProvider.ts';
-import type { ProviderEvent, ToolDef, TurnInput } from './provider.ts';
+import type { ToolDef, TurnInput } from './provider.ts';
 
 const readTool: ToolDef = {
   name: 'get_quests',
@@ -42,6 +42,7 @@ function turn(overrides: Partial<TurnInput> = {}): TurnInput {
   return {
     systemPrompt: 'You are an Old School RuneScape advisor.',
     message: 'Local time: Tuesday 27 October 2026, 17:00 (UTC, GMT+00:00)\n\nWhat next?',
+    history: [],
     providerSessionId: null,
     tools: [readTool, writeTool],
     toolContext: { accountId: 1, timeZone: 'UTC', now: new Date(), addSource: () => {} },
@@ -74,13 +75,12 @@ function fakeQuery(
   return { query, calls };
 }
 
-async function drain(events: AsyncIterable<ProviderEvent>): Promise<ProviderEvent[]> {
-  const all: ProviderEvent[] = [];
-  for await (const event of events) all.push(event);
-  return all;
-}
-
-const ENV = { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-from-the-shell' };
+const ENV = {
+  PATH: '/usr/bin',
+  ANTHROPIC_API_KEY: 'sk-from-the-shell',
+  OPENAI_COMPAT_API_KEY: 'sk-or-v1-another-ais',
+  GEMINI_API_KEY: 'AIza-another-ais',
+};
 
 describe('Claude provider', () => {
   it('runs Claude Code with only our tools, none of the user’s settings, and the chat’s options', async () => {
@@ -92,8 +92,8 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: null,
     });
-    await drain(provider.runTurn(turn()));
-    await drain(provider.runTurn(turn({ providerSessionId: 'session-1' })));
+    await Array.fromAsync(provider.runTurn(turn()));
+    await Array.fromAsync(provider.runTurn(turn({ providerSessionId: 'session-1' })));
     const [first, second] = fake.calls;
     expect(first?.prompt).toBe(turn().message);
     expect(first?.options).toMatchObject({
@@ -121,6 +121,28 @@ describe('Claude provider', () => {
     });
   });
 
+  it('puts the chat so far before the message when it starts a session, not when it resumes one', async () => {
+    const fake = fakeQuery();
+    const provider = createClaudeProvider({
+      query: fake.query,
+      cwd: tempDir(),
+      env: ENV,
+      apiKey: null,
+    });
+    const history: TurnInput['history'] = [
+      { role: 'user', text: 'What should I train?' },
+      { role: 'assistant', text: 'Agility.' },
+    ];
+    await Array.fromAsync(provider.runTurn(turn({ history })));
+    await Array.fromAsync(provider.runTurn(turn({ history, providerSessionId: 'session-1' })));
+    await Array.fromAsync(provider.runTurn(turn()));
+    expect(fake.calls.map((one) => one.prompt)).toEqual([
+      `Earlier in this chat (another AI may have answered):\n\nThe user: What should I train?\n\nYou: Agility.\n\n---\n\n${turn().message}`,
+      turn().message,
+      turn().message,
+    ]);
+  });
+
   it('keeps an API key from Claude Code on the plan, and passes the key, the cache length and the cap with an API key', async () => {
     const fake = fakeQuery();
     const plan = createClaudeProvider({
@@ -129,14 +151,14 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: 'sk-from-env-file',
     });
-    await drain(plan.runTurn(turn()));
+    await Array.fromAsync(plan.runTurn(turn()));
     expect(fake.calls[0]?.options.env).toEqual({ PATH: '/usr/bin' });
     expect(fake.calls[0]?.options).not.toHaveProperty('maxBudgetUsd');
     // A spending cap is for an API key only.
-    await drain(plan.runTurn(turn({ settings: { ...turn().settings, budgetUsd: 0.5 } })));
+    await Array.fromAsync(plan.runTurn(turn({ settings: { ...turn().settings, budgetUsd: 0.5 } })));
     expect(fake.calls.pop()?.options).not.toHaveProperty('maxBudgetUsd');
     const settings = { ...turn().settings, billing: 'api_key' as const, budgetUsd: 0.5 };
-    await drain(plan.runTurn(turn({ settings })));
+    await Array.fromAsync(plan.runTurn(turn({ settings })));
     expect(fake.calls[1]?.options.env).toEqual({
       PATH: '/usr/bin',
       ANTHROPIC_API_KEY: 'sk-from-env-file',
@@ -150,7 +172,7 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: null,
     });
-    expect(await drain(keyless.runTurn(turn({ settings })))).toEqual([
+    expect(await Array.fromAsync(keyless.runTurn(turn({ settings })))).toEqual([
       {
         type: 'error',
         message:
@@ -222,16 +244,24 @@ describe('Claude provider', () => {
       query: fake.query,
       cwd: tempDir(),
       env: ENV,
-      apiKey: null,
+      apiKey: 'sk-from-env-file',
     });
-    expect(await drain(provider.runTurn(turn()))).toEqual([
+    const usage = { type: 'usage', inputTokens: 1200, outputTokens: 800, cacheReadTokens: 6200 };
+    expect(await Array.fromAsync(provider.runTurn(turn()))).toEqual([
       { type: 'session', providerSessionId: 'session-7' },
       { type: 'text', delta: 'Train ' },
       { type: 'text', delta: 'Magic.' },
       { type: 'tool_started', id: 'toolu_1', name: 'get_quests', input: { status: 'finished' } },
       { type: 'tool_finished', id: 'toolu_1', isError: true },
-      { type: 'usage', inputTokens: 1200, outputTokens: 800, cacheReadTokens: 6200, costUsd: 0.04 },
+      // What it would have cost isn't charged on the plan.
+      { ...usage, costUsd: null, billing: 'plan' },
     ]);
+    const settings = { ...turn().settings, billing: 'api_key' as const };
+    expect((await Array.fromAsync(provider.runTurn(turn({ settings })))).at(-1)).toEqual({
+      ...usage,
+      costUsd: 0.04,
+      billing: 'api_key',
+    });
   });
 
   it('gives an error for a result that failed, with what Claude Code said', async () => {
@@ -267,7 +297,9 @@ describe('Claude provider', () => {
       });
       const settings = { ...turn().settings, budgetUsd: 0.5 };
       errors.push(
-        (await drain(provider.runTurn(turn({ settings })))).find((event) => event.type === 'error'),
+        (await Array.fromAsync(provider.runTurn(turn({ settings })))).find(
+          (event) => event.type === 'error',
+        ),
       );
     }
     expect(errors).toEqual([
@@ -301,7 +333,9 @@ describe('Claude provider', () => {
     });
     const settings = { ...turn().settings, billing: 'api_key' as const };
     expect(
-      (await drain(keyed.runTurn(turn({ settings })))).find((event) => event.type === 'error'),
+      (await Array.fromAsync(keyed.runTurn(turn({ settings })))).find(
+        (event) => event.type === 'error',
+      ),
     ).toEqual({
       type: 'error',
       message: 'Not logged in · Please run /login',
@@ -326,7 +360,7 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: null,
     });
-    await drain(provider.runTurn(turn({ requestApproval })));
+    await Array.fromAsync(provider.runTurn(turn({ requestApproval })));
     const canUseTool = fake.calls[0]?.options.canUseTool;
     if (!canUseTool) throw new Error('No canUseTool');
     const options = { signal: new AbortController().signal, toolUseID: 'toolu_9' } as Parameters<
@@ -385,7 +419,7 @@ describe('Claude provider', () => {
       apiKey: null,
     });
     const controller = new AbortController();
-    const events = drain(provider.runTurn(turn({ signal: controller.signal })));
+    const events = Array.fromAsync(provider.runTurn(turn({ signal: controller.signal })));
     await vi.waitFor(() => expect(seen).toBeDefined());
     expect(seen?.signal.aborted).toBe(false);
     controller.abort();
@@ -426,7 +460,7 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: null,
     });
-    await drain(provider.runTurn(turn()));
+    await Array.fromAsync(provider.runTurn(turn()));
     expect(existsSync(folder)).toBe(true);
   });
 
@@ -442,7 +476,7 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: null,
     });
-    const events = await drain(provider.runTurn(turn()));
+    const events = await Array.fromAsync(provider.runTurn(turn()));
     expect(events.filter((event) => event.type === 'error')).toHaveLength(1);
     // A failure with no result is still the turn's error, with the sign-in steps when it's
     // about signing in.
@@ -456,13 +490,13 @@ describe('Claude provider', () => {
         env: ENV,
         apiKey: null,
       });
-    expect((await drain(failing('spawn claude ENOENT').runTurn(turn()))).at(-1)).toEqual({
+    expect((await Array.fromAsync(failing('spawn claude ENOENT').runTurn(turn()))).at(-1)).toEqual({
       type: 'error',
       message: 'spawn claude ENOENT',
       fix: null,
     });
     const notSignedIn = 'Not logged in · Please run /login';
-    expect((await drain(failing(notSignedIn).runTurn(turn()))).at(-1)).toEqual({
+    expect((await Array.fromAsync(failing(notSignedIn).runTurn(turn()))).at(-1)).toEqual({
       type: 'error',
       message: notSignedIn,
       fix: SIGN_IN_FIX,
@@ -512,7 +546,7 @@ describe('Claude provider', () => {
       env: ENV,
       apiKey: null,
     });
-    const text = (await drain(provider.runTurn(turn())))
+    const text = (await Array.fromAsync(provider.runTurn(turn())))
       .flatMap((event) => (event.type === 'text' ? [event.delta] : []))
       .join('');
     expect(text).toBe("Let me check.\n\nYou've done it.\n\nOne more thing.");
@@ -540,7 +574,7 @@ describe('Claude provider', () => {
         env: ENV,
         apiKey: null,
       });
-      const events = await drain(provider.runTurn(turn()));
+      const events = await Array.fromAsync(provider.runTurn(turn()));
       expect([source, events.some((event) => event.type === 'error')]).toEqual([source, refused]);
       expect([source, events.some((event) => event.type === 'text')]).toEqual([source, !refused]);
     }
@@ -551,7 +585,7 @@ describe('Claude provider', () => {
       env: { PATH: '/usr/bin', Anthropic_Api_Key: 'sk-other-case' },
       apiKey: null,
     });
-    await drain(mixed.runTurn(turn()));
+    await Array.fromAsync(mixed.runTurn(turn()));
     expect(fake.calls[0]?.options.env).toEqual({ PATH: '/usr/bin' });
   });
 

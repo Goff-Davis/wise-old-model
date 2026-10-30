@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_PORT } from '@wom/shared';
+import { DEFAULT_PORT, PROVIDERS } from '@wom/shared';
 
 export type Config = {
   contact: string;
@@ -8,11 +8,44 @@ export type Config = {
   dataDir: string;
   runeliteDir: string;
   anthropicApiKey: string | null;
+  /** An OpenAI-compatible API (OpenAI, OpenRouter, Ollama…), when OPENAI_COMPAT_BASE_URL is set. */
+  openAiCompat: OpenAiCompatConfig | null;
+  /** Google's Gemini API, when GEMINI_API_KEY is set. */
+  gemini: GeminiConfig | null;
   isDev: boolean;
   version: string;
-  /** PORT, DATA_DIR and RUNELITE_DIR as set (null when not, so the default applies), to show. */
-  env: { PORT: string | null; DATA_DIR: string | null; RUNELITE_DIR: string | null };
+  /** The settings that aren't secrets, as set (null when not, so the default applies), to show. */
+  env: Record<(typeof SHOWN)[number], string | null>;
 };
+
+export type OpenAiCompatConfig = {
+  baseUrl: string;
+  apiKey: string | null;
+  /** What the app calls it ("Ollama"). */
+  name: string;
+  /** The model it answers with until one is picked in Settings. */
+  model: string | null;
+};
+
+export type GeminiConfig = {
+  apiKey: string;
+  /** The model it answers with until one is picked in Settings. */
+  model: string | null;
+};
+
+/** The .env settings the About section shows as set; the keys are only ever set or not. */
+const SHOWN = [
+  'PORT',
+  'DATA_DIR',
+  'RUNELITE_DIR',
+  'OPENAI_COMPAT_BASE_URL',
+  'OPENAI_COMPAT_NAME',
+  'OPENAI_COMPAT_MODEL',
+  'GEMINI_MODEL',
+] as const;
+
+/** The longest name OPENAI_COMPAT_NAME can give, so it fits the Settings page. */
+const NAME_MAX_LENGTH = 40;
 
 export class ConfigError extends Error {
   name = 'ConfigError';
@@ -104,6 +137,59 @@ function parsePort(raw: string | null): number {
   return port;
 }
 
+/** Settings that mean nothing without `needs`, which would quietly be ignored. */
+function requireWith(env: Record<string, string | undefined>, keys: string[], needs: string) {
+  for (const key of keys) {
+    if (value(env, key) !== null && value(env, needs) === null) {
+      throw new ConfigError(
+        `${key} is set, but ${needs} isn't. Set ${needs} too, or remove ${key}.`,
+      );
+    }
+  }
+}
+
+/** The OpenAI-compatible API: on when its base URL, an http(s) address, is set. */
+function openAiCompatConfig(env: Record<string, string | undefined>): OpenAiCompatConfig | null {
+  requireWith(
+    env,
+    ['OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_NAME', 'OPENAI_COMPAT_MODEL'],
+    'OPENAI_COMPAT_BASE_URL',
+  );
+  const raw = value(env, 'OPENAI_COMPAT_BASE_URL');
+  if (raw === null) return null;
+  const url = URL.parse(raw);
+  if (!url || (url.protocol !== 'http:' && url.protocol !== 'https:')) {
+    throw new ConfigError(
+      `OPENAI_COMPAT_BASE_URL must be a web address such as https://api.openai.com/v1 or http://localhost:11434/v1, but it is "${raw}".`,
+    );
+  }
+  // It's shown in Settings, so it can't carry a secret (and fetch refuses such an address).
+  if (url.username || url.password) {
+    throw new ConfigError(
+      "OPENAI_COMPAT_BASE_URL can't hold a user name or password. Put the key in OPENAI_COMPAT_API_KEY instead.",
+    );
+  }
+  const name = value(env, 'OPENAI_COMPAT_NAME') ?? PROVIDERS.openai.name;
+  if (name.length > NAME_MAX_LENGTH) {
+    throw new ConfigError(
+      `OPENAI_COMPAT_NAME can be at most ${NAME_MAX_LENGTH} characters, but it is "${name}".`,
+    );
+  }
+  return {
+    baseUrl: raw.replace(/\/+$/, ''),
+    apiKey: value(env, 'OPENAI_COMPAT_API_KEY'),
+    name,
+    model: value(env, 'OPENAI_COMPAT_MODEL'),
+  };
+}
+
+/** Gemini: on when its key is set. */
+function geminiConfig(env: Record<string, string | undefined>): GeminiConfig | null {
+  requireWith(env, ['GEMINI_MODEL'], 'GEMINI_API_KEY');
+  const apiKey = value(env, 'GEMINI_API_KEY');
+  return apiKey === null ? null : { apiKey, model: value(env, 'GEMINI_MODEL') };
+}
+
 const ROOT_PACKAGE = new URL('../../package.json', import.meta.url);
 
 /** The app's version, from the root package.json; refuses any other package.json. */
@@ -142,13 +228,11 @@ export function loadConfig(
       folderValue(env, 'RUNELITE_DIR', platform, home) ??
       pathsFor(platform).join(home, '.runelite'),
     anthropicApiKey: value(env, 'ANTHROPIC_API_KEY'),
+    openAiCompat: openAiCompatConfig(env),
+    gemini: geminiConfig(env),
     isDev: env.NODE_ENV === 'development',
     version: readVersion(),
-    env: {
-      PORT: value(env, 'PORT'),
-      DATA_DIR: value(env, 'DATA_DIR'),
-      RUNELITE_DIR: value(env, 'RUNELITE_DIR'),
-    },
+    env: Object.fromEntries(SHOWN.map((key) => [key, value(env, key)])) as Config['env'],
   };
 }
 

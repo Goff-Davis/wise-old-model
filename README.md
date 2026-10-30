@@ -1,10 +1,10 @@
 # Wise Old Model
 
-A personal, locally-run advisor for Old School RuneScape. It brings together everything about your own accounts (levels, boss kill counts, gains, quests, diaries, combat achievements, the collection log, bank and gear) in one dashboard, and pairs it with a chat with Claude that knows each account's real state and cites the OSRS Wiki pages its advice comes from.
+A personal, locally-run advisor for Old School RuneScape. It brings together everything about your own accounts (levels, boss kill counts, gains, quests, diaries, combat achievements, the collection log, bank and gear) in one dashboard, and pairs it with a chat with an AI model of your choice (Claude by default, or Gemini, or any model with an OpenAI-compatible API, local ones included) that knows each account's real state and cites the OSRS Wiki pages its advice comes from.
 
 It rebuilds, for personal use, the idea behind "Waise Old Man" (the Gielinor bot), an AI that combined the OSRS Wiki, Wise Old Man and TempleOSRS to give account advice; that tool has shut down.
 
-It's for one person and a handful of accounts, running on your own computer (`127.0.0.1`), on Windows, macOS, Linux or WSL. Out of scope: other users or logins, public hosting, a Discord bot, training a model on wiki content, commercial use, and automating gameplay of any kind.
+It's for one person and a handful of accounts, running on your own computer (`127.0.0.1`), on Windows, macOS, Linux or WSL.
 
 ## What it does
 
@@ -14,7 +14,7 @@ It's for one person and a handful of accounts, running on your own computer (`12
 - **Bank and gear:** your bank's value, one search across bank, seed vault, inventory and gear, and your equipment and inventory laid out as in game.
 - **Collection log:** tabs and entries like the in-game log, from TempleOSRS.
 - **Goals:** a skill level or XP, a quest, a diary tier, combat achievements, boss kills, a collection log item or entry, an item, or your own. Progress comes from your data, quest and diary goals list what's still needed, and goals complete themselves as you play.
-- **The chat:** ask about the selected account, and Claude looks things up with the app's own tools, shows what it looked at, cites the wiki pages it read, and asks before adding or changing a goal. It's built to answer questions like:
+- **The chat:** ask about the selected account, and the AI looks things up with the app's own tools, shows what it looked at, cites the wiki pages it read, and asks before adding or changing a goal. It's built to answer questions like:
   - "What should I work on next?"
   - "Can I do Dragon Slayer II yet? What am I missing?"
   - "What's my best gear upgrade for under 20m?"
@@ -25,7 +25,12 @@ The app keeps its own history of your stats, independent of third-party sites, a
 ## Requirements
 
 - **Node.js 26**, pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed, `mise install` in the repo root sets it up.
-- **Claude Code**, signed in with your Claude plan: run `claude`, then `/login`, once on each machine. The chat runs Claude Code through the Claude Agent SDK, so it uses your plan's usage. An Anthropic API key works instead (see Configuration).
+- **An AI for the chat**, one or more of:
+  - **Claude** (the default): Claude Code signed in with your Claude plan. Run `claude`, then `/login`, once on each machine. The chat runs Claude Code through the Claude Agent SDK, so it uses your plan's usage. An Anthropic API key works instead.
+  - **Any OpenAI-compatible API**: a hosted one with its key (OpenAI, OpenRouter, Groq, Mistral and others), or a model running on your own computer with Ollama or LM Studio, which needs no key.
+  - **Gemini**: an API key from [Google AI Studio](https://aistudio.google.com/apikey).
+
+  See Configuration → Choosing the AI.
 - **RuneLite** with two Plugin Hub plugins:
   - [Character Export](https://github.com/DZWNK/Character-Export): writes your quests, diaries, combat achievements, bank and gear to local files, which the app reads. It sends nothing anywhere.
   - **Temple OSRS**: syncs your collection log to TempleOSRS.
@@ -59,16 +64,55 @@ Settings that rarely change, and secrets, live in `.env` in the repo root. It's 
 |---|---|---|---|
 | `CONTACT` | Yes | (none) | Your Discord name or email. It's sent in the User-Agent so Wise Old Man, Temple and the wiki can reach you if something goes wrong. Plain ASCII only. |
 | `PORT` | No | `4747` | The port the server listens on (on `127.0.0.1` only). |
-| `DATA_DIR` | No | Your OS's app-data folder | Where the database, backups, icons and the chat's Claude Code working folder go. |
+| `DATA_DIR` | No | Your OS's app-data folder | Where the database, backups, icons and (with Claude) Claude Code's working folder go. |
 | `RUNELITE_DIR` | No | `~/.runelite` | Where RuneLite keeps Character Export's files. On WSL with RuneLite on Windows: `/mnt/c/Users/<you>/.runelite`. |
-| `ANTHROPIC_API_KEY` | No | (none) | Only used if you switch the chat's billing to an API key in Settings. |
+| `ANTHROPIC_API_KEY` | No | (none) | Claude only: used if you switch Claude's billing to an API key in Settings. |
+| `OPENAI_COMPAT_BASE_URL` | No | (none) | Turns on an OpenAI-compatible AI: its API's address, such as `https://api.openai.com/v1`. |
+| `OPENAI_COMPAT_API_KEY` | No | (none) | Its key. A local server (Ollama, LM Studio) needs none. |
+| `OPENAI_COMPAT_NAME` | No | `OpenAI-compatible` | What the app calls it ("OpenRouter", "Ollama"), up to 40 characters. |
+| `OPENAI_COMPAT_MODEL` | No | The first of its models by name | The model it answers with until you pick one in Settings. |
+| `GEMINI_API_KEY` | No | (none) | Turns on Gemini. |
+| `GEMINI_MODEL` | No | The first it lists that thinks | The Gemini model it answers with until you pick one in Settings. |
 
 The default data folder is `%LOCALAPPDATA%\wise-old-model` on Windows, `~/Library/Application Support/wise-old-model` on macOS and `~/.local/share/wise-old-model` on Linux and WSL. Folder settings accept `~` for your home folder. The server checks every value at startup and stops with a message saying what to fix.
+
+### Choosing the AI
+
+Claude is always available. Each other AI is turned on by its lines in `.env` (restart the app after changing them), and you can set up several at once. Then pick which one answers in **Settings → AI**, at any time and without restarting. Each AI remembers its own model and effort, and a chat keeps its conversation when you switch: the new AI gets the earlier questions and answers (the latest 20 messages), and looks up your account's data again itself.
+
+Some examples for `.env`:
+
+```sh
+# OpenAI
+OPENAI_COMPAT_BASE_URL=https://api.openai.com/v1
+OPENAI_COMPAT_API_KEY=sk-...
+OPENAI_COMPAT_NAME=OpenAI
+OPENAI_COMPAT_MODEL=gpt-5
+
+# OpenRouter (hundreds of models behind one key; answers show what they cost)
+OPENAI_COMPAT_BASE_URL=https://openrouter.ai/api/v1
+OPENAI_COMPAT_API_KEY=sk-or-...
+OPENAI_COMPAT_NAME=OpenRouter
+
+# Ollama, on this computer (no key; LM Studio is http://localhost:1234/v1)
+OPENAI_COMPAT_BASE_URL=http://localhost:11434/v1
+OPENAI_COMPAT_NAME=Ollama
+OPENAI_COMPAT_MODEL=qwen3:14b
+
+# Gemini
+GEMINI_API_KEY=AIza...
+```
+
+Only one OpenAI-compatible API can be set up at a time. Setting `OPENAI_COMPAT_MODEL` is worth it for an API that lists many models (OpenAI, OpenRouter): otherwise the chat starts with the first of them by name, which is rarely the one you want.
+
+The chat needs a model that can call tools: it has twenty, and a good answer often takes several rounds of them. Small local models may call them poorly or not at all; the chat says so when a model can't use tools. Gemini's thinking stays at each model's own setting, as the API doesn't say which levels a model takes.
+
+### In the app
 
 Everything else is set in the app, on the Settings page:
 
 - **Game data:** Automatic (an open page re-reads Character Export's files every few seconds as you play; the interval is adjustable) or Manual (only when you press Refresh).
-- **AI:** billing (your Claude plan, or an API key), the model and effort (picked from what Claude Code offers), the most tool rounds per question, and a spending cap per question with an API key.
+- **AI:** which AI answers (any `.env` sets up), its model and effort (picked from the models it lists), the most tool rounds per question, and, for Claude, its billing (your plan, or an API key) and a spending cap per question with a key.
 - **Display:** dark or light theme, and the time zone (automatic, or any zone).
 
 ## Usage
@@ -110,9 +154,9 @@ A single test file: `npx vitest run <path>`.
 Everything stays on your computer except:
 
 - requests to the hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki and its prices API, and RuneLite's icon server, each carrying your `CONTACT` in the User-Agent;
-- what the chat's tools return about the selected account (names, stats, bank contents), which is sent to Claude to answer you.
+- what the chat's tools return about the selected account (names, stats, bank contents), and the chat itself, which are sent to the AI you picked to answer you: Anthropic for Claude, Google for Gemini, or wherever `OPENAI_COMPAT_BASE_URL` points. With a model on your own computer (Ollama, LM Studio), they stay on it.
 
-The app never reads or stores your Claude sign-in; Claude Code handles it.
+The app never reads or stores your Claude sign-in; Claude Code handles it. The other AIs' keys stay in `.env`, on the server: the page only ever learns whether each is set.
 
 ## Documentation
 

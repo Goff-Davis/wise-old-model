@@ -10,7 +10,7 @@ TypeScript runs directly on Node (type stripping, no build step), so the code us
 flowchart TB
   routes["routes/<br/>thin Express routers: parse input, call a service"]
   services["services/ and goals/<br/>page data, accounts, freshness, goal progress"]
-  ai["ai/<br/>chat service, Claude provider, tools, instructions"]
+  ai["ai/<br/>chat service, providers, tool loop, tools, instructions"]
   calc["calc/ and items/<br/>requirement checks, gear, XP estimates, item matching"]
   sources["sources/<br/>one module per outside source"]
   store["store/ and db/<br/>SQLite through Kysely: saved data, snapshots, cache"]
@@ -38,7 +38,7 @@ flowchart TB
 | `calc/` | `requirements.ts` (quest and diary checks, quest points), `gear.ts` (recommended gear and upgrades), `estimates.ts` (hours to a target XP), `combatAchievements.ts` |
 | `items/` | `itemIndex.ts` (loose name search), `itemNames.ts` (name keys, owned-item matching), `itemStats.ts` (equipment stats from the wiki) |
 | `goals/` | `progress.ts` (how far a goal is), `goalsService.ts` (the Goals page, adding, changing, ordering, completing) |
-| `ai/` | `provider.ts` (the interface), `claudeProvider.ts`, `fakeProvider.ts` (tests), `chatService.ts`, `instructions.ts`, `tools/` |
+| `ai/` | `provider.ts` (the interface), `providers.ts` (the ones `.env` sets up), `providerInfo.ts` (every AI as Settings lists it, without their SDKs), `claudeProvider.ts`, `openaiProvider.ts`, `geminiProvider.ts`, `toolLoop.ts` (the tool loop for API providers), `toolCalls.ts` (running and approving tool calls, tool schemas), `fakeProvider.ts` (tests), `chatService.ts`, `instructions.ts`, `tools/` |
 | `routes/` | `accounts.ts`, `goals.ts`, `chats.ts`, `settings.ts` (with About and backups), `icons.ts` |
 | `settings/` | `settingsRepo.ts`: settings stored one row each |
 | `../test/helpers.ts` | Test helpers: temp folders, test configs and databases, a real HTTP `call`, fake requesters, fixtures |
@@ -52,14 +52,14 @@ sequenceDiagram
   participant DB as db/open.ts
   participant A as app.ts
   M->>M: loadConfig(.env) — stops with a clear message if invalid
-  M->>St: startServer(config, { Claude provider })
+  M->>St: startServer(config, { providers .env sets up })
   St->>St: claim 127.0.0.1:PORT first (a second copy stops here)
   Note over St: answers 503 "starting" meanwhile
   St->>DB: open, back up if due, migrate
   St->>A: createApp(config, db) and hand it the port
 ```
 
-- **Config** (`config.ts`): `CONTACT` is required (it goes in the User-Agent, so plain ASCII only). Folder settings accept `~`, turn a WSL path like `/mnt/c/...` into `C:\...` on Windows, and refuse anything that wouldn't work on this OS (a Linux path on Windows, a relative path), saying what to write instead.
+- **Config** (`config.ts`): `CONTACT` is required (it goes in the User-Agent, so plain ASCII only). Folder settings accept `~`, turn a WSL path like `/mnt/c/...` into `C:\...` on Windows, and refuse anything that wouldn't work on this OS (a Linux path on Windows, a relative path), saying what to write instead. An AI's settings without the one that turns it on (`OPENAI_COMPAT_API_KEY` without `OPENAI_COMPAT_BASE_URL`, `GEMINI_MODEL` without `GEMINI_API_KEY`) are refused rather than ignored, as is a base URL that isn't http(s) or holds a user name or password.
 - **The guard** (`http/localOnly.ts`): `Host` must be `localhost:<port>` or `127.0.0.1:<port>` (also Vite's 5173 in development), which blocks DNS rebinding. Requests the browser marks as cross-site or same-site are refused unless they're a page navigation, and anything but GET or HEAD must carry a matching `Origin`. Failures are a 403 explaining why.
 - **Headers:** `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Cross-Origin-Resource-Policy: same-origin`.
 - **Errors** (`http/errors.ts`) are written in one place, the last middleware, always as `{ "error": "..." }`. Routes throw an `HttpError(status, message)`, or `parseInput(schema, value)` turns bad input into a 400 with Zod's message. A `SourceError` (an outside site failing) becomes a 502 with its message. Anything else is a 500 whose details stay in the server's console.
@@ -68,7 +68,7 @@ sequenceDiagram
 
 ## Talking to other sites
 
-Every outbound request goes through `createRequester` (`http/requester.ts`). It:
+Every request to a data source goes through `createRequester` (`http/requester.ts`). (The AI providers are the exception: each talks through its own SDK, as their answers stream for minutes and each SDK knows its API. See The AI layer.) It:
 
 - sends `wise-old-model/<version> (personal use; contact: <CONTACT>)` as the User-Agent (the wiki blocks generic ones);
 - keeps one queue per site: Wise Old Man requests at least 3 s apart, every other site 1 s, on a clock that only moves forward;
@@ -201,6 +201,7 @@ erDiagram
     text id PK
     int account_id
     text title
+    text provider "whose session it holds"
     text provider_session_id
     text updated_at
   }
@@ -232,7 +233,7 @@ erDiagram
 - **The file** is `wise-old-model.db` in the data folder, opened through `node:sqlite` with a small Kysely dialect of our own (`nodeSqliteDialect.ts`). Write-ahead logging with `synchronous = NORMAL`; a write waits up to 5 s for a lock.
 - **Migrations** (`db/migrations.ts`) run at startup, all pending ones in one transaction, with a foreign-key check before committing.
 - **Backups** (`db/backup.ts`) are full copies made with `VACUUM INTO` into `backups/`: at startup when the newest is over a day old, before any migration (which must succeed first), and on Back up now. The newest 7 are kept.
-- **Settings** are one row each, as JSON; a value no longer valid falls back to its default. Secrets and paths stay in `.env`.
+- **Settings** are one row each, as JSON; a value no longer valid falls back to its default. The model and effort are each AI's own, stored as `model:<provider>` and `effort:<provider>`, so switching AI brings back what was picked for it; the API reads and writes them as plain `model` and `effort`, meaning the chosen AI's. Secrets and paths stay in `.env`.
 
 ## Page data
 
@@ -279,38 +280,86 @@ Goals belong to one account; progress is computed from its data every time, neve
 
 ```mermaid
 flowchart LR
-  route["routes/chats.ts<br/>(SSE)"] --> svc["chatService.ts<br/>turns, storage, approvals"]
-  svc --> prov{{"ChatProvider interface<br/>(provider.ts)"}}
+  route["routes/chats.ts<br/>(SSE)"] --> svc["chatService.ts<br/>turns, history, storage, approvals"]
+  svc --> prov{{"ChatProvider interface<br/>(provider.ts)<br/>the one Settings picks"}}
   prov --> claude["claudeProvider.ts<br/>Claude Agent SDK"]
+  prov --> openai["openaiProvider.ts<br/>OpenAI SDK"]
+  prov --> gemini["geminiProvider.ts<br/>Google's SDK"]
   prov -.-> fake["fakeProvider.ts<br/>(tests)"]
   svc --> tools["tools/<br/>20 tools via defineTool"]
   svc --> instr["instructions.ts<br/>system prompt, message header"]
   claude --> cc["Claude Code process"]
-  cc -- "MCP (in-process 'osrs' server)" --> tools
+  cc -- "MCP (in-process 'osrs' server)" --> calls
+  openai --> loop["toolLoop.ts"]
+  gemini --> loop
+  loop --> calls["toolCalls.ts<br/>run, ask first, schemas"]
+  calls --> tools
 ```
+
+`main.ts` builds every provider `.env` sets up (`createProviders` in `providers.ts`): Claude always, the OpenAI-compatible API when `OPENAI_COMPAT_BASE_URL` is set, Gemini when `GEMINI_API_KEY` is. The last two SDKs are loaded only then, as each takes seconds to load from a slow drive. Each turn uses the one the settings name, so switching needs no restart; one that isn't set up answers with what `.env` needs. `GET /chat/providers` lists all three for Settings → AI (`providerInfos` in `providerInfo.ts`, which needs none of the SDKs), each set up or with its setup line, never with a key.
 
 ### Chat service
 
 `createChatService` runs one turn at a time per chat:
 
-1. Stores the question, names a new chat after it, and checks the account's files (completing goals), sending a `files` event when something changed.
-2. Builds the system prompt (`buildSystemPrompt`: the account's name and type with that type's rule, the nine rules below) and heads the message with the local time and zone (`Local time: Tuesday 27 October 2026, 17:00 (America/Chicago, GMT-05:00)`). The prompt never changes within a chat, so Claude's prompt cache holds.
-3. Streams the provider's events to the page as `ChatEvent`s (`shared/src/chat.ts`): text, each lookup with its status line, changes waiting for approval and their answers, then the wiki pages read, tokens used and `done`.
-4. Stores the answer, with its error and whether it was stopped.
+1. Picks the provider the settings name, with its own model and effort. With no model picked, it takes the AI's default as Settings shows it: the model `.env` names, or else the first in its model list (the list kept an hour, so it isn't asked for each turn); with none, the turn says so.
+2. Stores the question, names a new chat after it, and checks the account's files (completing goals), sending a `files` event when something changed.
+3. Builds the system prompt (`buildSystemPrompt`: the account's name and type with that type's rule, the nine rules below) and heads the message with the local time and zone (`Local time: Tuesday 27 October 2026, 17:00 (America/Chicago, GMT-05:00)`). The prompt never changes within a chat, so the providers' prompt caches hold.
+4. Gives the provider the session to resume, if the chat holds one of this provider's, or else the chat so far (`historyOf`): each earlier question that got an answer, and the answer's text, without the lookups; the latest 20 messages, up to 24,000 characters (a latest answer longer than that is cut short rather than left out).
+5. Streams the provider's events to the page as `ChatEvent`s (`shared/src/chat.ts`): text, each lookup with its status line, changes waiting for approval and their answers, then the wiki pages read, tokens used and `done`.
+6. Stores the answer, with its error (and the AI that gave it) and whether it was stopped, and its usage as the provider reports it: tokens, the cost when it gives one (Claude with an API key, OpenRouter), and Claude's billing.
+
+**Sessions across providers.** `chat_sessions.provider` says whose session `provider_session_id` is. Only Claude keeps one: a `session` event stores it with Claude's id, and the next Claude turn resumes it. A turn in which another AI answered lets it go (both become null), since it misses that answer; Claude then starts a new session, with the chat so far written before the message (`withHistory`). A turn that answered nothing (a failure at once) leaves it as it was.
 
 Stop, closing the page, or deleting the chat or its account ends the turn at once; whatever it left open (a change waiting, a lookup running) is settled the same way on the page and in the stored answer.
 
-### The Claude provider
+### Providers
+
+Every provider gets the same `TurnInput` (system prompt, message, the chat so far, the session to resume, tools, the settings with the model to use, `requestApproval`, the stop signal) and gives back the same events (`session`, `text`, `tool_started`, `tool_finished`, `usage` with its billing, `error` with what to do). Its `info` names it, says whether it has Claude's billing choice and gives the model `.env` names for it; its `models()` lists what it offers, cached an hour by the chat service (Claude's per billing).
+
+All of them share `toolCalls.ts`: `runTool` (a result as JSON text, a failure as an error the model reads), `mayRun` (lookups run unasked; a change is asked about by its summary, and one that can't be made is refused with why; anything else is refused), and `toolSchemas` (each tool's input as JSON Schema).
+
+#### Claude
 
 `claudeProvider.ts` calls the Agent SDK's `query` per turn:
 
-- `tools: []` (no built-in tools), `settingSources: []` (none of your Claude Code settings, plugins or skills), `strictMcpConfig` (no other MCP servers), a custom system prompt, and a working folder of its own (`<dataDir>/claude/`), so these sessions stay out of your coding projects. Each chat resumes its Claude Code session.
-- The app's tools are an in-process MCP server. Every call goes through `canUseTool`: lookups run unasked; a goal change is shown as an Approve / Decline row first; anything else is refused.
-- **Billing:** with your plan, any `ANTHROPIC_API_KEY` is removed from Claude Code's environment, and a turn whose Claude Code would still bill a key stops with an explanation. With API key billing, the key from `.env` is passed in, with an hour-long prompt cache and the optional spending cap.
+- `tools: []` (no built-in tools), `settingSources: []` (none of your Claude Code settings, plugins or skills), `strictMcpConfig` (no other MCP servers), a custom system prompt, and a working folder of its own (`<dataDir>/claude/`), so these sessions stay out of your coding projects. Each chat resumes its Claude Code session, or starts one with the chat so far.
+- The app's tools are an in-process MCP server. Every call goes through `canUseTool`, which asks `mayRun`.
+- **Billing:** with your plan, any `ANTHROPIC_API_KEY` is removed from Claude Code's environment, a turn whose Claude Code would still bill a key stops with an explanation, and its usage reports no cost (what it would have cost isn't charged). With API key billing, the key from `.env` is passed in, with an hour-long prompt cache and the optional spending cap. The other AIs' keys are never passed to Claude Code.
 - The models and effort levels offered come from Claude Code itself (`supportedModels()`, asked without sending a prompt, kept an hour per billing), so new models appear without code changes. The default model is Claude Code's `opus` alias.
 - Errors come with what to do: not signed in gets the `claude` then `/login` steps.
 
 The app never reads, copies or stores the Claude sign-in; Claude Code handles it.
+
+#### The tool loop
+
+The other two APIs leave the tool loop to us, and share their shell (`apiProvider` in `toolLoop.ts`): each brings its model list, a `Conversation` per turn, and what its errors mean (`explain`). `runToolLoop` drives the `Conversation`: each round sends everything so far and streams the answer back (text as it comes, the calls it makes, usage), then the round's calls run in order through `mayRun` and `runTool`, their results are added (`addRound`), and the next round goes, until the model answers without a call. A later round's text starts a new paragraph. Input that isn't a JSON object is refused back to the model. It stops at the most tool rounds the settings allow (with the same words as Claude's limit), and between calls once the turn is stopped.
+
+#### OpenAI-compatible
+
+`openaiProvider.ts` speaks Chat Completions through OpenAI's SDK, which OpenAI, OpenRouter, Ollama, LM Studio, Groq, Mistral and others share. The client is given `.env`'s address and key (a stand-in for a local server that needs none) and none of the SDK's environment variables (another key, address, organization or project, debug logging); only `OPENAI_CUSTOM_HEADERS` still applies, which exists for this SDK alone.
+
+- Each round streams with usage; a call arrives in pieces by index (a new id at an index is another call), and a call's `extra_content` (Gemini's thought signature, on its compatible endpoint) is sent back with it.
+- Usage keeps the cached part of the prompt apart, and OpenRouter's `cost` when it gives one.
+- The models are the API's list, sorted by name, with no effort setting (not every model takes one).
+- Errors come with what to do: a refused or missing key, an address it can't reach, an unknown model, or a model that can't use tools.
+
+#### Gemini
+
+`geminiProvider.ts` uses Google's SDK with `.env`'s key, `vertexai: false` and the Gemini API's address, so no Google setting in the environment can send the key elsewhere. (If the shell also sets `GOOGLE_API_KEY`, the SDK warns at startup that it's using that one. It isn't: the key passed in wins.)
+
+- The tools' schemas are cut down to the JSON Schema Gemini documents (`geminiSchema`: `const` becomes a one-value `enum`, `oneOf` becomes `anyOf`, others such as `pattern` are left out); the tools check their input themselves.
+- Each round's parts go back exactly as they came, since later rounds need the thought signatures on them. Thoughts aren't shown.
+- A round that gives nothing says why: a blocked question, a lookup it couldn't make, or an empty answer.
+- The models are those that answer chats, in Google's order but with the first that thinks moved first (it's the default; a Gemma model, say, refuses system instructions). There's no effort setting: the API doesn't say which thinking levels a model takes, and refuses one it doesn't, so each model thinks as it does by default.
+- The SDK's errors carry the API's whole JSON answer; only its message is shown.
+
+#### Adding a provider
+
+1. Add its id to `ProviderIdSchema` (`shared/src/settings.ts`) and its name and setup line to `providers.ts`.
+2. Add its `.env` settings to `config.ts` (and `.env.example`, the README and About).
+3. Write `<name>Provider.ts`: give its SDK client `.env`'s values explicitly, and build it with `apiProvider` from its model list, a `Conversation` per turn (its usage mapped) and `explain` for its errors (with what to do). An API that runs its own tool loop can implement `ChatProvider` directly, through `mayRun` and `runTool`.
+4. Build it in `createProviders` when `.env` sets it up (importing its module there, so its SDK loads only then), and test it against a fake of its client, as `openaiProvider.test.ts` does.
 
 ### Instructions
 
@@ -336,8 +385,8 @@ All routes are under `/api`. Inputs are checked with the shared schemas; an unkn
 | Route | Does |
 |---|---|
 | `GET /health` | Version check |
-| `GET`, `PATCH /settings` | The app's settings (a partial update; unknown keys refused) |
-| `GET /about` | Data folder, RuneLite folder and whether it's there, last backup, `.env` values (the API key only as set or not) |
+| `GET`, `PATCH /settings` | The app's settings (a partial update; unknown keys refused, and an AI `.env` doesn't set up) |
+| `GET /about` | Data folder, RuneLite folder and whether it's there, last backup, `.env` values (the API keys only as set or not) |
 | `POST /backups` | Back up now |
 | `GET /accounts` | Every account, by name |
 | `GET /accounts/status` | Each account's Character Export folder and Temple log, from saved data |
@@ -351,7 +400,8 @@ All routes are under `/api`. Inputs are checked with the shared schemas; an unkn
 | `GET`, `POST /accounts/:id/chats`, `PATCH`, `DELETE /chats/:id`, `GET /chats/:id/messages` | Chats |
 | `POST /chats/:id/messages` | Send a message; the answer streams back as server-sent events |
 | `POST /chats/:id/approvals/:requestId`, `POST /chats/:id/stop` | Approve or decline a change; stop an answer |
-| `GET /chat/models?billing=` | The models and effort levels Claude Code offers |
+| `GET /chat/providers` | Every AI, whether `.env` sets it up (and if not, what to add), and whether it has Claude's billing choice |
+| `GET /chat/models?provider=&billing=` | The models and effort levels an AI offers (Claude's per billing; by default the ones set), and the model it uses when none is picked |
 | `GET /icons/wiki/:file`, `GET /icons/item/:id` | Game icons, downloaded on first use and kept in the data folder |
 
 Icons are served with a year-long immutable cache. Only plain file names and numeric ids are accepted, a file is written whole or not at all, and a site that fails isn't asked for icons for a minute, so a page full of icons can't hold up the wiki's queue.
@@ -361,5 +411,5 @@ Icons are served with a year-long immutable cache. Only plain file names and num
 - `server/test/helpers.ts` gives every test a fresh temp folder (`tempDir`), a config pointing at it (`testConfig`), a migrated database (`testDb`, in memory unless a file is passed), and `call`, one real HTTP request against the app.
 - Outside sites are faked with `fakeRequester`, fed with responses captured once from the real APIs (`server/test/fixtures`); `sharedDataAnswer` answers the wiki, prices, Temple's categories and Wise Old Man's rates from those fixtures. `testWikiCtx` gives a wiki context with a movable clock.
 - Character Export samples come from real files, trimmed and renamed so no real names are committed (`exportFixture`, `writeExportFiles`).
-- The chat is tested with `fakeProvider.ts`; tests never call Claude. The Claude provider is tested against a fake `query`.
+- The chat is tested with `fakeProvider.ts`; tests never call any model. The Claude provider is tested against a fake `query`, the others against fakes of their SDK clients, and `runToolLoop` against a scripted conversation.
 - The requester's queues, pauses and retries are tested with an injected clock and `sleep`, so they run instantly.

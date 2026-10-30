@@ -49,13 +49,22 @@ const TOOL_ICONS: Partial<Record<string, string>> = {
   get_collection_log: PROGRESS_ICONS.collectionLog,
 };
 
-/** What an answer used: tokens on the plan ("8.2k tokens on your plan"), or its cost with a key. */
+/**
+ * What an answer used: with Claude, tokens on the plan ("8.2k tokens on your plan") or the cost
+ * with a key; with another AI, its tokens and what they cost when it says ("8.2k tokens ($0.03)").
+ */
 export function usageText(usage: ChatUsage): string {
   if (usage.billing === 'api_key' && usage.costUsd !== null) {
     return `$${usage.costUsd.toFixed(2)} with your API key`;
   }
-  const tokens = formatCompact(usage.tokens).replace('K', 'k');
-  return `${tokens} ${plural(usage.tokens, 'token')} ${usage.billing === 'plan' ? 'on your plan' : 'with your API key'}`;
+  const tokens = `${formatCompact(usage.tokens).replace('K', 'k')} ${plural(usage.tokens, 'token')}`;
+  if (usage.billing === 'plan') return `${tokens} on your plan`;
+  if (usage.billing === 'api_key') return `${tokens} with your API key`;
+  if (usage.costUsd === null) return tokens;
+  // OpenRouter's cheaper models cost fractions of a cent (and its free ones nothing).
+  const cost =
+    usage.costUsd > 0 && usage.costUsd < 0.01 ? 'under $0.01' : `$${usage.costUsd.toFixed(2)}`;
+  return `${tokens} (${cost})`;
 }
 
 /** The lookups an answer made: one line ("Looked at 4 things"), opening to each, with icons. */
@@ -170,11 +179,14 @@ function Answer(props: {
       {answer.error && (
         <div className={styles.problem} role="alert">
           {answer.error.fix ? (
-            // A setup problem, as the mockup has it: what to do, then what Claude Code said.
+            // A setup problem, as the mockup has it: what to do, then what the AI said (an
+            // answer stored before the AI was kept with it says "the AI").
             <>
-              <strong>Claude isn't available yet</strong>
+              <strong>{answer.error.provider ?? 'The AI'} isn't available yet</strong>
               <p>{answer.error.fix}</p>
-              <p className={styles.muted}>Claude Code said: {answer.error.message}</p>
+              <p className={styles.muted}>
+                {answer.error.provider ?? 'The AI'} said: {answer.error.message}
+              </p>
             </>
           ) : (
             <strong>{answer.error.message}</strong>

@@ -1,3 +1,4 @@
+import type { ProviderId } from '@wom/shared';
 import type { Generated, Selectable } from 'kysely';
 
 /** All times are ISO 8601 text in UTC. JSON columns hold JSON text. */
@@ -55,6 +56,8 @@ export interface ChatSessionsTable {
   id: string;
   account_id: number;
   title: string;
+  /** The provider whose session provider_session_id is (null when it holds none). */
+  provider: ProviderId | null;
   provider_session_id: string | null;
   created_at: string;
   updated_at: string;

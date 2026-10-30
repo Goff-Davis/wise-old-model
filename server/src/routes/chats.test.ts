@@ -10,6 +10,7 @@ import {
   testDb,
 } from '../../test/helpers.ts';
 import { createFakeProvider, type FakeStep } from '../ai/fakeProvider.ts';
+import { createProviders } from '../ai/providers.ts';
 import { createApp } from '../app.ts';
 
 const ADD_MAGIC = 'Add goal: Reach 75 Magic (skill)';
@@ -26,7 +27,7 @@ async function setup(script: FakeStep[]) {
     config: testConfig(),
     db,
     req: fakeRequester(() => outage('Some site')).req,
-    provider: fake.provider,
+    providers: [fake.provider],
   });
   const created = await call(app, { method: 'POST', path: `/api/accounts/${row.id}/chats` });
   expect(created.status).toBe(201);
@@ -290,12 +291,57 @@ describe('chat routes', () => {
     expect(await db.selectFrom('chat_messages').selectAll().execute()).toEqual([]);
   });
 
-  it("answers with the AI's models, for the billing asked about", async () => {
+  it('answers with the models of the AI and billing asked about', async () => {
     const { app } = await setup([]);
     const res = await call(app, { path: '/api/chat/models' });
-    expect(res).toMatchObject({ status: 200, body: { models: [], error: null } });
-    const keyed = await call(app, { path: '/api/chat/models?billing=api_key' });
+    expect(res).toMatchObject({
+      status: 200,
+      body: { models: [], defaultModel: null, error: null },
+    });
+    const keyed = await call(app, { path: '/api/chat/models?provider=claude&billing=api_key' });
     expect(keyed).toMatchObject({ status: 200, body: { models: [], error: null } });
-    expect((await call(app, { path: '/api/chat/models?billing=card' })).status).toBe(400);
+    const unset = await call(app, { path: '/api/chat/models?provider=gemini' });
+    expect(unset).toMatchObject({
+      status: 200,
+      body: { models: [], error: 'Set GEMINI_API_KEY in .env, then restart Wise Old Model.' },
+    });
+    for (const query of ['billing=card', 'provider=mistral']) {
+      expect((await call(app, { path: `/api/chat/models?${query}` })).status).toBe(400);
+    }
   });
+
+  // It loads the providers' SDKs, which takes seconds on a slow drive.
+  it('lists every AI, set up or not, with what .env needs and never a key', async () => {
+    const keys = ['sk-or-v1-only-the-server', 'AIza-only-the-server'];
+    const config = testConfig({
+      openAiCompat: {
+        baseUrl: 'https://openrouter.ai/api/v1',
+        apiKey: keys[0] ?? null,
+        name: 'OpenRouter',
+        model: null,
+      },
+    });
+    // The real providers, holding their keys (built, never asked anything).
+    const app = createApp({
+      config,
+      db: await testDb(),
+      providers: await createProviders(config, {}),
+    });
+    const res = await call(app, { path: '/api/chat/providers' });
+    for (const key of keys) expect(res.text).not.toContain(key);
+    expect(res).toMatchObject({
+      status: 200,
+      body: [
+        { id: 'claude', name: 'Claude', configured: true, choosesBilling: true, setup: null },
+        { id: 'openai', name: 'OpenRouter', configured: true, choosesBilling: false, setup: null },
+        {
+          id: 'gemini',
+          name: 'Gemini',
+          configured: false,
+          choosesBilling: false,
+          setup: 'Set GEMINI_API_KEY in .env, then restart Wise Old Model.',
+        },
+      ],
+    });
+  }, 30_000);
 });

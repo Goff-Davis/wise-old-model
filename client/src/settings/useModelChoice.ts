@@ -24,22 +24,24 @@ export function nearestEffort(effort: string, levels: string[], order: string[])
 
 /**
  * The model and effort the chat answers with, as the chat bar and Settings → AI pick them: the
- * AI settings, picked from the models the provider lists (Claude Code's own, so they follow its
+ * chosen AI's settings, picked from the models it lists (its own list, so they follow its
  * releases), each with the effort levels it takes. A pick is saved at once, shown meanwhile, and
- * back to what's saved if it isn't. The saved model is found by its id or by the model an alias
- * stands for; one the list hasn't (or every model, when it can't be listed) is kept as a choice
- * of its own. A model with no effort setting has no effort to pick (`showEffort`), and switching
- * to one without the effort set takes the nearest it has.
+ * back to what's saved if it isn't. None picked yet shows the model the AI answers with then.
+ * The saved model is found by its id or by the model an alias stands for; one the list hasn't
+ * (or every model, when it can't be listed) is kept as a choice of its own. A model with no
+ * effort setting has no effort to pick (`showEffort`), and switching to one without the effort
+ * set takes the nearest it has.
  */
 export function useModelChoice() {
   const settings = useSettings();
   const update = useUpdateSettings();
   const saved = settings.data;
-  // Each billing has its own list, asked for once the settings say which.
+  // Each AI (and Claude's each billing) has its own list, asked for once the settings say which.
   const listed = useQuery({
-    ...chatModelsQuery(saved?.billing ?? 'plan'),
+    ...chatModelsQuery(saved?.provider ?? 'claude', saved?.billing ?? 'plan'),
     enabled: saved !== undefined,
-    staleTime: HOUR_MS,
+    // A list that failed is asked for again next time: the AI may have been started since.
+    staleTime: (query) => (query.state.data?.error ? 0 : HOUR_MS),
   });
   // What was picked, until its save settles (a mutation is pending only a tick later).
   const [picked, setPicked] = useState<Picked | null>(null);
@@ -47,7 +49,7 @@ export function useModelChoice() {
     setPicked(change);
     update.mutate(change, { onSettled: () => setPicked(null) });
   };
-  const modelId = picked?.model ?? saved?.model ?? '';
+  const modelId = picked?.model ?? (saved?.model || listed.data?.defaultModel) ?? '';
   const effort = picked?.effort ?? saved?.effort ?? '';
   const listedModels = listed.data?.models ?? [];
   const current =
@@ -63,6 +65,7 @@ export function useModelChoice() {
   const order = levelsOf(listedModels);
   // A model not in the list could take any level the others do.
   const levels = current ? current.efforts : order;
+  const efforts = levels.includes(effort) || !effort ? levels : [...levels, effort];
   return {
     /** False until the settings have loaded. */
     ready: saved !== undefined,
@@ -74,8 +77,9 @@ export function useModelChoice() {
         next && next.efforts.length > 0 ? nearestEffort(effort, next.efforts, order) : effort;
       pick(nearest === effort ? { model: id } : { model: id, effort: nearest });
     },
-    showEffort: !current || current.efforts.length > 0,
-    efforts: levels.includes(effort) || !effort ? levels : [...levels, effort],
+    // A listed model has the levels it lists; another, any the others have (or the one set).
+    showEffort: current ? current.efforts.length > 0 : efforts.length > 0,
+    efforts,
     effort,
     pickEffort: (level: string) => pick({ effort: level }),
     /** Why the models couldn't be listed, when they couldn't. */

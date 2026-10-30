@@ -7,7 +7,10 @@ import { Problem } from '../../components/Problem.tsx';
 import { useTimeZone } from '../../settings/useSettings.ts';
 import styles from './Settings.module.css';
 
-/** Each .env setting as set, or what applies when it isn't; the API key only as set or not. */
+/** A key as set or not, and what not set means when that says more. */
+const setOrNot = (key: 'set' | 'not set', notSet = 'Not set') => (key === 'set' ? 'Set' : notSet);
+
+/** Each .env setting as set, or what applies when it isn't; the API keys only as set or not. */
 function envRows(env: AboutAnswer['env']): [name: string, value: string][] {
   return [
     ['CONTACT', env.CONTACT],
@@ -17,7 +20,13 @@ function envRows(env: AboutAnswer['env']): [name: string, value: string][] {
       'RUNELITE_DIR',
       env.RUNELITE_DIR ?? 'Not set (the RuneLite folder in Game data is the default)',
     ],
-    ['ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY === 'set' ? 'Set' : 'Not set'],
+    ['ANTHROPIC_API_KEY', setOrNot(env.ANTHROPIC_API_KEY)],
+    ['OPENAI_COMPAT_BASE_URL', env.OPENAI_COMPAT_BASE_URL ?? 'Not set (no OpenAI-compatible AI)'],
+    ['OPENAI_COMPAT_API_KEY', setOrNot(env.OPENAI_COMPAT_API_KEY)],
+    ['OPENAI_COMPAT_NAME', env.OPENAI_COMPAT_NAME ?? 'Not set (OpenAI-compatible)'],
+    ['OPENAI_COMPAT_MODEL', env.OPENAI_COMPAT_MODEL ?? 'Not set (the first of its models by name)'],
+    ['GEMINI_API_KEY', setOrNot(env.GEMINI_API_KEY, 'Not set (no Gemini)')],
+    ['GEMINI_MODEL', env.GEMINI_MODEL ?? 'Not set (the first it lists that thinks)'],
   ];
 }
 

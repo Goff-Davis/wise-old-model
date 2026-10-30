@@ -30,9 +30,9 @@ flowchart LR
 |---|---|
 | `accounts.ts` | Account types and their labels (`ACCOUNT_TYPE_LABELS`, `ACCOUNT_TYPE_NOUNS`), `hasBank` and `canTrade`, source kinds, freshness, account names (`AccountNameSchema`), the account, lookup, add, change, refresh, file check and status schemas |
 | `overview.ts`, `gains.ts`, `bank.ts`, `collectionLog.ts`, `goals.ts` | Each page's data schema; the bank's places (`BANK_PLACES`, `PLACE_NAMES`); This week's ranges; goal targets, `goalTitle` and progress; Temple's tabs and the steps to sync a log |
-| `chat.ts` | Chats, messages, stored answers, the stream's events (`ChatEvent`), and the stream format itself (`formatSse` on the server, `parseSse` in the browser) |
-| `settings.ts` | The settings schema and defaults, and effort level names |
-| `about.ts` | The About section and backups |
+| `chat.ts` | Chats, messages, stored answers (an error names the AI that gave it; usage carries Claude's billing, or none), the stream's events (`ChatEvent`), the model lists and the AIs Settings can pick (`ProviderInfo`), and the stream format itself (`formatSse` on the server, `parseSse` in the browser) |
+| `settings.ts` | The settings schema and defaults (the chosen AI, `ProviderIdSchema`, with its own model and effort; an empty model means the AI's default), and effort level names |
+| `about.ts` | The About section (the `.env` values, the API keys only as set or not) and backups |
 | `errors.ts` | The error answer (`{ error }`) and `errorMessage` |
 | `names.ts` | `nameKey`: names compared ignoring case, with spaces, underscores, hyphens and non-breaking spaces the same (Wise Old Man's rule) |
 | `time.ts` | Time constants, time zone checks (`effectiveTimeZone`: Automatic means the browser's zone), local days (`localDayKey`, `dayStart`, `dayRange`, `startOfLocalDay`) and `formatTime` ("5 minutes ago", "yesterday", "Oct 27, 2026") |

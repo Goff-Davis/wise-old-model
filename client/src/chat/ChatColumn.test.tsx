@@ -278,13 +278,18 @@ describe('ChatColumn', () => {
       label: 'Checking your gains…',
       status: 'error',
     });
-    answer.push({ type: 'error', message: 'Not logged in · Please run /login', fix });
+    answer.push({
+      type: 'error',
+      message: 'Not logged in · Please run /login',
+      fix,
+      provider: 'Claude',
+    });
     expect(await screen.findByText(/Looked at 1 thing\b/, { selector: 'p' })).toBeTruthy();
     const alert = await screen.findByRole('alert');
-    // As the mockup has it: a heading, what to do, and what Claude Code said.
+    // As the mockup has it: a heading, what to do, and what the AI said.
     expect(within(alert).getByText("Claude isn't available yet").tagName).toBe('STRONG');
     expect(alert.textContent).toContain(fix);
-    expect(alert.textContent).toContain('Claude Code said: Not logged in · Please run /login');
+    expect(alert.textContent).toContain('Claude said: Not logged in · Please run /login');
   });
 
   it('opens, renames and deletes earlier chats', async () => {
@@ -317,7 +322,7 @@ describe('ChatColumn', () => {
     expect(await screen.findByText('Ask anything about Lumby Pete.')).toBeTruthy();
   });
 
-  it('gives tokens on the plan, and the cost with an API key', () => {
+  it("gives tokens on Claude's plan, the cost with its API key, and another AI's tokens and any cost", () => {
     expect(usageText({ tokens: 8200, costUsd: null, billing: 'plan' })).toBe(
       '8.2k tokens on your plan',
     );
@@ -325,6 +330,62 @@ describe('ChatColumn', () => {
     expect(usageText({ tokens: 8200, costUsd: 0.04, billing: 'api_key' })).toBe(
       '$0.04 with your API key',
     );
+    expect(usageText({ tokens: 8200, costUsd: null, billing: null })).toBe('8.2k tokens');
+    expect(usageText({ tokens: 8200, costUsd: 0.031, billing: null })).toBe('8.2k tokens ($0.03)');
+    expect(usageText({ tokens: 900, costUsd: 0.0004, billing: null })).toBe(
+      '900 tokens (under $0.01)',
+    );
+    // OpenRouter's free models cost nothing.
+    expect(usageText({ tokens: 900, costUsd: 0, billing: null })).toBe('900 tokens ($0.00)');
+  });
+
+  it('names the AI a stored problem came from, or says the AI for one stored before it was kept', async () => {
+    const problem = (provider?: string) => ({
+      id: provider ? 3 : 2,
+      role: 'assistant',
+      text: '',
+      error: {
+        message: 'API key not valid.',
+        fix: 'Check GEMINI_API_KEY.',
+        ...(provider ? { provider } : {}),
+      },
+      usage: null,
+      createdAt: '2026-10-27T12:00:00.000Z',
+    });
+    renderChat({
+      chats: [CHAT],
+      // As the server sends them: the older answer has no provider in its error.
+      routes: { 'GET /api/chats/c1/messages': () => [USER, problem(), problem('Gemini')] },
+    });
+    const [older, newer] = await screen.findAllByRole('alert');
+    expect(within(older as HTMLElement).getByText("The AI isn't available yet")).toBeTruthy();
+    expect(older?.textContent).toContain('The AI said: API key not valid.');
+    expect(within(newer as HTMLElement).getByText("Gemini isn't available yet")).toBeTruthy();
+    expect(newer?.textContent).toContain('Gemini said: API key not valid.');
+  });
+
+  it('shows the model another AI answers with when none is picked, with no effort to pick', async () => {
+    renderChat({
+      chats: [CHAT],
+      settings: { provider: 'openai', model: '', effort: '' },
+      routes: {
+        'GET /api/chats/c1/messages': () => [],
+        'GET /api/chat/models': ({ url }) => ({
+          models: ['llama3.3:70b', 'qwen3:14b'].map((id) => ({
+            id,
+            resolvedId: null,
+            label: id,
+            description: '',
+            efforts: [],
+          })),
+          defaultModel: url.searchParams.get('provider') === 'openai' ? 'qwen3:14b' : null,
+          error: null,
+        }),
+      },
+    });
+    const model = (await screen.findByRole('combobox', { name: 'Model' })) as HTMLSelectElement;
+    await waitFor(() => expect(model.value).toBe('qwen3:14b'));
+    expect(screen.queryByRole('combobox', { name: 'Effort' })).toBeNull();
   });
 
   it("opens another account's latest chat when the account changes, hanging up on an answer", async () => {
@@ -599,7 +660,7 @@ describe('ChatColumn', () => {
       routes: {
         'GET /api/chats/c1/messages': () => [],
         'POST /api/chats/c1/messages': () => answer.response,
-        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, defaultModel: null, error: null }),
       },
     });
     await screen.findByPlaceholderText('Ask about Lumby Pete');
@@ -647,7 +708,7 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, defaultModel: null, error: null }),
       },
       settings: { model: 'claude-opus-5-5' },
     });
@@ -659,7 +720,7 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, defaultModel: null, error: null }),
       },
       settings: { model: 'claude-opus-4-8', effort: 'high' },
     });
@@ -674,7 +735,7 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: TEST_MODELS, error: null }),
+        'GET /api/chat/models': () => ({ models: TEST_MODELS, defaultModel: null, error: null }),
       },
       refuse: 'Settings are read-only right now.',
     });
@@ -691,7 +752,11 @@ describe('ChatColumn', () => {
       chats: [CHAT],
       routes: {
         'GET /api/chats/c1/messages': () => [],
-        'GET /api/chat/models': () => ({ models: [], error: 'Not logged in · Please run /login' }),
+        'GET /api/chat/models': () => ({
+          models: [],
+          defaultModel: null,
+          error: 'Not logged in · Please run /login',
+        }),
       },
     });
     const alone = (await screen.findByRole('combobox', { name: 'Model' })) as HTMLSelectElement;

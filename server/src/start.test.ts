@@ -57,10 +57,10 @@ describe('startServer', () => {
     (await holdPort(port)).close();
   });
 
-  it('answers the chat with the AI provider it is given', async () => {
+  it('answers the chat with the AI providers it is given', async () => {
     const config = testConfig({ port: await freePort() });
     const { provider } = createFakeProvider([{ type: 'text', delta: 'Hello from the provider.' }]);
-    const { server, db } = await startServer(config, { provider });
+    const { server, db } = await startServer(config, { providers: [provider] });
     try {
       const row = await insertAccount(db);
       const base = `http://127.0.0.1:${config.port}`;

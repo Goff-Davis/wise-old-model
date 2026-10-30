@@ -24,6 +24,7 @@ import {
   minutesAgo,
   refusal,
   TEST_MODELS,
+  TEST_PROVIDERS,
   testAbout,
   testQueryClient,
 } from '../../test/fakeApi.ts';
@@ -456,6 +457,74 @@ describe('Settings → Game data', () => {
 });
 
 describe('Settings → AI', () => {
+  it('picks the AI from those .env sets up, saying what each other one needs', async () => {
+    const asked: string[] = [];
+    const patches = fakeServer({
+      settings: { billing: 'api_key' },
+      routes: {
+        'GET /api/chat/providers': () => [
+          TEST_PROVIDERS[0],
+          { ...TEST_PROVIDERS[1], name: 'Ollama', configured: true, setup: null },
+          TEST_PROVIDERS[2],
+        ],
+        'GET /api/chat/models': ({ url }) => {
+          asked.push(String(url.searchParams));
+          return url.searchParams.get('provider') === 'openai'
+            ? {
+                models: ['llama3.3:70b', 'qwen3:14b'].map((id) => ({
+                  id,
+                  resolvedId: null,
+                  label: id,
+                  description: '',
+                  efforts: [],
+                })),
+                defaultModel: 'qwen3:14b',
+                error: null,
+              }
+            : { models: TEST_MODELS, defaultModel: 'default', error: null };
+        },
+      },
+    });
+    renderSettings();
+    const ai = await screen.findByRole('region', { name: 'AI' });
+    const claude = await within(ai).findByRole('radio', { name: 'Claude' });
+    expect(claude).toHaveProperty('checked', true);
+    const gemini = within(ai).getByRole('radio', { name: 'Gemini' });
+    expect(gemini).toHaveProperty('disabled', true);
+    // Why it can't be picked, read with it.
+    const why = document.getElementById(gemini.getAttribute('aria-describedby') ?? '');
+    expect(why?.textContent).toBe(
+      'Gemini: Set GEMINI_API_KEY in .env, then restart Wise Old Model.',
+    );
+    expect(await within(ai).findByRole('radio', { name: 'API key' })).toHaveProperty(
+      'checked',
+      true,
+    );
+    expect(within(ai).getByRole('spinbutton', { name: /spending cap/i })).toBeTruthy();
+
+    fireEvent.click(within(ai).getByRole('radio', { name: 'Ollama' }));
+    await waitFor(() => expect(patches).toEqual([{ provider: 'openai' }]));
+    // Billing and its cap are Claude's alone.
+    await waitFor(() =>
+      expect(within(ai).queryByRole('radio', { name: 'Claude plan' })).toBeNull(),
+    );
+    expect(within(ai).queryByRole('spinbutton', { name: /spending cap/i })).toBeNull();
+    // None picked yet: the model it answers with is shown, with no effort to pick.
+    const model = within(ai).getByRole('combobox', { name: 'Model' });
+    await waitFor(() => expect(model).toHaveProperty('value', 'qwen3:14b'));
+    expect(within(ai).queryByRole('combobox', { name: 'Effort' })).toBeNull();
+    expect(asked).toEqual(['provider=claude&billing=api_key', 'provider=openai&billing=api_key']);
+
+    fireEvent.change(model, { target: { value: 'llama3.3:70b' } });
+    await waitFor(() => expect(patches).toContainEqual({ model: 'llama3.3:70b' }));
+    // Back to Claude: its own model and effort.
+    fireEvent.click(within(ai).getByRole('radio', { name: 'Claude' }));
+    await waitFor(() =>
+      expect(within(ai).getByRole('combobox', { name: 'Model' })).toHaveProperty('value', 'opus'),
+    );
+    expect(within(ai).getByRole('combobox', { name: 'Effort' })).toHaveProperty('value', 'medium');
+  });
+
   it('hides the spending cap unless billing is an API key, and says when .env has no key', async () => {
     const patches = fakeServer();
     renderSettings();
@@ -499,13 +568,13 @@ describe('Settings → AI', () => {
     await waitFor(() => expect(patches).toContainEqual({ budgetUsd: null }));
   });
 
-  it("offers the models Claude Code lists, with the picked model's effort levels", async () => {
+  it("offers the models the AI lists, with the picked model's effort levels", async () => {
     const billings: (string | null)[] = [];
     const patches = fakeServer({
       routes: {
         'GET /api/chat/models': ({ url }) => {
           billings.push(url.searchParams.get('billing'));
-          return { models: TEST_MODELS, error: null };
+          return { models: TEST_MODELS, defaultModel: null, error: null };
         },
       },
     });
@@ -531,6 +600,67 @@ describe('Settings → AI', () => {
     expect(billings).toEqual(['plan']);
     fireEvent.click(within(ai).getByRole('radio', { name: 'API key' }));
     await waitFor(() => expect(billings).toEqual(['plan', 'api_key']));
+  });
+
+  it("still offers Claude's billing when the AIs can't be listed", async () => {
+    fakeServer({
+      routes: { 'GET /api/chat/providers': () => refusal(500, 'Something went wrong.') },
+    });
+    renderSettings();
+    const ai = await screen.findByRole('region', { name: 'AI' });
+    expect(await within(ai).findByRole('radio', { name: 'Claude plan' })).toBeTruthy();
+    await waitFor(() =>
+      expect(ai.textContent).toContain("Couldn't list the AIs. Something went wrong."),
+    );
+  });
+
+  it('asks for the models again after a list that failed, as the AI may be started since', async () => {
+    let calls = 0;
+    fakeServer({
+      routes: {
+        'GET /api/chat/models': () =>
+          ++calls === 1
+            ? { models: [], defaultModel: null, error: "Couldn't reach Ollama." }
+            : { models: TEST_MODELS, defaultModel: null, error: null },
+      },
+    });
+    const client = testQueryClient();
+    const mount = () =>
+      render(
+        <QueryClientProvider client={client}>
+          <Mounted />
+        </QueryClientProvider>,
+      );
+    const first = mount();
+    await screen.findByText("Couldn't list the models: Couldn't reach Ollama.");
+    first.unmount();
+    mount();
+    const model = await screen.findByRole('combobox', { name: 'Model' });
+    await waitFor(() => expect(within(model).getAllByRole('option')).toHaveLength(4));
+    expect(calls).toBe(2);
+  });
+
+  it("keeps the model when an AI's models can't be listed, with no effort when it has none", async () => {
+    fakeServer({
+      settings: { provider: 'openai', model: 'qwen3:14b', effort: '' },
+      routes: {
+        'GET /api/chat/models': () => ({
+          models: [],
+          defaultModel: null,
+          error: "Couldn't reach Ollama at http://localhost:11434/v1.",
+        }),
+      },
+    });
+    renderSettings();
+    const ai = await screen.findByRole('region', { name: 'AI' });
+    const model = await within(ai).findByRole('combobox', { name: 'Model' });
+    await waitFor(() =>
+      expect(ai.textContent).toContain(
+        "Couldn't list the models: Couldn't reach Ollama at http://localhost:11434/v1.",
+      ),
+    );
+    expect(model).toHaveProperty('value', 'qwen3:14b');
+    expect(within(ai).queryByRole('combobox', { name: 'Effort' })).toBeNull();
   });
 
   it('saves the most tool rounds per question, from 1 to 100', async () => {
@@ -577,6 +707,12 @@ describe('Settings → About', () => {
       'DATA_DIRNot set (the data folder above is the default)',
       'RUNELITE_DIR~/.runelite',
       'ANTHROPIC_API_KEYNot set',
+      'OPENAI_COMPAT_BASE_URLNot set (no OpenAI-compatible AI)',
+      'OPENAI_COMPAT_API_KEYNot set',
+      'OPENAI_COMPAT_NAMENot set (OpenAI-compatible)',
+      'OPENAI_COMPAT_MODELNot set (the first of its models by name)',
+      'GEMINI_API_KEYNot set (no Gemini)',
+      'GEMINI_MODELNot set (the first it lists that thinks)',
     ]);
     expect(about.textContent).toContain('Game images © Jagex Ltd.');
     const license = within(about).getByRole('link', { name: 'CC BY-NC-SA 3.0' });
@@ -606,15 +742,40 @@ describe('Settings → About', () => {
     );
   });
 
-  it('shows the API key as set without its value', async () => {
+  it('shows the API keys as set without their values, and the other AI settings as set', async () => {
     fakeServer({
       routes: {
-        'GET /api/about': () => ({ ...ABOUT, env: { ...ABOUT.env, ANTHROPIC_API_KEY: 'set' } }),
+        'GET /api/about': () => ({
+          ...ABOUT,
+          env: {
+            ...ABOUT.env,
+            ANTHROPIC_API_KEY: 'set',
+            OPENAI_COMPAT_BASE_URL: 'http://localhost:11434/v1',
+            OPENAI_COMPAT_API_KEY: 'set',
+            OPENAI_COMPAT_NAME: 'Ollama',
+            OPENAI_COMPAT_MODEL: 'qwen3:14b',
+            GEMINI_API_KEY: 'set',
+            GEMINI_MODEL: 'gemini-3-pro',
+          },
+        }),
       },
     });
     renderSettings();
     const env = await screen.findByRole('list', { name: '.env settings' });
-    expect(within(env).getAllByRole('listitem').at(-1)?.textContent).toBe('ANTHROPIC_API_KEYSet');
+    expect(
+      within(env)
+        .getAllByRole('listitem')
+        .slice(4)
+        .map((item) => item.textContent),
+    ).toEqual([
+      'ANTHROPIC_API_KEYSet',
+      'OPENAI_COMPAT_BASE_URLhttp://localhost:11434/v1',
+      'OPENAI_COMPAT_API_KEYSet',
+      'OPENAI_COMPAT_NAMEOllama',
+      'OPENAI_COMPAT_MODELqwen3:14b',
+      'GEMINI_API_KEYSet',
+      'GEMINI_MODELgemini-3-pro',
+    ]);
   });
 
   it('backs up now and shows the new last backup, or why it failed', async () => {

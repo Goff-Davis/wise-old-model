@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { type JSX, useId } from 'react';
 import { aboutQuery } from '../../api/about.ts';
+import { chatProvidersQuery } from '../../api/chats.ts';
 import { Problem } from '../../components/Problem.tsx';
 import { EffortOptions, ModelOptions } from '../../settings/ModelOptions.tsx';
 import { useModelChoice } from '../../settings/useModelChoice.ts';
@@ -14,7 +15,7 @@ const BILLING = [
   { value: 'api_key', label: 'API key' },
 ] as const;
 
-/** The model and effort, from the models Claude Code lists (the chat bar has the same two). */
+/** The model and effort, from the models the AI lists (the chat bar has the same two). */
 function ModelPicker(): JSX.Element {
   const choice = useModelChoice();
   const modelId = useId();
@@ -52,38 +53,58 @@ function ModelPicker(): JSX.Element {
 }
 
 /**
- * How the chat is billed (the Claude plan through Claude Code, or the API key from .env), the
- * model and effort, the most tool rounds per question, and, with an API key, a spending cap per
- * question.
+ * Which AI answers (any .env sets up; each other one says what it needs), its model and effort,
+ * the most tool rounds per question, and, for Claude, how the chat is billed (the plan through
+ * Claude Code, or the API key from .env) and, with an API key, a spending cap per question.
  */
 export function Ai(): JSX.Element {
   const id = useId();
   const settings = useSettings();
   const update = useUpdateSettings();
   const about = useQuery(aboutQuery);
+  const providers = useQuery(chatProvidersQuery);
   const s = settings.data;
+  const chosen = providers.data?.find((provider) => provider.id === s?.provider);
+  // Until the AIs are listed (or if they can't be), Claude is the one with billing.
+  const choosesBilling = chosen ? chosen.choosesBilling : s?.provider === 'claude';
   return (
     <section aria-labelledby={id} className={styles.section}>
       <h3 id={id}>AI</h3>
       {s && (
         <>
-          <Choices
-            legend="Billing"
-            value={s.billing}
-            options={BILLING}
-            onChange={(billing) => update.mutate({ billing })}
-          >
-            <p className={styles.hint}>
-              {s.billing === 'plan'
-                ? "Uses your Claude plan's usage, through Claude Code signed in on this computer (run claude, then /login)."
-                : 'Pays per token with ANTHROPIC_API_KEY from .env.'}
-            </p>
-            {s.billing === 'api_key' && about.data?.env.ANTHROPIC_API_KEY === 'not set' && (
-              <Problem>
-                ANTHROPIC_API_KEY isn't set in .env. Add it and restart Wise Old Model.
-              </Problem>
-            )}
-          </Choices>
+          {providers.data && (
+            <Choices
+              legend="Provider"
+              value={s.provider}
+              options={providers.data.map((provider) => ({
+                value: provider.id,
+                label: provider.name,
+                disabled: !provider.configured,
+                hint: provider.setup ? `${provider.name}: ${provider.setup}` : undefined,
+              }))}
+              onChange={(provider) => update.mutate({ provider })}
+            />
+          )}
+          {providers.isError && <Problem>Couldn't list the AIs. {providers.error.message}</Problem>}
+          {choosesBilling && (
+            <Choices
+              legend="Billing"
+              value={s.billing}
+              options={BILLING}
+              onChange={(billing) => update.mutate({ billing })}
+            >
+              <p className={styles.hint}>
+                {s.billing === 'plan'
+                  ? "Uses your Claude plan's usage, through Claude Code signed in on this computer (run claude, then /login)."
+                  : 'Pays per token with ANTHROPIC_API_KEY from .env.'}
+              </p>
+              {s.billing === 'api_key' && about.data?.env.ANTHROPIC_API_KEY === 'not set' && (
+                <Problem>
+                  ANTHROPIC_API_KEY isn't set in .env. Add it and restart Wise Old Model.
+                </Problem>
+              )}
+            </Choices>
+          )}
           <ModelPicker />
           <NumberField
             label="Most tool rounds per question"
@@ -94,7 +115,7 @@ export function Ai(): JSX.Element {
             invalid="Use 1 to 100."
             onSave={(value) => value !== null && update.mutate({ maxTurns: value })}
           />
-          {s.billing === 'api_key' && (
+          {choosesBilling && s.billing === 'api_key' && (
             <NumberField
               label="Spending cap per question (US$)"
               value={s.budgetUsd}

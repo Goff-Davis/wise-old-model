@@ -8,7 +8,7 @@ How Wise Old Model is put together, and why. This page covers the whole system; 
 
 ## What it is
 
-A personal, single-user OSRS account advisor that runs on your own computer. It gathers everything known about a handful of your accounts (from the official hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki and files RuneLite writes as you play), keeps its own history of it, and shows it in a dashboard beside a chat with Claude that can look all of it up.
+A personal, single-user OSRS account advisor that runs on your own computer. It gathers everything known about a handful of your accounts (from the official hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki and files RuneLite writes as you play), keeps its own history of it, and shows it in a dashboard beside a chat with the AI you choose (Claude by default, Gemini, or any model with an OpenAI-compatible API) that can look all of it up.
 
 Three constraints shape most of the design:
 
@@ -28,10 +28,11 @@ flowchart LR
       Services["Services<br/>(pages, goals, chat)"]
       Sources["Data sources"]
       DB[("SQLite<br/>data folder")]
-      AI["AI layer<br/>(Claude Agent SDK)"]
+      AI["AI layer<br/>(provider interface)"]
     end
     RL["RuneLite +<br/>Character Export"] -- "JSON files" --> Files[".runelite/character-exporter/"]
-    CC["Claude Code<br/>(run by the SDK)"]
+    CC["Claude Code<br/>(run by the Agent SDK)"]
+    Local["Ollama / LM Studio<br/>(optional)"]
   end
 
   Browser <-- "fetch / server-sent events" --> API
@@ -39,7 +40,8 @@ flowchart LR
   Services --> Sources
   Services <--> DB
   Services --> AI
-  AI <--> CC
+  AI <-- "Claude" --> CC
+  AI <-. "OpenAI-compatible API" .-> Local
   Sources -- "reads" --> Files
   Sources -- "one queue per site" --> Ext
 
@@ -51,10 +53,12 @@ flowchart LR
     RLI["RuneLite item icons"]
   end
   CC -- "your plan or API key" --> Claude["Claude"]
+  AI -. "OpenAI SDK, .env's address and key" .-> OAI["OpenAI, OpenRouter,<br/>Groq, Mistral…"]
+  AI -. "Google's SDK, .env's key" .-> Gem["Gemini"]
   RL -. "Temple plugin syncs<br/>the collection log" .-> T
 ```
 
-The server exists for two reasons. The Jagex hiscores send no CORS headers, so a browser can't call them directly. And the AI's credentials (Claude Code's sign-in, or an API key) must never reach the browser.
+The server exists for two reasons. The Jagex hiscores send no CORS headers, so a browser can't call them directly. And the AI's credentials (Claude Code's sign-in, or a provider's API key) must never reach the browser.
 
 ## Packages
 
@@ -144,31 +148,36 @@ sequenceDiagram
   participant U as You
   participant C as Chat column
   participant S as Chat service
-  participant P as Claude provider
-  participant CC as Claude Code (Agent SDK)
+  participant P as Provider (the one Settings picks)
+  participant M as Model
   participant T as App tools
   U->>C: "Can I do Dragon Slayer II yet?"
   C->>S: POST /api/chats/:id/messages (server-sent events back)
   S->>S: check the account's files first
-  S->>P: system prompt, message, tools
-  P->>CC: query (no built-in tools, only the app's)
+  S->>P: system prompt, message, tools, the chat so far
+  P->>M: ask (Claude: Claude Code with only the app's tools)
   loop as the model asks
-    CC->>T: check_quest_requirements, get_wiki_page, ...
-    T-->>CC: small JSON results (stale/missing noted)
+    M->>T: check_quest_requirements, get_wiki_page, ...
+    T-->>M: small JSON results (stale/missing noted)
     S-->>C: status lines ("Checking your quests…")
   end
   opt a goal change
-    CC->>P: may I call add_goal?
+    M->>P: call add_goal
     S-->>C: Approve / Decline row
     U->>C: Approve
   end
-  CC-->>P: streamed text, usage
+  M-->>P: streamed text, usage
   S-->>C: text, sources, tokens, done
   S->>S: store the answer
 ```
 
-- The model is reached through a **provider interface**, so nothing outside one module depends on a provider's SDK. The provider used is Claude, through the Claude Agent SDK, which runs Claude Code in the app so usage can bill to your Claude plan. The app never touches the Claude sign-in; Claude Code handles it. An API key is the alternative.
-- Claude Code runs with **no built-in tools** (no files, shell or web) and none of your Claude Code settings, plugins or other MCP servers. Its only tools are the app's twenty, served from inside the server.
+- The model is reached through a **provider interface**, so nothing outside the providers' own modules depends on an SDK. Three providers exist, and every one `.env` sets up starts with the app; each turn uses the one Settings → AI picks, so switching needs no restart:
+  - **Claude**, through the Claude Agent SDK, which runs Claude Code in the app so usage can bill to your Claude plan (or an API key). The app never touches the Claude sign-in; Claude Code handles it. Claude Code runs the tool loop itself, with **no built-in tools** (no files, shell or web) and none of your Claude Code settings, plugins or other MCP servers: its only tools are the app's twenty, served from inside the server.
+  - **Any OpenAI-compatible API** (OpenAI, OpenRouter, Ollama, LM Studio, Groq, Mistral…), through OpenAI's SDK.
+  - **Gemini**, through Google's SDK.
+
+  For the last two the app runs the tool loop itself (`toolLoop.ts`): stream a round of the answer, run the tools it called, send the results back, until the model answers without calling one.
+- **A chat survives a switch.** Claude Code keeps its own session of a chat, resumed on the next turn; the APIs keep nothing, so each turn sends the chat so far as text (the latest 20 messages), without the old lookups, which the model makes again if it needs them. A session is only resumed by the provider that made it: after another AI answered, Claude starts a new one with the chat so far.
 - Tools that **change data** (adding or updating a goal) need your Approve in the chat. Everything else runs unasked.
 - Every tool result is **small and dated**: an `asOf` time, which sources are stale, which files are missing and what to do in game. A result over 8,000 characters is refused, so the model asks for less.
 - Each wiki page a tool read is listed under the answer as a source.
@@ -183,8 +192,10 @@ sequenceDiagram
 | Store raw answers as snapshots | History survives parser changes; third-party formats can be re-read. |
 | SQLite through Node's built-in `node:sqlite` and Kysely | No native add-ons to compile, so `npm install` works the same on Windows, macOS, Linux and WSL. |
 | Do the math in code, not the model | Requirement checks and estimates are deterministic and testable; the model explains them. |
-| A provider interface around the AI | The provider can be swapped without touching tools or the UI. |
+| A provider interface around the AI | The AI can be swapped in Settings without touching tools or the UI; adding one means writing a provider. |
 | Claude through the Agent SDK, never handling the sign-in | Lets usage bill to your Claude plan while following Anthropic's terms for apps. |
+| The AI providers talk through their own SDKs, outside the shared request handler | Their answers stream for minutes, past the handler's 20-second timeout, and each SDK knows its API's errors and formats. Each is given `.env`'s address and key explicitly, so nothing in the shell's environment redirects them. |
+| The chat so far is resent as text, not as old tool results | It stays small and works with every provider, and the model looks up fresh data rather than trusting old results. |
 | Zod schemas shared by client and server | The API's shape is defined once and checked on both ends. |
 | TypeScript run directly by Node, checked by TypeScript 7 | No server build step; only erasable syntax is used. |
 
@@ -202,8 +213,8 @@ It runs on Windows, macOS, Linux and WSL. Development happens on WSL; the finish
 
 - The server listens on `127.0.0.1` only. Every request must name `localhost` or `127.0.0.1` with the app's port as its `Host`; writes must also carry a matching `Origin`; requests the browser marks as coming from another site are refused unless they're a page navigation.
 - Responses forbid framing (`frame-ancestors 'none'`) and cross-origin reads.
-- Secrets and paths live in `.env`, which is git-ignored. The Settings page shows only whether an API key is set, never its value.
-- What the chat's tools return (account names, stats, bank contents) is sent to the AI provider. Nothing else from the machine is.
+- Secrets and paths live in `.env`, which is git-ignored. The Settings page shows only whether each API key is set, never its value, and `OPENAI_COMPAT_BASE_URL` can't hold a user name or password.
+- What the chat's tools return (account names, stats, bank contents) and the chat itself are sent to the AI picked in Settings: Anthropic, Google, or wherever `OPENAI_COMPAT_BASE_URL` points (with a local server such as Ollama, nowhere). Nothing else from the machine is.
 - Game icons are Jagex's; they're downloaded on first use into the data folder and never committed.
 
 ## Testing
@@ -211,7 +222,7 @@ It runs on Windows, macOS, Linux and WSL. Development happens on WSL; the finish
 Vitest runs the server, client and shared tests together (`npm test`, or `npm run check` with type checking and lint).
 
 - Server tests run against a fresh in-memory database and fake requesters fed with responses captured once from the real APIs, so no test makes a live request.
-- The chat is tested with a scripted fake provider; tests never call Claude.
+- The chat is tested with a scripted fake provider, and each provider against a fake of its SDK; tests never call any model.
 - Client tests render components against a fake API that fails the test on any request it doesn't expect.
 
 Each package's page describes its own test setup.

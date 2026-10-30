@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { SourceKindSchema } from './accounts.ts';
 import { formatNumber } from './format.ts';
-import { SettingsSchema } from './settings.ts';
+import { ProviderIdSchema, SettingsSchema } from './settings.ts';
 
 /** A chat with the AI about one account. */
 export const ChatSessionSchema = z.object({
@@ -34,17 +34,27 @@ export const ChatApprovalSchema = z.object({
 /** A wiki page a tool read while answering. */
 export const ChatSourceSchema = z.object({ title: z.string(), url: z.string() });
 
-/** What an answer used: tokens on the plan, plus its cost with an API key. */
+/**
+ * What an answer used: its tokens, its cost when the provider says (Claude with an API key,
+ * OpenRouter), and Claude's billing (null for the other providers, which have none to pick).
+ */
 export const ChatUsageSchema = z.object({
   tokens: z.number(),
   costUsd: z.number().nullable(),
-  billing: SettingsSchema.shape.billing,
+  billing: SettingsSchema.shape.billing.nullable(),
 });
 
 export type ChatUsage = z.infer<typeof ChatUsageSchema>;
 
-/** A problem that ended an answer, with what to do about it when that's known. */
-export const ChatErrorSchema = z.object({ message: z.string(), fix: z.string().nullable() });
+/**
+ * A problem that ended an answer, with what to do about it when that's known, and the provider
+ * that said it ("Gemini"; null in answers stored before it was kept).
+ */
+export const ChatErrorSchema = z.object({
+  message: z.string(),
+  fix: z.string().nullable(),
+  provider: z.string().nullable().default(null),
+});
 
 /**
  * An answer as the chat shows it: stored when the turn ends, even after Stop or an error. Each
@@ -120,13 +130,31 @@ export const ChatModelSchema = z.object({
 
 export type ChatModel = z.infer<typeof ChatModelSchema>;
 
-/** The models the chat can use, or none and why (Claude Code not signed in, say). */
+/**
+ * The models a provider offers, or none and why (Claude Code not signed in, a wrong key), and
+ * the one it answers with when none is picked (the model setting is empty), if it has one.
+ */
 export const ChatModelsAnswerSchema = z.object({
   models: z.array(ChatModelSchema),
+  defaultModel: z.string().nullable(),
   error: z.string().nullable(),
 });
 
 export type ChatModelsAnswer = z.infer<typeof ChatModelsAnswerSchema>;
+
+/**
+ * An AI the chat can use, for Settings → AI: whether .env sets it up (and if not, what to add),
+ * and whether it has Claude's billing choice (plan or API key) and spending cap.
+ */
+export const ProviderInfoSchema = z.object({
+  id: ProviderIdSchema,
+  name: z.string(),
+  configured: z.boolean(),
+  choosesBilling: z.boolean(),
+  setup: z.string().nullable(),
+});
+
+export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
 
 /** The longest message, and the longest chat title. */
 export const MESSAGE_MAX_LENGTH = 4000;

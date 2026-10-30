@@ -62,6 +62,9 @@ async function existingFile(): Promise<string> {
   return file;
 }
 
+/** The first migration alone, as the first version shipped. */
+const initial = appMigrations['001_initial'] as Migration;
+
 /** The app's migrations plus one more, as a later update would ship it. */
 const withMigration = (name: string, migration: Migration) => ({
   migrations: { ...appMigrations, [name]: migration },
@@ -258,6 +261,46 @@ describe('migrations', () => {
     const db = await testDb(file);
     expect(await count(db, 'accounts')).toBe(1);
     expect(await count(db, 'snapshots')).toBe(1);
+  });
+
+  it("move the model and effort to Claude's own, and mark the chats Claude Code holds as Claude's", async () => {
+    const file = path.join(tempDir('wom-db-'), 'wise-old-model.db');
+    const first = await testDb(file, { migrations: { '001_initial': initial } });
+    const accountId = await addAccount(first);
+    await first
+      .insertInto('settings')
+      .values([
+        { key: 'model', value: '"sonnet"' },
+        { key: 'effort', value: '"high"' },
+        { key: 'theme', value: '"light"' },
+      ])
+      .execute();
+    const chat = (id: string, session: string | null) => ({
+      id,
+      account_id: accountId,
+      title: 'New chat',
+      provider_session_id: session,
+      created_at: 't',
+      updated_at: 't',
+    });
+    await first
+      .insertInto('chat_sessions')
+      .values([chat('a', 'claude-session-1'), chat('b', null)])
+      .execute();
+    await first.destroy();
+
+    const db = await testDb(file);
+    expect(await db.selectFrom('settings').selectAll().orderBy('key').execute()).toEqual([
+      { key: 'effort:claude', value: '"high"' },
+      { key: 'model:claude', value: '"sonnet"' },
+      { key: 'theme', value: '"light"' },
+    ]);
+    expect(
+      await db.selectFrom('chat_sessions').select(['id', 'provider']).orderBy('id').execute(),
+    ).toEqual([
+      { id: 'a', provider: 'claude' },
+      { id: 'b', provider: null },
+    ]);
   });
 
   it('still start after the clock went backwards between two migrations', async () => {

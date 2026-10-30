@@ -1,6 +1,7 @@
 import { defaultSettings } from '@wom/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { call, testConfig, testDb } from '../../test/helpers.ts';
+import { createFakeProvider } from '../ai/fakeProvider.ts';
 import { createApp } from '../app.ts';
 
 async function setup() {
@@ -16,6 +17,25 @@ describe('settings routes', () => {
     const res = await call(server, { path: '/api/settings' });
     expect(res.status).toBe(200);
     expect(res.body).toEqual(defaultSettings);
+  });
+
+  it("pick an AI only when .env sets it up, saying what to add when it doesn't", async () => {
+    const db = await testDb();
+    const providers = [
+      createFakeProvider([]).provider,
+      createFakeProvider([], { id: 'openai', name: 'Ollama', choosesBilling: false }).provider,
+    ];
+    const server = createApp({ config: testConfig(), db, providers });
+    const refused = await call(server, patch({ provider: 'gemini', model: 'gemini-3-pro' }));
+    expect(refused).toMatchObject({
+      status: 400,
+      body: {
+        error: "Gemini isn't set up. Set GEMINI_API_KEY in .env, then restart Wise Old Model.",
+      },
+    });
+    expect(await db.selectFrom('settings').selectAll().execute()).toEqual([]);
+    const picked = await call(server, patch({ provider: 'openai' }));
+    expect(picked).toMatchObject({ status: 200, body: { provider: 'openai', model: '' } });
   });
 
   it('save a change and answer with every setting', async () => {

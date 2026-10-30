@@ -6,6 +6,7 @@ import express, { type Express, type RequestHandler, Router } from 'express';
 import type { Kysely } from 'kysely';
 import { createChatService } from './ai/chatService.ts';
 import type { ChatProvider, ToolDef } from './ai/provider.ts';
+import { providerInfos } from './ai/providerInfo.ts';
 import { buildTools } from './ai/tools/index.ts';
 import { type Config, userAgent } from './config.ts';
 import type { DB } from './db/schema.ts';
@@ -27,16 +28,12 @@ export type AppDeps = {
   clientDist?: string;
   /** How the server talks to other sites; tests pass a fake. */
   req?: Requester;
-  /** The AI behind the chat, and the tools it may use (by default, all of them). */
-  provider?: ChatProvider;
+  /**
+   * The AIs .env sets up (none in tests that don't chat: a turn then says so), and the tools
+   * they may use (by default, all of them).
+   */
+  providers?: ChatProvider[];
   tools?: ToolDef[];
-};
-
-/** The chat's AI until one is set up: every answer says so. */
-const NO_PROVIDER: ChatProvider = {
-  async *runTurn() {
-    yield { type: 'error', message: "The AI isn't set up in this copy of Wise Old Model." };
-  },
 };
 
 const DEFAULT_CLIENT_DIST = fileURLToPath(new URL('../../client/dist', import.meta.url));
@@ -93,7 +90,9 @@ export function createApp(deps: AppDeps): Express {
 
   // One requester for the whole app, so each site's queue and spacing cover every request.
   const req = deps.req ?? createRequester({ userAgent: userAgent(config) });
-  app.use('/api', settingsRoutes(deps.db, config));
+  const providers = deps.providers ?? [];
+  const infos = providerInfos(providers);
+  app.use('/api', settingsRoutes(deps.db, config, infos));
   const accountDeps = {
     db: deps.db,
     req,
@@ -102,12 +101,12 @@ export function createApp(deps: AppDeps): Express {
   };
   const chats = createChatService({
     ...accountDeps,
-    provider: deps.provider ?? NO_PROVIDER,
+    providers,
     tools: deps.tools ?? buildTools(accountDeps),
   });
   app.use('/api', accountRoutes(accountDeps, { beforeDelete: (row) => chats.stopAccount(row.id) }));
   app.use('/api', goalRoutes(accountDeps));
-  app.use('/api', chatRoutes(deps.db, chats));
+  app.use('/api', chatRoutes(deps.db, chats, infos));
   app.use('/api', iconRoutes(createIconStore(req, config.dataDir)));
 
   app.use('/api', (_req, _res, next) => {

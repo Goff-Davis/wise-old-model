@@ -1,4 +1,4 @@
-import type { ChatProvider, ProviderEvent, ToolArgs, TurnInput } from './provider.ts';
+import type { ChatProvider, ProviderEvent, ProviderMeta, ToolArgs, TurnInput } from './provider.ts';
 
 /**
  * A step of a fake turn: an event to give, a tool to run (as a provider's tool loop would, with
@@ -12,15 +12,28 @@ export type FakeStep =
   | { type: 'throw'; message: string }
   | { type: 'hang' };
 
+/** Claude's info, as a fake provider has it unless a test says otherwise. */
+export const CLAUDE_INFO: ProviderMeta = {
+  id: 'claude',
+  name: 'Claude',
+  choosesBilling: true,
+  defaultModel: null,
+};
+
 /**
  * A provider that plays a script, for tests: the same steps each turn, or the steps
  * `script(turn)` gives for the turn (0 first). It stops at the next step once the turn is
- * stopped. `turns` keeps what each turn was given, and `answers` each approval's answer.
+ * stopped. `turns` keeps what each turn was given, and `answers` each approval's answer. It's
+ * Claude unless `info` says otherwise.
  */
-export function createFakeProvider(script: FakeStep[] | ((turn: number) => FakeStep[])) {
+export function createFakeProvider(
+  script: FakeStep[] | ((turn: number) => FakeStep[]),
+  info: Partial<ProviderMeta> = {},
+) {
   const turns: TurnInput[] = [];
   const answers: boolean[] = [];
   const provider: ChatProvider = {
+    info: { ...CLAUDE_INFO, ...info },
     async *runTurn(input) {
       turns.push(input);
       const steps = typeof script === 'function' ? script(turns.length - 1) : script;

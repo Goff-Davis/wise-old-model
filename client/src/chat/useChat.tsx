@@ -75,7 +75,10 @@ function withEvent(answer: LiveAnswer, event: ChatEvent): LiveAnswer {
       return { ...answer, usage };
     }
     case 'error':
-      return { ...answer, error: { message: event.message, fix: event.fix } };
+      return {
+        ...answer,
+        error: { message: event.message, fix: event.fix, provider: event.provider },
+      };
     case 'files':
     case 'done':
       return answer;
@@ -159,7 +162,7 @@ export function useChat(accountId: string, enabled = true) {
       const update = (change: (answer: LiveAnswer) => LiveAnswer) =>
         setLive((turn) => turn && { ...turn, answer: change(turn.answer) });
       const failWith = (message: string) =>
-        update((answer) => ({ ...answer, error: { message, fix: null } }));
+        update((answer) => ({ ...answer, error: { message, fix: null, provider: null } }));
       const controller = new AbortController();
       hangUp.current = controller;
       let id = chatId;

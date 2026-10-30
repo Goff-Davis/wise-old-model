@@ -17,6 +17,12 @@ flowchart LR
   client --> helpers
 ```
 
+## Contents
+
+- [Rules for this package](#rules-for-this-package)
+- [Modules](#modules)
+- [Notable conventions](#notable-conventions)
+
 ## Rules for this package
 
 - **One entry point:** the package exports only `src/index.ts`, which re-exports every module. Import from `@wom/shared`, never from a file inside it.

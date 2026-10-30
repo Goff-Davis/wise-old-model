@@ -4,6 +4,32 @@ The backend: an Express 5 app on Node 26 that talks to every outside site, reads
 
 TypeScript runs directly on Node (type stripping, no build step), so the code uses only erasable syntax (no enums, namespaces or parameter properties) and relative imports end in `.ts`. TypeScript 7 only type-checks.
 
+## Contents
+
+- [Layers](#layers)
+- [Startup and the HTTP layer](#startup-and-the-http-layer)
+- [Talking to other sites](#talking-to-other-sites)
+  - [The sources](#the-sources)
+- [Freshness: when to fetch](#freshness-when-to-fetch)
+  - [Shared data cache](#shared-data-cache)
+- [Character Export](#character-export)
+- [Storage](#storage)
+- [Page data](#page-data)
+  - [Calculations](#calculations)
+- [Goals](#goals)
+- [The AI layer](#the-ai-layer)
+  - [Chat service](#chat-service)
+  - [Providers](#providers)
+    - [Claude](#claude)
+    - [The tool loop](#the-tool-loop)
+    - [OpenAI-compatible](#openai-compatible)
+    - [Gemini](#gemini)
+    - [Adding a provider](#adding-a-provider)
+  - [Instructions](#instructions)
+  - [Tools](#tools)
+- [API](#api)
+- [Testing](#testing)
+
 ## Layers
 
 ```mermaid

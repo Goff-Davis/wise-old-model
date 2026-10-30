@@ -6,6 +6,21 @@ It rebuilds, for personal use, the idea behind "Waise Old Man" (the Gielinor bot
 
 It's for one person and a handful of accounts, running on your own computer (`127.0.0.1`), on Windows, macOS, Linux or WSL.
 
+## Contents
+
+- [What it does](#what-it-does)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [Choosing the AI](#choosing-the-ai)
+  - [In the app](#in-the-app)
+- [Usage](#usage)
+  - [Commands](#commands)
+- [Privacy](#privacy)
+- [Documentation](#documentation)
+- [Data sources and attribution](#data-sources-and-attribution)
+- [License](#license)
+
 ## What it does
 
 - **Accounts:** add an account by name. The app looks it up on the hiscores, Wise Old Man, TempleOSRS and RuneLite's files first. You can rename an account, change its type or delete it, and a renamed account is noticed and offered its new name, keeping its history.

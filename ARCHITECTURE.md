@@ -6,6 +6,21 @@ How Wise Old Model is put together, and why. This page covers the whole system; 
 - [client/ARCHITECTURE.md](client/ARCHITECTURE.md): the React app.
 - [shared/ARCHITECTURE.md](shared/ARCHITECTURE.md): the schemas and game rules both sides use.
 
+## Contents
+
+- [What it is](#what-it-is)
+- [The system at a glance](#the-system-at-a-glance)
+- [Packages](#packages)
+- [How data flows](#how-data-flows)
+  - [Getting data in](#getting-data-in)
+  - [Keeping it](#keeping-it)
+  - [Showing it](#showing-it)
+- [How the chat works](#how-the-chat-works)
+- [Key decisions](#key-decisions)
+- [Running on different systems](#running-on-different-systems)
+- [Security and privacy](#security-and-privacy)
+- [Testing](#testing)
+
 ## What it is
 
 A personal, single-user OSRS account advisor that runs on your own computer. It gathers everything known about a handful of your accounts (from the official hiscores, Wise Old Man, TempleOSRS, the OSRS Wiki and files RuneLite writes as you play), keeps its own history of it, and shows it in a dashboard beside a chat with the AI you choose (Claude by default, Gemini, or any model with an OpenAI-compatible API) that can look all of it up.

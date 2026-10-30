@@ -4,6 +4,17 @@ The React app: a chat-first dashboard for one account at a time. See the [root A
 
 **Stack:** React 19, Vite 8, TanStack Query for server data, React Router for pages, Zod (through `@wom/shared`) to check every API answer, and plain CSS Modules with theme tokens. No component library.
 
+## Contents
+
+- [Folders](#folders)
+- [Screen layout](#screen-layout)
+- [Routes](#routes)
+- [Server data](#server-data)
+- [Pages](#pages)
+- [The chat](#the-chat)
+- [Look and feel](#look-and-feel)
+- [Testing](#testing)
+
 ## Folders
 
 | Folder | What's in it |

@@ -99,10 +99,25 @@ describe('Goals', () => {
     expect(within(page).queryByText('Kill the Corrupted Gauntlet')).toBeNull();
   });
 
-  it('draws a bar for skill and combat achievement goals', async () => {
+  it('draws a bar for skill, combat achievement and counted item goals', async () => {
     const view = testGoalsView();
-    // A kill count has a measure, but no bar.
     view.goals.push(
+      testGoal(
+        10,
+        'Get 260 × Mark of grace',
+        { kind: 'item', item: 'Mark of grace', quantity: 260 },
+        {
+          progress: {
+            done: false,
+            fraction: 143 / 260,
+            detail: '143 of 260 owned: in the bank.',
+            stillNeeded: [],
+          },
+        },
+      ),
+      // One of an item has no measure, so no bar.
+      testGoal(11, 'Get Dragon defender', { kind: 'item', item: 'Dragon defender' }),
+      // A kill count has a measure, but no bar.
       testGoal(
         9,
         '500 Vorkath kills',
@@ -120,6 +135,7 @@ describe('Goals', () => {
     ).toEqual([
       ['Reach 75 Magic', '9'],
       ['Elite combat achievements', '73'],
+      ['Get 260 × Mark of grace', '55'],
     ]);
   });
 
@@ -416,6 +432,20 @@ describe('AddGoalDialog', () => {
     await expect.poll(() => within(page).queryByRole('dialog')).toBeNull();
   });
 
+  it('titles an item goal with how many of it, when more than one', async () => {
+    const page = renderGoals();
+    const dialog = await openDialog(page);
+    fireEvent.change(within(dialog).getByLabelText('Kind'), { target: { value: 'item' } });
+    fireEvent.change(within(dialog).getByLabelText('Item'), { target: { value: 'Mark of grace' } });
+    const title = within(dialog).getByLabelText('Title') as HTMLInputElement;
+    expect(title.placeholder).toBe('Get Mark of grace');
+    const quantity = within(dialog).getByLabelText('How many') as HTMLInputElement;
+    // Empty is one of it, as the field shows.
+    expect(quantity.placeholder).toBe('1');
+    fireEvent.change(quantity, { target: { value: '260' } });
+    expect(title.placeholder).toBe('Get 260 × Mark of grace');
+  });
+
   it('builds each kind of target from its fields', async () => {
     const page = renderGoals();
     /** Adds a goal of `kind` through the dialog, its fields set (a label to click is a choice). */
@@ -467,9 +497,16 @@ describe('AddGoalDialog', () => {
     expect(await addVia('collection_log', [['Whole entry'], ['Entry', 'Vorkath']])).toEqual({
       target: { kind: 'collection_log', entry: 'Vorkath' },
     });
+    // How many is left empty for one.
     expect(await addVia('item', [['Item', 'Dragon hunter crossbow']])).toEqual({
       target: { kind: 'item', item: 'Dragon hunter crossbow' },
     });
+    expect(
+      await addVia('item', [
+        ['Item', 'Mark of grace'],
+        ['How many', '260'],
+      ]),
+    ).toEqual({ target: { kind: 'item', item: 'Mark of grace', quantity: 260 } });
     expect(await addVia('custom', [['Title', 'Clear out the bank']])).toEqual({
       title: 'Clear out the bank',
       target: { kind: 'custom' },

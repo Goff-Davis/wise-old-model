@@ -28,7 +28,7 @@ It's for one person and a handful of accounts, running on your own computer (`12
 - **This week:** XP, kills and clues, what you completed and new collection log items, for today, the last 7 or 30 days, or any days you pick.
 - **Bank and gear:** your bank's value, one search across bank, seed vault, inventory and gear, and your equipment and inventory laid out as in game.
 - **Collection log:** tabs and entries like the in-game log, from TempleOSRS.
-- **Goals:** a skill level or XP, a quest, a diary tier, combat achievements, boss kills, a collection log item or entry, an item, or your own. Progress comes from your data, quest and diary goals list what's still needed, and goals complete themselves as you play.
+- **Goals:** a skill level or XP, a quest, a diary tier, combat achievements, boss kills, a collection log item or entry, an item or a number of one (260 Marks of grace, counted across everywhere you keep them), or your own. Progress comes from your data, quest and diary goals list what's still needed, and goals complete themselves as you play.
 - **The chat:** ask about the selected account, and the AI looks things up with the app's own tools, shows what it looked at, cites the wiki pages it read, and asks before adding or changing a goal. It's built to answer questions like:
   - "What should I work on next?"
   - "Can I do Dragon Slayer II yet? What am I missing?"

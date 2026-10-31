@@ -39,6 +39,7 @@ type Fields = {
   logItem: string;
   entry: string;
   item: string;
+  quantity: string;
 };
 
 const START: Fields = {
@@ -60,6 +61,7 @@ const START: Fields = {
   logItem: '',
   entry: '',
   item: '',
+  quantity: '',
 };
 
 /** A number field's value, or undefined when it's empty (NaN when it isn't a number). */
@@ -87,7 +89,7 @@ function targetOf(fields: Fields): unknown {
         ? { kind: 'collection_log', item: fields.logItem }
         : { kind: 'collection_log', entry: fields.entry };
     case 'item':
-      return { kind: 'item', item: fields.item };
+      return { kind: 'item', item: fields.item, quantity: number(fields.quantity) };
     case 'custom':
       return { kind: 'custom' };
   }
@@ -144,7 +146,8 @@ type PickList<T> = { options: T[]; missing: string | null };
 
 /**
  * The fields the picked kind takes. Names are picked from the account's lists (`options`, from
- * the server): a skill from a dropdown, the rest searched for; an item is typed.
+ * the server): a skill from a dropdown, the rest searched for; an item is typed, with how many
+ * of it (empty for one).
  */
 function KindFields(props: {
   fields: Fields;
@@ -155,12 +158,13 @@ function KindFields(props: {
 }): JSX.Element | null {
   const { fields, set, options } = props;
   const waiting = props.failed ? "Couldn't load the list" : 'Loading…';
-  const amount = (key: keyof Fields) => (id: string) => (
+  const amount = (key: keyof Fields, placeholder?: string) => (id: string) => (
     <input
       id={id}
       type="number"
       min={1}
       inputMode="numeric"
+      placeholder={placeholder}
       value={fields[key]}
       onChange={(event) => set({ [key]: event.target.value })}
     />
@@ -313,16 +317,19 @@ function KindFields(props: {
       );
     case 'item':
       return (
-        <Field label="Item">
-          {(id) => (
-            <input
-              id={id}
-              type="text"
-              value={fields.item}
-              onChange={(event) => set({ item: event.target.value })}
-            />
-          )}
-        </Field>
+        <>
+          <Field label="Item">
+            {(id) => (
+              <input
+                id={id}
+                type="text"
+                value={fields.item}
+                onChange={(event) => set({ item: event.target.value })}
+              />
+            )}
+          </Field>
+          <Field label="How many">{amount('quantity', '1')}</Field>
+        </>
       );
     case 'custom':
       return null;

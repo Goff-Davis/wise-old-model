@@ -107,6 +107,26 @@ describe('goal targets', () => {
       'A kill count goal needs a number of kills.',
     ]);
   });
+
+  it('takes how many of an item, from 1 to a full stack, and one when not said', () => {
+    expect(
+      NewGoalTargetSchema.parse({ kind: 'item', item: 'Mark of grace', quantity: 260 }),
+    ).toEqual({ kind: 'item', item: 'Mark of grace', quantity: 260 });
+    // A goal stored before counts reads as one of it.
+    expect(GoalTargetSchema.parse({ kind: 'item', item: 'Dragon defender' })).toEqual({
+      kind: 'item',
+      item: 'Dragon defender',
+    });
+    const range = ['An item goal is from 1 to 2,147,483,647 of it.'];
+    for (const quantity of [0, 2.5, 2_147_483_648]) {
+      expect(
+        problems(NewGoalTargetSchema, { kind: 'item', item: 'Mark of grace', quantity }),
+      ).toEqual(range);
+    }
+    expect(
+      problems(NewGoalTargetSchema, { kind: 'item', item: 'Coins', quantity: 2_147_483_647 }),
+    ).toEqual([]);
+  });
 });
 
 describe('new goals', () => {
@@ -153,6 +173,12 @@ describe('goalTitle', () => {
     );
     expect(goalTitle({ kind: 'item', item: 'Dragon hunter crossbow' })).toBe(
       'Get Dragon hunter crossbow',
+    );
+    expect(goalTitle({ kind: 'item', item: 'Dragon defender', quantity: 1 })).toBe(
+      'Get Dragon defender',
+    );
+    expect(goalTitle({ kind: 'item', item: 'Mark of grace', quantity: 1260 })).toBe(
+      'Get 1,260 × Mark of grace',
     );
   });
 });

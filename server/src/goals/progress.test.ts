@@ -1,4 +1,4 @@
-import { type GoalTarget, TEMPLE_SYNC_STEPS, xpForLevel } from '@wom/shared';
+import { type GoalTarget, type OwnedItem, TEMPLE_SYNC_STEPS, xpForLevel } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
 import { exportFixture, FIXTURE_CA_THRESHOLDS, fixture } from '../../test/helpers.ts';
 import { hoursToTarget, skillRates } from '../calc/estimates.ts';
@@ -600,14 +600,16 @@ describe('goalProgress for the collection log', () => {
 });
 
 describe('goalProgress for an item', () => {
-  const owned = (name: string, where: 'bank' | 'equipment' | 'inventory' | 'seed_vault') => ({
+  const owned = (name: string, where: OwnedItem['where'], quantity = 1) => ({
     id: 1,
     name,
-    quantity: 1,
+    quantity,
     where,
     slot: 0,
     unitPrice: null,
   });
+
+  const marks = (quantity: number) => ({ kind: 'item' as const, item: 'Mark of grace', quantity });
 
   it('says where an owned item is, in any state', () => {
     expect(
@@ -642,6 +644,75 @@ describe('goalProgress for an item', () => {
         account({ owned: [], ownedUnknown: ['bank'] }),
       ).detail,
     ).toBe("Not owned, as far as the app knows: the bank isn't saved yet.");
+  });
+
+  it('counts a number of an item over every place it is kept, done once there are enough', () => {
+    const kept = account({
+      owned: [
+        owned('Mark of grace', 'bank', 120),
+        owned('Coins', 'inventory', 5000),
+        owned('Mark of grace', 'inventory', 23),
+      ],
+    });
+    expect(goalProgress(marks(260), kept)).toEqual({
+      done: false,
+      fraction: 143 / 260,
+      detail: '143 of 260 owned: in the bank and in the inventory.',
+      stillNeeded: [],
+    });
+    expect(goalProgress(marks(143), kept)).toEqual({
+      done: true,
+      fraction: 1,
+      detail: '143 owned: in the bank and in the inventory.',
+      stillNeeded: [],
+    });
+    expect(goalProgress(marks(100), kept)).toMatchObject({ done: true, fraction: 1 });
+  });
+
+  it('counts only the state a number of one names (a dose), and every state when it names none', () => {
+    const potions = account({
+      owned: [
+        owned('Prayer potion(4)', 'bank', 6),
+        owned('Prayer potion(3)', 'bank', 5),
+        owned('Prayer potion(4)', 'inventory', 2),
+      ],
+    });
+    expect(
+      goalProgress({ kind: 'item', item: 'Prayer potion(4)', quantity: 10 }, potions),
+    ).toMatchObject({ done: false, detail: '8 of 10 owned: in the bank and in the inventory.' });
+    expect(
+      goalProgress({ kind: 'item', item: 'Prayer potion', quantity: 10 }, potions),
+    ).toMatchObject({ done: true, detail: '13 owned: in the bank and in the inventory.' });
+    // Owning one is owning it in any state, as it always was.
+    expect(
+      goalProgress(
+        { kind: 'item', item: 'Prayer potion(4)' },
+        account({ owned: [owned('Prayer potion(3)', 'bank')] }),
+      ),
+    ).toMatchObject({ done: true, detail: 'Owned: in the bank.' });
+  });
+
+  it('says none of a number is owned, and which places it may yet be in', () => {
+    expect(goalProgress(marks(260), account({ owned: [owned('Coins', 'bank', 10)] }))).toEqual({
+      done: false,
+      fraction: 0,
+      detail: 'None of 260 owned.',
+      stillNeeded: [],
+    });
+    expect(
+      goalProgress(
+        marks(260),
+        account({
+          owned: [owned('Mark of grace', 'inventory', 9)],
+          ownedUnknown: ['bank', 'seed_vault'],
+        }),
+      ).detail,
+    ).toBe("9 of 260 owned: in the inventory. The bank and the seed vault aren't saved yet.");
+    expect(goalProgress(marks(260), account({ owned: [], ownedUnknown: ['bank'] })).detail).toBe(
+      "None of 260 owned. The bank isn't saved yet.",
+    );
+    // One of an item is the goal it always was.
+    expect(goalProgress(marks(1), account({ owned: [] })).detail).toBe('Not owned.');
   });
 
   it("says when it isn't owned, or what's kept isn't known", () => {

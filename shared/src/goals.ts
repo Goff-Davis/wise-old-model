@@ -65,6 +65,11 @@ const skillShape = {
     .optional(),
 };
 
+/** The most of an item one stack can hold, and so the most an item goal can ask for. */
+const MAX_STACK = 2_147_483_647;
+
+const ITEM_RANGE = `An item goal is from 1 to ${formatNumber(MAX_STACK)} of it.`;
+
 /** Whether exactly one of two fields is given. */
 const oneOf =
   <K extends string>(a: K, b: K) =>
@@ -102,14 +107,20 @@ const OTHER_TARGETS = [
       entry: NameSchema.optional(),
     })
     .refine(oneOf('item', 'entry'), 'A collection log goal is either an item or an entry.'),
-  z.object({ kind: z.literal('item'), item: NameSchema }),
+  z.object({
+    kind: z.literal('item'),
+    item: NameSchema,
+    /** How many of it (one when not said, as in a goal stored before counts). */
+    quantity: z.int(ITEM_RANGE).min(1, ITEM_RANGE).max(MAX_STACK, ITEM_RANGE).optional(),
+  }),
   z.object({ kind: z.literal('custom') }),
 ] as const;
 
 /**
  * What a goal is for. A skill goal is a level or an amount of XP, from `startXp`: the XP when it
- * was set, where its progress starts. A combat achievement goal is a task or a whole tier, and a
- * collection log goal an item or a whole entry. A custom goal is its title, ticked off by hand.
+ * was set, where its progress starts. A combat achievement goal is a task or a whole tier, a
+ * collection log goal an item or a whole entry, and an item goal one of it or a number of it
+ * (260 Marks of grace). A custom goal is its title, ticked off by hand.
  */
 export const GoalTargetSchema = z.discriminatedUnion('kind', [
   z
@@ -160,7 +171,9 @@ export function goalTitle(target: NewGoalTarget): string {
         ? `Get ${target.item}`
         : `Complete the ${target.entry} collection log`;
     case 'item':
-      return `Get ${target.item}`;
+      return target.quantity !== undefined && target.quantity > 1
+        ? `Get ${formatNumber(target.quantity)} × ${target.item}`
+        : `Get ${target.item}`;
     case 'custom':
       return 'Custom goal';
   }

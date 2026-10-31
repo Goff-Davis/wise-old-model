@@ -1,5 +1,6 @@
 import {
   BANK_PLACES,
+  capitalize,
   formatCompact,
   formatNumber,
   type GoalProgress,
@@ -23,7 +24,7 @@ import {
   questKey,
 } from '../calc/requirements.ts';
 import { SourceError } from '../http/requester.ts';
-import { findName, itemKey, ownedKey } from '../items/itemNames.ts';
+import { findName, hasState, itemKey, ownedKey } from '../items/itemNames.ts';
 import { type AccountData, checkLevels } from '../services/accountData.ts';
 import { MISSING_FIX, tierDone } from '../sources/characterExport.ts';
 import type { SkillRates } from '../sources/wom.ts';
@@ -368,24 +369,38 @@ function itemProgress(
   if (!data.owned) {
     return progress(false, null, NOT_KNOWN.owned);
   }
-  const key = ownedKey(target.item);
-  const places = new Set(
-    data.owned.filter((item) => ownedKey(item.name) === key).map((item) => item.where),
+  const wanted = target.quantity ?? 1;
+  // Owning one is owning it in any state. A number of it in a named state (Prayer potion(4))
+  // counts only that state, as a (3) isn't a (4); a name without one counts every state.
+  const keyOf = wanted > 1 && hasState(target.item) ? itemKey : ownedKey;
+  const key = keyOf(target.item);
+  const stacks = data.owned.filter((item) => keyOf(item.name) === key);
+  const places = new Set(stacks.map((item) => item.where));
+  const where = list.format(
+    BANK_PLACES.filter((place) => places.has(place.where)).map(
+      (place) => PLACE_NAMES[place.where].at,
+    ),
   );
-  if (places.size === 0) {
-    const unknown = data.ownedUnknown.map((place) => PLACE_NAMES[place].place);
+  const unknown = data.ownedUnknown.map((place) => PLACE_NAMES[place].place);
+  const notSaved =
+    unknown.length > 0
+      ? `${list.format(unknown)} ${plural(unknown.length, "isn't", "aren't")} saved yet`
+      : null;
+  if (wanted === 1) {
+    if (places.size > 0) return progress(true, null, `Owned: ${where}.`);
     return progress(
       false,
       null,
-      unknown.length === 0
-        ? 'Not owned.'
-        : `Not owned, as far as the app knows: ${list.format(unknown)} ${plural(unknown.length, "isn't", "aren't")} saved yet.`,
+      notSaved ? `Not owned, as far as the app knows: ${notSaved}.` : 'Not owned.',
     );
   }
-  const where = BANK_PLACES.filter((place) => places.has(place.where)).map(
-    (place) => PLACE_NAMES[place.where].at,
-  );
-  return progress(true, null, `Owned: ${list.format(where)}.`);
+  const have = stacks.reduce((sum, item) => sum + item.quantity, 0);
+  if (have >= wanted) return progress(true, 1, `${formatNumber(have)} owned: ${where}.`);
+  const owned =
+    have === 0
+      ? `None of ${formatNumber(wanted)} owned.`
+      : `${formatNumber(have)} of ${formatNumber(wanted)} owned: ${where}.`;
+  return progress(false, have / wanted, notSaved ? `${owned} ${capitalize(notSaved)}.` : owned);
 }
 
 /**

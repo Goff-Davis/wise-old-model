@@ -54,16 +54,16 @@ function GoalIcon(props: { target: GoalTarget }): JSX.Element {
   }
 }
 
-/** Kinds whose progress has a measure worth a bar. */
-const BARRED = new Set<GoalTarget['kind']>(['skill', 'combat_achievement']);
+/** Kinds whose progress has a measure worth a bar (an item's only when it's a number of it). */
+const BARRED = new Set<GoalTarget['kind']>(['skill', 'combat_achievement', 'item']);
 
 /** What a status dot means, for screen readers. */
 const STATUS_WORDS = { red: 'not met', yellow: 'under way' } as const;
 
 /**
  * One active goal: its handle (drag it, or Alt+↑ and Alt+↓ on it), icon, title and kind, a bar
- * for a skill or combat achievement tier, what's said of it, what a quest or diary still needs
- * (with "Ask the AI for a plan"), a box to tick a custom goal off, and Drop.
+ * for a skill, combat achievement tier or number of an item, what's said of it, what a quest or
+ * diary still needs (with "Ask the AI for a plan"), a box to tick a custom goal off, and Drop.
  */
 function ActiveGoal(props: {
   goal: GoalWithProgress;

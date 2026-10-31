@@ -24,6 +24,9 @@ const ITEM_STATE = /\s*\((?:uncharged|empty|inactive|u|\d+|or|l|t\d*|g|c|h\d|p\+
 // A Barrows item's wear: Karil's coif 75.
 const BARROWS_WEAR = / (?:100|75|50|25|0)$/;
 
+/** Whether a name says an item's state or wear, as Prayer potion(4) or Karil's coif 75 does. */
+export const hasState = (name: string) => ITEM_STATE.test(name) || BARROWS_WEAR.test(name);
+
 /** A name for matching what an account owns: no state or wear, lowercase, apostrophes dropped. */
 export const ownedKey = (name: string) =>
   name

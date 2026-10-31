@@ -81,7 +81,7 @@ export function goalTools(deps: AccountDeps): ToolDef[] {
     defineTool({
       name: 'add_goal',
       description:
-        "Adds a goal to the account, after the user approves it in the chat. A target is one of: a skill level or XP, a quest, a diary area and tier, a combat achievement tier or task, boss kills, a collection log item or entry, an item, or a custom goal (which needs a title). Names must be the game's.",
+        "Adds a goal to the account, after the user approves it in the chat. A target is one of: a skill level or XP, a quest, a diary area and tier, a combat achievement tier or task, boss kills, a collection log item or entry, an item (with a quantity for a number of it, such as 260 Marks of grace), or a custom goal (which needs a title). Names must be the game's.",
       input: NewGoalSchema.shape,
       readOnly: false,
       label: ({ title, target }) => `Adding goal: ${title ?? goalTitle(target)}…`,

@@ -38,9 +38,11 @@ async function setup() {
   const config = testConfig();
   const app = createApp({ config, db, req: fake.req });
   const save = saveFor(db, row.id);
-  /** Gives the account Character Export files (Sample Name's), as the plugin writes them. */
-  const writeFiles = (...files: string[]) =>
-    writeExportFiles(config.runeliteDir, 'Lumby Pete', exportFixtures(files));
+  /** Gives the account Character Export files (file name → text), as the plugin writes them. */
+  const writeFiles = (files: Record<string, string>) =>
+    writeExportFiles(config.runeliteDir, 'Lumby Pete', files);
+  /** Checks the account's files for changes, as the page does. */
+  const check = () => call(app, { method: 'POST', path: `/api/accounts/${row.id}/files/check` });
   await save(
     'hiscores',
     hiscoresWith({ skills: { Magic: [71, 850_000] }, activities: { Vorkath: 412 } }),
@@ -51,7 +53,7 @@ async function setup() {
   const list = async () => (await call(app, { path: base })).body as GoalsView;
   const change = (id: number, body: unknown) =>
     call(app, { method: 'PATCH', path: `/api/goals/${id}`, body });
-  return { db, row, app, save, writeFiles, add, list, change, base, urls: fake.urls };
+  return { db, row, app, save, writeFiles, check, add, list, change, base, urls: fake.urls };
 }
 
 const idOf = (res: { body: unknown }) => (res.body as { id: number }).id;
@@ -288,17 +290,16 @@ describe("the wiki's part of a goal's progress", () => {
 
 describe('syncGoalCompletion', () => {
   it('marks reached goals done when a file check reads a change, never a custom one', async () => {
-    const { add, app, db, list, row, save, writeFiles } = await setup();
+    const { add, check, db, list, save, writeFiles } = await setup();
     await add({ target: { kind: 'boss_kills', boss: 'Vorkath', kills: 500 } });
     await add({ title: 'Clear out the bank', target: { kind: 'custom' } });
     await save('hiscores', hiscoresWith({ activities: { Vorkath: 600 } }));
-    const check = () => call(app, { method: 'POST', path: `/api/accounts/${row.id}/files/check` });
     const statuses = () =>
       db.selectFrom('goals').select(['title', 'status']).orderBy('id').execute();
     // A check that reads no change marks nothing.
     expect((await check()).body).toMatchObject({ changed: [], goalsCompleted: 0 });
     expect((await statuses()).map((goal) => goal.status)).toEqual(['active', 'active']);
-    writeFiles('quests.json');
+    writeFiles(exportFixtures(['quests.json']));
     expect((await check()).body).toMatchObject({ changed: ['ce_quests'], goalsCompleted: 1 });
     // Marked by the file check itself, before the page asks.
     const saved = await statuses();
@@ -310,6 +311,45 @@ describe('syncGoalCompletion', () => {
     expect(view.goals.map((goal) => [goal.title, goal.status])).toEqual([
       ['Clear out the bank', 'active'],
       ['500 Vorkath kills', 'done'],
+    ]);
+  });
+
+  it('counts an item over its stacks: refused when already had, then done when there are enough', async () => {
+    const { add, check, list, save, writeFiles } = await setup();
+    /** Sample Name's bank with a stack of Marks of grace, as Character Export writes it. */
+    const bankWith = (marks: number) => {
+      const bank = JSON.parse(exportFixture('bank.json')) as {
+        items: unknown[];
+        item_count: number;
+      };
+      bank.items.push({
+        slot: bank.items.length,
+        id: 11849,
+        quantity: marks,
+        name: 'Mark of grace',
+      });
+      bank.item_count = bank.items.length;
+      return JSON.stringify(bank);
+    };
+    const marks = { target: { kind: 'item', item: 'Mark of grace', quantity: 260 } };
+    await save('ce_bank', bankWith(300));
+    expect(await add(marks)).toMatchObject({
+      status: 409,
+      body: { error: '"Get 260 × Mark of grace" is already done.' },
+    });
+    await save('ce_bank', bankWith(100));
+    expect((await add(marks)).status).toBe(201);
+    expect((await list()).goals[0]?.progress).toMatchObject({
+      done: false,
+      fraction: 100 / 260,
+      // Only the bank is saved here, so the rest may hold more.
+      detail:
+        "100 of 260 owned: in the bank. The seed vault, the inventory, and the worn gear aren't saved yet.",
+    });
+    writeFiles({ 'bank.json': bankWith(260) });
+    expect((await check()).body).toMatchObject({ changed: ['ce_bank'], goalsCompleted: 1 });
+    expect((await list()).goals.map((goal) => [goal.title, goal.status])).toEqual([
+      ['Get 260 × Mark of grace', 'done'],
     ]);
   });
 

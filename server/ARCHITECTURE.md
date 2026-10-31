@@ -294,7 +294,7 @@ Goals belong to one account; progress is computed from its data every time, neve
 | Combat achievements | A task, or a whole tier | Done or not; points toward the tier |
 | Boss kills | A kill count | The hiscores' count |
 | Collection log | An item, or a whole entry | Obtained or not; items in the entry |
-| Item | Own an item | Where it is, in any state |
+| Item | Own an item, or a number of one (260 Marks of grace) | Where it is, in any state; for a number, how many of how many, every stack counted (a name with a state, such as Prayer potion(4) or Dragon defender (l), counts only that state) |
 | Custom | Free text | Ticked off by hand |
 
 - A goal **completes itself** when the data shows it reached (`syncGoalCompletion`): after Refresh, after a file check that read a changed file, and before the Goals page is shown. Custom goals are ticked off by hand.

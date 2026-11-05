@@ -135,6 +135,9 @@ export function useChat(accountId: string, enabled = true) {
   const hangUp = useRef<AbortController | null>(null);
   // The message box, which a page's question moves the focus to (showing the chat).
   const box = useRef<HTMLTextAreaElement | null>(null);
+  // How many times the chat has been shown afresh: a chat opened (picked or new, even the one
+  // already open) or a question sent. The column goes to the end each time.
+  const [toEnd, setToEnd] = useState(0);
   // Another account's chat starts afresh, at its latest chat.
   const [shownFor, setShownFor] = useState(accountId);
   if (shownFor !== accountId) {
@@ -159,6 +162,7 @@ export function useChat(accountId: string, enabled = true) {
       if (!text || busy) return;
       setBusy(true);
       setLive({ user: { text, note }, answer: EMPTY_ANSWER });
+      setToEnd((count) => count + 1);
       const update = (change: (answer: LiveAnswer) => LiveAnswer) =>
         setLive((turn) => turn && { ...turn, answer: change(turn.answer) });
       const failWith = (message: string) =>
@@ -234,11 +238,16 @@ export function useChat(accountId: string, enabled = true) {
     [chatId],
   );
 
-  /** Opens a chat (null: a new one), unless one is answering. */
-  const open = (id: string | null) => {
-    if (busy) return;
+  /** Shows a chat (null: a new one) in place of the one open. */
+  const show = (id: string | null) => {
     setLive(null);
     setPicked(id);
+    setToEnd((count) => count + 1);
+  };
+
+  /** Opens a chat (null: a new one), unless one is answering. */
+  const open = (id: string | null) => {
+    if (!busy) show(id);
   };
 
   // What pages get, kept the same while it doesn't change, so they don't redraw as an answer
@@ -261,6 +270,7 @@ export function useChat(accountId: string, enabled = true) {
     messages,
     live,
     busy,
+    toEnd,
     box,
     asking,
     /** Whether the answer is waiting for Approve or Decline. */
@@ -276,10 +286,7 @@ export function useChat(accountId: string, enabled = true) {
     },
     remove: async (id: string) => {
       await apiSend('DELETE', `/api/chats/${id}`, undefined, Ignored);
-      if (id === chatId) {
-        setLive(null);
-        setPicked(null);
-      }
+      if (id === chatId) show(null);
       await reloadChats();
     },
   };

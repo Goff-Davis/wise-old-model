@@ -459,25 +459,56 @@ function Composer(props: { chat: Chat; name: string }): JSX.Element {
   );
 }
 
+/** About a line, in px: the reader is at the end within it, and sees a message once it shows. */
+const A_LINE = 40;
+
+/**
+ * Whether the log's newest message (the one before its end marker: the answer being given, or
+ * the latest stored) starts below what it shows, less than a line of it in view.
+ */
+function newestBelow(log: HTMLElement | null): boolean {
+  const newest = log?.lastElementChild?.previousElementSibling;
+  return (
+    !!log &&
+    !!newest &&
+    newest.getBoundingClientRect().top > log.getBoundingClientRect().bottom - A_LINE
+  );
+}
+
 /**
  * The chat about the open account: its name, New chat and Earlier chats; the messages, each
  * answer with its lookups, changes to approve, sources and usage; a new chat's starter
- * questions; and the message box.
+ * questions; New message, when the answer gets something below where the reader scrolled to;
+ * and the message box.
  */
 export function ChatColumn(props: { name: string }): JSX.Element | null {
   const chat = useChatContext();
   const [showEarlier, setShowEarlier] = useState(false);
   const earlierId = useId();
+  const log = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   // Whether the reader is at the newest of the chat, which then stays in view as it grows;
-  // scrolled up to read, it stays where it is.
+  // scrolled up to read, it stays where it is. Sending, or opening a chat, goes to the end.
   const atEnd = useRef(true);
+  // Whether the answer got something below where the reader scrolled to, since they saw its start.
+  const [unread, setUnread] = useState(false);
   const stored = chat?.messages.data ?? [];
   const live = chat?.live;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when the messages or the answer grow, which it doesn't read.
+  const answer = live?.answer;
+  const toEnd = chat?.toEnd;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when a chat is opened or a question sent, which it doesn't read.
+  useEffect(() => {
+    atEnd.current = true;
+    setUnread(false);
+  }, [toEnd]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: it runs when the messages or the answer grow, or a chat is opened or a question sent, which it doesn't read.
   useEffect(() => {
     if (atEnd.current) end.current?.scrollIntoView({ block: 'end' });
-  }, [stored.length, live?.answer]);
+  }, [stored.length, answer, toEnd]);
+  // Only as the answer grows: the stored chat taking its place brings nothing new.
+  useEffect(() => {
+    if (answer && !atEnd.current && newestBelow(log.current)) setUnread(true);
+  }, [answer]);
   if (!chat) return null;
   const empty = chat.chatId === null && !live && !chat.sessions.isPending;
   return (
@@ -504,6 +535,7 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
         {showEarlier && <EarlierChats chat={chat} onClose={() => setShowEarlier(false)} />}
       </div>
       <div
+        ref={log}
         className={styles.messages}
         role="log"
         aria-label="Messages"
@@ -512,7 +544,8 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
         aria-busy={chat.busy}
         onScroll={(event) => {
           const box = event.currentTarget;
-          atEnd.current = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+          atEnd.current = box.scrollTop + box.clientHeight >= box.scrollHeight - A_LINE;
+          if (unread && (atEnd.current || !newestBelow(box))) setUnread(false);
         }}
       >
         {empty ? (
@@ -544,6 +577,22 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
         )}
         <div ref={end} />
       </div>
+      {unread && (
+        // Over the bottom of the messages, in their grid cell. Clicking it removes it, so the
+        // focus moves on to the message box.
+        <button
+          type="button"
+          className={styles.newMessage}
+          data-floating
+          onClick={() => {
+            end.current?.previousElementSibling?.scrollIntoView({ block: 'start' });
+            setUnread(false);
+            chat.box.current?.focus();
+          }}
+        >
+          New message <span aria-hidden="true">↓</span>
+        </button>
+      )}
       <p className="visually-hidden" role="status">
         {chat.waiting ? 'Waiting for your approval.' : chat.busy ? 'Answering.' : ''}
       </p>

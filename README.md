@@ -143,7 +143,7 @@ Then:
 
 1. **Add an account** by name. The app shows what the hiscores, Wise Old Man, Temple and Character Export know about it, and what to do in game if something's missing.
 2. **Play with the page open.** In Automatic mode the dashboard follows Character Export's files as they change. Online data (hiscores, Wise Old Man, Temple) is fetched when a page needs it and its copy is old; **Refresh** fetches everything again.
-3. **Ask the chat.** Continue the latest chat or start a new one, use a starter question, or ask from a page (Suggest goals, or "Ask the AI for a plan" on a goal). Changes the AI proposes appear as Approve / Decline. Stop ends an answer.
+3. **Ask the chat.** Continue the latest chat or start a new one, use a starter question, or ask from a page (Suggest goals, or "Ask the AI for a plan" on a goal). Changes the AI proposes appear as Approve / Decline. Stop ends an answer. If you've scrolled up to read, New message says when the answer arrives below and takes you to its start.
 4. **Back up** whenever you like from Settings → About; the app also backs up daily when it starts.
 
 On a narrow window, the page and menu fold behind a Menu button so the chat keeps the screen.

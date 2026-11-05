@@ -1,6 +1,7 @@
 /*
  * The chat fills its column: its header, the messages (which scroll, taking the space left),
- * then the message box, each in its own row; Earlier chats and the status line float over it.
+ * then the message box, each in its own row; Earlier chats, New message and the status line
+ * float over it.
  */
 .column {
   position: relative;
@@ -63,8 +64,12 @@
   border: 1px solid var(--rule);
   border-radius: 6px;
   background: var(--panel);
-  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
   font-size: 0.92rem;
+}
+
+/* What floats over the chat casts a shadow on it. */
+.column > [data-floating] {
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
 }
 
 .earlier ul {
@@ -110,9 +115,22 @@
 }
 
 .messages {
-  grid-row: 2;
+  grid-area: 2 / 1;
   min-height: 0;
   overflow: auto;
+}
+
+/*
+ * New message shares the messages' cell, over their bottom edge, centred above the box. Both
+ * name their column: an item given only a row is put beside one already there.
+ */
+.newMessage {
+  grid-area: 2 / 1;
+  align-self: end;
+  justify-self: center;
+  z-index: 1;
+  margin-bottom: 8px;
+  background: var(--panel);
 }
 
 /* The user's messages to the right, narrower; answers take the column's width. */
@@ -261,7 +279,9 @@
   gap: 8px;
 }
 
-.yes {
+/* The button to press: Approve, Send, New message. */
+.yes,
+.newMessage {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -316,7 +336,9 @@
   list-style: none;
 }
 
-.starters button {
+/* Pills: the starter questions and New message. */
+.starters button,
+.newMessage {
   border-radius: 14px;
 }
 

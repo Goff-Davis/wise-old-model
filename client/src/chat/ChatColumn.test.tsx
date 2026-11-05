@@ -1,13 +1,14 @@
 import { focusManager, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import {
+  AssistantContentSchema,
   type ChatEvent,
   type ChatMessage,
   type ChatSession,
   formatSse,
   type Settings,
 } from '@wom/shared';
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { nearestEffort } from '../settings/useModelChoice.ts';
 import { type FakeRoute, fakeApi, refusal, TEST_MODELS, testQueryClient } from '../test/fakeApi.ts';
@@ -39,11 +40,17 @@ function stream() {
   };
 }
 
-function Harness(props: { accountId?: string }): JSX.Element {
-  const chat = useChat(props.accountId ?? '1');
+/**
+ * The chat column for an account (Lumby Pete's, 1), beside a `page` when given; drawn afresh for
+ * another account, as the app does.
+ */
+function Harness(props: { accountId?: string; page?: ReactNode }): JSX.Element {
+  const accountId = props.accountId ?? '1';
+  const chat = useChat(accountId);
   return (
     <ChatProviders chat={chat}>
-      <ChatColumn name="Lumby Pete" />
+      <ChatColumn key={accountId} name="Lumby Pete" />
+      {props.page}
     </ChatProviders>
   );
 }
@@ -58,6 +65,7 @@ function renderChat(
     routes?: Record<string, FakeRoute>;
     settings?: Partial<Settings>;
     refuse?: string;
+    page?: ReactNode;
   } = {},
 ) {
   const sent: string[] = [];
@@ -84,7 +92,7 @@ function renderChat(
   const patches = fakeApi({ routes, settings: opts.settings, refuse: opts.refuse });
   render(
     <QueryClientProvider client={testQueryClient()}>
-      <Harness />
+      <Harness page={opts.page} />
     </QueryClientProvider>,
   );
   const box = () => screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
@@ -103,21 +111,75 @@ const USER: ChatMessage = {
   createdAt: '2026-10-27T12:00:00.000Z',
 };
 
+/** A stored answer saying `text`. */
+const answered = (id: number, text: string): Extract<ChatMessage, { role: 'assistant' }> => ({
+  id,
+  role: 'assistant',
+  ...AssistantContentSchema.parse({ text }),
+  usage: null,
+  createdAt: '2026-10-27T12:01:00.000Z',
+});
+
+/**
+ * Lays the messages out as a browser would and scrolls them: `scrollTop` down 1,000 px of them
+ * with 100 showing (the log 0 to 100 px down the screen), the newest message (the one before
+ * the end marker) starting `newestTop` px down and everything else well above; then the
+ * reader's scroll event.
+ */
+function scrollTo(scrollTop: number, newestTop = 0) {
+  const log = screen.getByRole('log');
+  Object.defineProperties(log, {
+    scrollTop: { configurable: true, value: scrollTop },
+    clientHeight: { configurable: true, value: 100 },
+    scrollHeight: { configurable: true, value: 1000 },
+  });
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    const newest = log.lastElementChild?.previousElementSibling;
+    const top = this === log ? 0 : this === newest ? newestTop : -500;
+    return DOMRect.fromRect({ y: top, height: this === log ? 100 : 50 });
+  });
+  fireEvent.scroll(log);
+}
+
+const newMessage = () => screen.queryByRole('button', { name: 'New message' });
+
+/** A moment for the chat's effects to run, before checking for something they didn't do. */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+type Stream = ReturnType<typeof stream>;
+
+/** Has the answer say `text` while the reader has scrolled up above its start, until New message shows. */
+async function answerUnseen(answer: Stream, text: string) {
+  scrollTo(200, 300);
+  answer.push({ type: 'text', delta: text });
+  await screen.findByRole('button', { name: 'New message' });
+}
+
+/** Ends the answer with the turn stored (`question`, then `text`), until the box takes another message. */
+async function storeTurn(answer: Stream, stored: ChatMessage[], question: string, text: string) {
+  stored.push(
+    { ...USER, id: stored.length + 1, text: question },
+    answered(stored.length + 2, text),
+  );
+  answer.push({ type: 'done', messageId: stored.length });
+  answer.end();
+  await screen.findByRole('button', { name: 'Send' });
+}
+
+/** A page's Ask the AI button. */
+function AskButton(): JSX.Element {
+  const asking = useChatAsk();
+  return (
+    <button type="button" onClick={() => asking?.ask('Plan for Song of the Elves', 'From Goals')}>
+      Ask the AI
+    </button>
+  );
+}
+
 /** Keeps each `why` the chat gives pages, as a page reading it would see them. */
 function Watcher(props: { whys: (string | undefined)[] }): null {
   props.whys.push(useChatAsk()?.why);
   return null;
-}
-
-/** The chat, with a page that watches what the chat tells pages. */
-function WithWatcher(props: { whys: (string | undefined)[] }): JSX.Element {
-  const chat = useChat('1');
-  return (
-    <ChatProviders chat={chat}>
-      <ChatColumn name="Lumby Pete" />
-      <Watcher whys={props.whys} />
-    </ChatProviders>
-  );
 }
 
 describe('ChatColumn', () => {
@@ -183,17 +245,11 @@ describe('ChatColumn', () => {
     }
     answer.push({ type: 'text', delta: 'Train **Magic** to 75.' });
     answer.push({ type: 'usage', tokens: 8200, costUsd: null, billing: 'plan' });
-    const done = {
-      id: 2,
-      role: 'assistant' as const,
-      text: 'Train **Magic** to 75.',
+    const done: ChatMessage = {
+      ...answered(2, 'Train **Magic** to 75.'),
       tools: tools.map(([id, name, label]) => ({ id, name, label, status: 'done' as const })),
-      approvals: [],
       sources: [{ title: 'Dream Mentor', url: 'https://oldschool.runescape.wiki/w/Dream_Mentor' }],
-      error: null,
-      stopped: false,
-      usage: { tokens: 8200, costUsd: null, billing: 'plan' as const },
-      createdAt: '2026-10-27T12:01:00.000Z',
+      usage: { tokens: 8200, costUsd: null, billing: 'plan' },
     };
     stored.push(USER, done);
     answer.push({ type: 'done', messageId: 2 });
@@ -315,11 +371,14 @@ describe('ChatColumn', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(sent).toContain('PATCH /api/chats/c0 {"title":"Vorkath"}'));
+    scrollTo(200);
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
     fireEvent.click(screen.getByRole('button', { name: 'Delete Vorkath gear' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(sent).toContain('DELETE /api/chats/c0 null'));
-    // Deleting the open chat leaves a new one.
+    // Deleting the open chat leaves a new one, shown from its end.
     expect(await screen.findByText('Ask anything about Lumby Pete.')).toBeTruthy();
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
   });
 
   it("gives tokens on Claude's plan, the cost with its API key, and another AI's tokens and any cost", () => {
@@ -409,6 +468,8 @@ describe('ChatColumn', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Hi' } });
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Message' }), { key: 'Enter' });
     await screen.findByRole('button', { name: 'Stop' });
+    await answerUnseen(answer, 'Hello');
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
     const send = vi
       .mocked(fetch)
       .mock.calls.find(
@@ -423,6 +484,9 @@ describe('ChatColumn', () => {
     expect(send?.[1]?.signal?.aborted).toBe(true);
     expect(screen.queryByText('Hi')).toBeNull();
     expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy();
+    // At the end of the other account's chat, with nothing new.
+    await waitFor(() => expect(newMessage()).toBeNull());
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
   });
 
   /**
@@ -522,7 +586,7 @@ describe('ChatColumn', () => {
     // The window is left and come back to, as when the game has the focus for a while.
     focusManager.setFocused(false);
     focusManager.setFocused(true);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settled();
     expect(screen.getAllByText('What next?')).toHaveLength(1);
     expect(gets).toBe(0);
   });
@@ -557,7 +621,7 @@ describe('ChatColumn', () => {
     expect(document.activeElement).toBe(box());
     answer.push({ type: 'done', messageId: 2 });
     answer.end();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settled();
     // Until the stored chat is in, the answer is still being shown.
     expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
     release();
@@ -606,24 +670,200 @@ describe('ChatColumn', () => {
     await screen.findByPlaceholderText('Ask about Lumby Pete');
     type('Hi');
     await screen.findByText('Hi');
-    const messages = screen.getByRole('log');
-    const at = (scrollTop: number) => {
-      Object.defineProperties(messages, {
-        scrollTop: { configurable: true, value: scrollTop },
-        clientHeight: { configurable: true, value: 100 },
-        scrollHeight: { configurable: true, value: 1000 },
-      });
-      fireEvent.scroll(messages);
-    };
     const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
-    at(200);
+    scrollTo(200);
     answer.push({ type: 'text', delta: 'Reading up there' });
     await screen.findByText('Reading up there');
     expect(scrolled).not.toHaveBeenCalled();
-    at(900);
+    // Back within a line of the end, which counts as the end.
+    scrollTo(870);
     answer.push({ type: 'text', delta: ', and back.' });
     await screen.findByText('Reading up there, and back.');
     expect(scrolled).toHaveBeenCalled();
+  });
+
+  it('says when the answer gets something below where the reader scrolled, and goes to its start', async () => {
+    const answer = stream();
+    const { box, type } = renderChat({
+      chats: [CHAT],
+      routes: {
+        'GET /api/chats/c1/messages': () => [],
+        'POST /api/chats/c1/messages': () => answer.response,
+      },
+    });
+    await screen.findByPlaceholderText('Ask about Lumby Pete');
+    type('Hi');
+    await screen.findByText('Hi');
+    // Following the end, nothing is new.
+    answer.push({
+      type: 'tool',
+      id: 't1',
+      name: 'get_quests',
+      label: 'Checking…',
+      status: 'started',
+    });
+    await screen.findByText(/Checking…/, { selector: 'p' });
+    await settled();
+    expect(newMessage()).toBeNull();
+    // Scrolled up to earlier messages, the answer starting below what shows.
+    scrollTo(200, 300);
+    expect(newMessage()).toBeNull();
+    answer.push({ type: 'text', delta: 'Train Magic.' });
+    const button = await screen.findByRole('button', { name: 'New message' });
+    // It floats over the messages, and comes after them in the tab order.
+    expect(button.matches('[data-floating]')).toBe(true);
+    expect(button.previousElementSibling).toBe(screen.getByRole('log'));
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    fireEvent.click(button);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'start' });
+    expect(scrolled.mock.contexts.at(-1)).toBe(
+      screen.getByText('Train Magic.').closest('[role="log"] > *'),
+    );
+    expect(newMessage()).toBeNull();
+    expect(document.activeElement).toBe(box());
+  });
+
+  it('says the answer is new until 40 px of its start show, then nothing as it comes', async () => {
+    const answer = stream();
+    const { type } = renderChat({
+      chats: [CHAT],
+      routes: {
+        'GET /api/chats/c1/messages': () => [],
+        'POST /api/chats/c1/messages': () => answer.response,
+      },
+    });
+    await screen.findByPlaceholderText('Ask about Lumby Pete');
+    type('Hi');
+    await screen.findByText('Hi');
+    answer.push({ type: 'text', delta: 'Train' });
+    await screen.findByText('Train');
+    // Scrolled up a little, to the answer's start, less than a line of it showing.
+    scrollTo(400, 61);
+    answer.push({ type: 'text', delta: ' Magic' });
+    await screen.findByText('Train Magic');
+    await screen.findByRole('button', { name: 'New message' });
+    // Then to where it shows.
+    scrollTo(450, 59);
+    expect(newMessage()).toBeNull();
+    answer.push({ type: 'text', delta: ' to 75.' });
+    await screen.findByText('Train Magic to 75.');
+    await settled();
+    expect(newMessage()).toBeNull();
+  });
+
+  it('keeps saying so once the answer is stored, until the reader scrolls to it', async () => {
+    const answer = stream();
+    const stored: ChatMessage[] = [];
+    const { type } = renderChat({
+      chats: [CHAT],
+      routes: {
+        'GET /api/chats/c1/messages': () => stored,
+        'POST /api/chats/c1/messages': () => answer.response,
+      },
+    });
+    await screen.findByPlaceholderText('Ask about Lumby Pete');
+    type('Hi');
+    await screen.findByText('Hi');
+    await answerUnseen(answer, 'Train Magic.');
+    await storeTurn(answer, stored, 'Hi', 'Train Magic.');
+    await settled();
+    expect(newMessage()).not.toBeNull();
+    // Scrolling down towards the answer's start, then to the end, where a short answer may show
+    // less than 40 px.
+    scrollTo(300, 300);
+    expect(newMessage()).not.toBeNull();
+    scrollTo(900, 70);
+    expect(newMessage()).toBeNull();
+  });
+
+  it('goes to the end when the open chat is opened again, after an answer that stayed', async () => {
+    const answer = stream();
+    const { type } = renderChat({
+      chats: [CHAT],
+      routes: {
+        'GET /api/chats/c1/messages': () => [USER],
+        'POST /api/chats/c1/messages': () => answer.response,
+      },
+    });
+    await screen.findByText('What next?');
+    type('Hi');
+    await screen.findByText('Hi');
+    await answerUnseen(answer, 'Half an');
+    // Cut off, it stays on screen with why.
+    answer.end();
+    await screen.findByRole('alert');
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier chats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'What next?' }));
+    await waitFor(() => expect(screen.queryByText('Hi')).toBeNull());
+    await waitFor(() => expect(newMessage()).toBeNull());
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
+  });
+
+  it('goes to the end when the reader sends, from the box or from a page', async () => {
+    const answers = [stream(), stream(), stream()];
+    let sends = 0;
+    const stored: ChatMessage[] = [];
+    const { type } = renderChat({
+      chats: [CHAT],
+      page: <AskButton />,
+      routes: {
+        'GET /api/chats/c1/messages': () => stored,
+        'POST /api/chats/c1/messages': () => answers[sends++]?.response ?? new Response(null),
+      },
+    });
+    await screen.findByPlaceholderText('Ask about Lumby Pete');
+    const [first, second] = answers as [Stream, Stream, Stream];
+    type('Hi');
+    await answerUnseen(first, 'Hello.');
+    await storeTurn(first, stored, 'Hi', 'Hello.');
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    type('What next?');
+    await screen.findByRole('button', { name: 'Stop' });
+    await waitFor(() => expect(newMessage()).toBeNull());
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
+    await answerUnseen(second, 'Train Magic.');
+    await storeTurn(second, stored, 'What next?', 'Train Magic.');
+    scrolled.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the AI' }));
+    await screen.findByRole('button', { name: 'Stop' });
+    await waitFor(() => expect(newMessage()).toBeNull());
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
+  });
+
+  it('goes to the end of another chat when it opens, leaving behind what was new', async () => {
+    const answer = stream();
+    const stored: ChatMessage[] = [];
+    const older = { ...CHAT, id: 'c0', title: 'Vorkath gear' };
+    const { type } = renderChat({
+      chats: [CHAT, older],
+      routes: {
+        'GET /api/chats/c1/messages': () => stored,
+        'GET /api/chats/c0/messages': () => [
+          { ...USER, id: 5, text: 'Best Vorkath gear?' },
+          answered(6, 'Bandos.'),
+        ],
+        'POST /api/chats/c1/messages': () => answer.response,
+      },
+    });
+    await screen.findByPlaceholderText('Ask about Lumby Pete');
+    type('Hi');
+    await screen.findByText('Hi');
+    await answerUnseen(answer, 'Hello.');
+    await storeTurn(answer, stored, 'Hi', 'Hello.');
+    const scrolled = vi.spyOn(Element.prototype, 'scrollIntoView');
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier chats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vorkath gear' }));
+    expect(await screen.findByText('Best Vorkath gear?')).toBeTruthy();
+    await waitFor(() => expect(newMessage()).toBeNull());
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
+    // Back to the first, already loaded and as long: nothing else changes, and it still goes there.
+    scrollTo(200);
+    scrolled.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Earlier chats' }));
+    fireEvent.click(screen.getByRole('button', { name: 'What next?' }));
+    expect(await screen.findByText('Hello.')).toBeTruthy();
+    expect(scrolled).toHaveBeenLastCalledWith({ block: 'end' });
   });
 
   it('opens Earlier chats over the chat, moving the focus to what each row asks next', async () => {
@@ -798,7 +1038,7 @@ describe('ChatColumn', () => {
     });
     render(
       <QueryClientProvider client={testQueryClient()}>
-        <WithWatcher whys={whys} />
+        <Harness page={<Watcher whys={whys} />} />
       </QueryClientProvider>,
     );
     expect(whys[0]).toBe('The chat is still loading.');

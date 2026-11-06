@@ -80,6 +80,7 @@ function Tabs(props: {
           tabIndex={tab === props.open ? 0 : -1}
           onClick={() => props.onOpen(tab)}
           onKeyDown={(event) => move(event, index)}
+          data-label={TAB_LABELS[tab]}
         >
           {TAB_LABELS[tab]}
         </button>

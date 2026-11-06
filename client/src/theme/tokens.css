@@ -7,16 +7,23 @@
 
   --bg: #1f1c17;
   --panel: #28231c;
-  --raised: #393227;
+  --raised: #332c22;
+  /* Dividers, and the edges of buttons and panels; a box to type in or pick from has the next. */
   --rule: #4a4134;
+  /* The edge of a box to type in or pick from: 3:1 on every surface (WCAG 1.4.11). */
+  --control-border: #85755d;
+  /*
+   * Text, and the colors below, pass 7:1 (WCAG AAA) on the background, panels and raised
+   * surfaces; contrast.test.ts checks every one.
+   */
   --text: #ebe1ca;
-  --muted: #a89a80;
-  --accent: #ff981f;
+  --muted: #c3baa8;
+  --accent: #ffa73f;
 
-  /* Status, after the in-game quest list; each passes 4.5:1 on the background and panels. */
-  --not-started: #e5654f;
+  /* Status, after the in-game quest list. */
+  --not-started: #f0a99c;
   --in-progress: #e9d44b;
-  --done: #3fbf4f;
+  --done: #6dcf79;
 
   /* Stats tiles, after the in-game stats tab. */
   --tile: #393227;
@@ -37,26 +44,27 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #e4d8b9;
-  --panel: #dacdab;
-  --raised: #cdbd94;
+  --bg: #f1eada;
+  --panel: #e8e0cb;
+  --raised: #dcd0b3;
   --rule: #a8956b;
+  --control-border: #83724d;
   --text: #2b2116;
-  --muted: #6b5a40;
-  --accent: #8f4300;
+  --muted: #473b2a;
+  --accent: #632e00;
 
-  --not-started: #9e2f1c;
-  --in-progress: #6b5400;
-  --done: #25622a;
+  --not-started: #702114;
+  --in-progress: #4b3b00;
+  --done: #1a451e;
 
-  --tile: #ebe2cb;
+  --tile: #f3eddf;
   --tile-frame: #cdbd94;
   --tile-name: #3d3122;
   --tile-level: #7a3a00;
   --tile-level-shadow: #f7f0dd;
 
   --stack-thousands: #2b2116;
-  --stack-millions: #25622a;
+  --stack-millions: #1a451e;
 }
 
 *,
@@ -131,13 +139,22 @@ input[type="radio"] {
   accent-color: var(--accent);
 }
 
+/* Boxes to type in or pick from, edged so they can be found (WCAG 1.4.11). */
 input:not([type]),
 input[type="text"],
 input[type="number"],
+input[type="search"],
+input[type="date"],
 select {
   padding: 6px 8px;
-  border: 1px solid var(--rule);
+  border: 1px solid var(--control-border);
   border-radius: 6px;
   background: var(--raised);
   color: var(--text);
+}
+
+/* A placeholder can say what the box is waiting for ("Answering…"), so it's read like text. */
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }

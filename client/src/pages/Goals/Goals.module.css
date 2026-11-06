@@ -130,6 +130,18 @@
   background: var(--accent);
 }
 
+/* A Windows contrast theme drops backgrounds: the bar keeps an edge, and its fill the highlight. */
+@media (forced-colors: active) {
+  .bar {
+    border: 1px solid CanvasText;
+  }
+
+  .bar span {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}
+
 .needed {
   display: flex;
   flex-wrap: wrap;
@@ -147,22 +159,21 @@
   list-style: none;
 }
 
-.dotRed,
-.dotYellow {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
+/* Filled when not met, half when under way. The bundled fonts lack both shapes, so they come
+   from one symbol font, the same size and on the same line. */
+.markRed,
+.markYellow {
   margin-right: 5px;
-  border-radius: 50%;
-  vertical-align: 1px;
+  font-family: "Segoe UI Symbol", "DejaVu Sans", sans-serif;
+  line-height: 1;
 }
 
-.dotRed {
-  background: var(--not-started);
+.markRed {
+  color: var(--not-started);
 }
 
-.dotYellow {
-  background: var(--in-progress);
+.markYellow {
+  color: var(--in-progress);
 }
 
 .ask,

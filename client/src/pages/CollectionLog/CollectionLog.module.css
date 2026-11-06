@@ -41,9 +41,23 @@
   color: var(--muted);
 }
 
+/* Picked: bold, with an accent bar, so it isn't told by color alone (WCAG 1.4.1). */
 .tabs button[aria-selected="true"] {
+  padding-bottom: 2px;
+  border-bottom: 3px solid var(--accent);
   background: var(--raised);
   color: var(--text);
+  font-weight: 700;
+}
+
+/* Each tab keeps room for its label in bold, so picking one moves none of the others. */
+.tabs button::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 700;
 }
 
 .log {
@@ -78,8 +92,12 @@
   text-align: left;
 }
 
+/* Picked: bold, with an accent bar, so it isn't told by color alone (WCAG 1.4.1). */
 .entries button[aria-current="true"] {
+  padding-inline-start: 4px;
+  border-inline-start: 3px solid var(--accent);
   background: var(--raised);
+  font-weight: 700;
 }
 
 .entries .done {
@@ -126,8 +144,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Picked: bold, with a thicker accent edge, so it isn't told by color alone (WCAG 1.4.1). */
 .items button[aria-pressed="true"] {
-  border-color: var(--accent);
+  padding: 1px;
+  border: 2px solid var(--accent);
+  font-weight: 700;
 }
 
 .items button[data-missing="true"] {

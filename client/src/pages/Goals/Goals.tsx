@@ -57,8 +57,10 @@ function GoalIcon(props: { target: GoalTarget }): JSX.Element {
 /** Kinds whose progress has a measure worth a bar (an item's only when it's a number of it). */
 const BARRED = new Set<GoalTarget['kind']>(['skill', 'combat_achievement', 'item']);
 
-/** What a status dot means, for screen readers. */
+/** What a status means, for screen readers. */
 const STATUS_WORDS = { red: 'not met', yellow: 'under way' } as const;
+/** A status's mark, its shape saying it as well as its color (WCAG 1.4.1). */
+const STATUS_MARKS = { red: '●', yellow: '◐' } as const;
 
 /**
  * One active goal: its handle (drag it, or Alt+↑ and Alt+↓ on it), icon, title and kind, a bar
@@ -153,8 +155,10 @@ function ActiveGoal(props: {
                 <li key={item.label}>
                   <span
                     aria-hidden="true"
-                    className={item.status === 'red' ? styles.dotRed : styles.dotYellow}
-                  />
+                    className={item.status === 'red' ? styles.markRed : styles.markYellow}
+                  >
+                    {STATUS_MARKS[item.status]}
+                  </span>
                   {item.label}
                   <span className="visually-hidden"> ({STATUS_WORDS[item.status]})</span>
                 </li>

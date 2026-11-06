@@ -1,4 +1,4 @@
-import { fireEvent, within } from '@testing-library/react';
+import { fireEvent, waitFor, within } from '@testing-library/react';
 import type { Gains } from '@wom/shared';
 import { describe, expect, it } from 'vitest';
 import { LUMBY_PETE, minutesAgo, testGains } from '../../test/fakeApi.ts';
@@ -74,6 +74,30 @@ describe('ThisWeek', () => {
     fireEvent.click(within(page).getByRole('button', { name: '30 days' }));
     await within(page).findByRole('button', { name: '30 days', pressed: true });
     await expect.poll(() => page.asked).toEqual(['period=week', 'period=day', 'period=month']);
+  });
+
+  it('says it is updating while it keeps the last period shown', async () => {
+    let answer: (gains: Gains) => void = () => {};
+    const { page } = renderApp('/1/this-week', {
+      routes: {
+        'GET /api/accounts': () => [LUMBY_PETE],
+        'GET /api/accounts/1/gains': ({ url }) =>
+          url.searchParams.get('period') === 'week'
+            ? testGains()
+            : new Promise<Gains>((resolve) => {
+                answer = resolve;
+              }),
+      },
+    });
+    await within(page).findByText(/^21\.85M XP/);
+    const status = within(page).getByRole('status');
+    expect(status.textContent).toBe('');
+    fireEvent.click(within(page).getByRole('button', { name: '30 days' }));
+    await waitFor(() => expect(status.textContent).toBe('Updating…'));
+    // The last period stays readable meanwhile.
+    expect(within(page).getByText(/^21\.85M XP/)).toBeTruthy();
+    answer(testGains());
+    await waitFor(() => expect(status.textContent).toBe(''));
   });
 
   it('asks for the days picked, from the start of the first to the end of the last in the settings zone', async () => {

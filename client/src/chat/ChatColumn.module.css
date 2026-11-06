@@ -85,7 +85,10 @@
   border-radius: 4px;
 }
 
+/* The open chat: bold, with an accent bar, so it isn't told by color alone (WCAG 1.4.1). */
 .earlier li[aria-current="true"] {
+  padding-inline-start: 3px;
+  border-inline-start: 3px solid var(--accent);
   background: var(--raised);
 }
 
@@ -107,6 +110,10 @@
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.earlier li[aria-current="true"] .open {
+  font-weight: 700;
 }
 
 .renameForm input {
@@ -347,7 +354,8 @@
   display: grid;
   gap: 6px;
   padding: 9px 11px;
-  border: 1px solid var(--rule);
+  /* The message box's edge (its textarea has none of its own). */
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   background: var(--panel);
 }

@@ -158,12 +158,17 @@ export function ThisWeek(): JSX.Element {
               type="button"
               aria-pressed={picked === each.period}
               onClick={() => pick(each.period)}
+              data-label={each.label}
             >
               {each.label}
             </button>
           ))}
         </fieldset>
         {picked === 'custom' && <CustomRange onShow={setRange} />}
+        {/* Always there, so screen readers hear it change and nothing moves when it does. */}
+        <p role="status" className={styles.updating}>
+          {query.isPlaceholderData ? 'Updating…' : ''}
+        </p>
       </header>
       {'show' in state ? (
         state.show

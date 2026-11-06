@@ -16,6 +16,8 @@ export default defineConfig({
           root: './client',
           environment: 'jsdom',
           setupFiles: ['./src/test/setup.ts'],
+          // Vitest skips CSS, so the tokens would read as empty; the contrast test checks them.
+          css: { include: [/theme\/tokens\.css/] },
           ...restore,
         },
       },

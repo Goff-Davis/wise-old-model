@@ -28,10 +28,23 @@
   color: var(--muted);
 }
 
+/* Picked: bold, with a thicker accent edge, so it isn't told by color alone (WCAG 1.4.1). */
+/* Each chip keeps room for its label in bold, so picking one moves none of the others. */
+.periods button::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 700;
+}
+
 .periods button[aria-pressed="true"] {
-  border-color: var(--accent);
+  padding: 3px 11px;
+  border: 2px solid var(--accent);
   background: var(--raised);
   color: var(--text);
+  font-weight: 700;
 }
 
 .custom {
@@ -53,8 +66,11 @@
   gap: 18px;
 }
 
-.gains[aria-busy="true"] {
-  opacity: 0.6;
+/* While another period loads, the last one stays at full contrast and this line says so. */
+.updating {
+  min-height: 1.5em;
+  margin: 6px 0 0;
+  color: var(--muted);
 }
 
 .summary {

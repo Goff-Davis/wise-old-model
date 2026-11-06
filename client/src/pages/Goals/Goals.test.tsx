@@ -149,7 +149,8 @@ describe('Goals', () => {
       within(needed)
         .getAllByRole('listitem')
         .map((item) => item.textContent),
-    ).toEqual(['75 Magic (you have 71) (not met)', 'Dream Mentor (under way)']);
+      // Each status has its own shape (filled, half), not only its own color.
+    ).toEqual(['●75 Magic (you have 71) (not met)', '◐Dream Mentor (under way)']);
     const plan = within(quest).getByRole('button', { name: 'Ask the AI for a plan' });
     expect(plan.getAttribute('aria-disabled')).toBeNull();
     // Only quest and diary goals offer one.

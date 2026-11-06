@@ -112,23 +112,28 @@ stateDiagram-v2
 
 | | Dark (default) | Light (parchment) |
 |---|---|---|
-| Background, panel, raised | `#1f1c17`, `#28231c`, `#393227` | `#e4d8b9`, `#dacdab`, `#cdbd94` |
-| Rules | `#4a4134` | `#a8956b` |
-| Text, muted | `#ebe1ca`, `#a89a80` | `#2b2116`, `#6b5a40` |
-| Accent | `#ff981f` (the game's orange) | `#8f4300` |
-| Not started, in progress, done | `#e5654f`, `#e9d44b`, `#3fbf4f` | `#9e2f1c`, `#6b5400`, `#25622a` |
+| Background, panel, raised | `#1f1c17`, `#28231c`, `#332c22` | `#f1eada`, `#e8e0cb`, `#dcd0b3` |
+| Rules (dividers, button and panel edges) | `#4a4134` | `#a8956b` |
+| Control edges (boxes to type in or pick from) | `#85755d` | `#83724d` |
+| Text, muted | `#ebe1ca`, `#c3baa8` | `#2b2116`, `#473b2a` |
+| Accent | `#ffa73f` (after the game's orange) | `#632e00` |
+| Not started, in progress, done | `#f0a99c`, `#e9d44b`, `#6dcf79` | `#702114`, `#4b3b00`, `#1a451e` |
 
 - **Type:** Alegreya (serif) for chat answers and headings, Alegreya Sans for the interface, Silkscreen (pixel) only for skill levels. Fonts are bundled through Fontsource, not loaded from Google.
 - **The one loud element** is the stats tiles, styled like the in-game stats tab (yellow pixel levels on stone in dark; dark amber on parchment in light).
-- **Status colors** follow the in-game quest list (red, yellow, green), each passing 4.5:1 contrast so they can color text.
+- **Status colors** follow the in-game quest list (red, yellow, green). Like text and muted text, each passes 7:1 on the background, panels and raised surfaces, so the colors sit close in lightness: hierarchy comes more from size and weight.
 - **No template chrome:** sentence case everywhere, no all-caps labels, no middle-dot meta strings, no arrows on buttons.
 - The last theme is also kept in `localStorage`, so `index.html` applies it before the app loads and a light page doesn't flash dark.
 - **Icons** (`components/Icon.tsx`) come from the server: wiki images by file name (`/api/icons/wiki/Attack_icon.png`) and RuneLite item icons by id (`/api/icons/item/4151`), pixel art kept sharp; a missing icon leaves a blank of its size.
 - **Accessibility:** native elements first (`<dialog>`, `<fieldset>`, form controls), ARIA patterns where needed (tabs in the Collection log, a combobox for `SearchSelect`), problems announced as they appear (`role="alert"`), and focus moved deliberately when something it was on disappears.
+- **WCAG 2.2 AAA** is the aim:
+  - Text is at 7:1 or more; control edges and the focus ring are at 3:1. `theme/contrast.test.ts` checks every text and edge color in both themes.
+  - Nothing is told by color alone. A picked item is bold, with an accent bar (menu link, tab, entry, open chat) or a thicker accent edge (period chip, collection log item). A goal's status has a shape (● not met, ◐ under way).
+  - Windows contrast themes (forced colors) keep the goal bar.
 
 ## Testing
 
 - Component tests (Vitest with jsdom and Testing Library) cover pages and components with logic: streaming and approvals, goal progress, the pickers, settings.
 - `test/fakeApi.ts` stands in for the server: routes are keyed by method and path, settings are served and recorded (each AI keeping its own model and effort, as on the server), and any request a test didn't expect fails it. It also holds test data (`LUMBY_PETE`, `testOverview`, `testAbout`, `TEST_MODELS`, `TEST_PROVIDERS`, `minutesAgo`).
 - `test/renderApp.tsx` renders the whole app at a path; tests use the app's own query client without retries.
-- jsdom can't check layout, so CSS-only changes are checked by eye.
+- jsdom can't check layout, so CSS-only changes are checked by eye. Colors are the exception: `theme/contrast.test.ts` reads `tokens.css` and checks each pair's contrast.

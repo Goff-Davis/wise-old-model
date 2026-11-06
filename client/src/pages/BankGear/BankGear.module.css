@@ -58,16 +58,7 @@
 .search input {
   flex: 1;
   min-width: 0;
-  padding: 6px 9px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
   background: var(--bg);
-  color: var(--text);
-  font: inherit;
-}
-
-.search input::placeholder {
-  color: var(--muted);
 }
 
 /* The worn gear and the inventory side by side, as in game. */

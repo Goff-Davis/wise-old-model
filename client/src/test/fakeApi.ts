@@ -278,7 +278,8 @@ export function testGains(changes: Partial<Gains> = {}): Gains {
   return {
     start: '2026-10-21T12:00:00.000Z',
     end: '2026-10-28T12:00:00.000Z',
-    summary: '21.85M XP, 52 boss kills and 1 new collection log item in the last 7 days.',
+    summary:
+      '21.85M experience (XP), 52 boss kills and 1 new collection log item in the last 7 days.',
     skills: [
       { name: 'Firemaking', xpGained: 19_832_419, levelFrom: 99, levelTo: 99 },
       { name: 'Fletching', xpGained: 1_216_938, levelFrom: 70, levelTo: 79 },

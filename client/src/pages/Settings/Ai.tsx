@@ -99,7 +99,7 @@ export function Ai(): JSX.Element {
         <>
           {providers.data && (
             <Choices
-              legend="Provider"
+              legend="Which AI answers"
               value={s.provider}
               options={providers.data.map((provider) => ({
                 value: provider.id,
@@ -142,7 +142,7 @@ export function Ai(): JSX.Element {
           />
           {choosesBilling && s.billing === 'api_key' && (
             <NumberField
-              label="Spending cap per question (US$)"
+              label="Spending cap per question, in US dollars"
               value={s.budgetUsd}
               min={0.01}
               optional

@@ -389,7 +389,9 @@ The other two APIs leave the tool loop to us, and share their shell (`apiProvide
 
 ### Instructions
 
-The system prompt tells the model to: act as an advisor for this one account; take facts about it only from tools, saying when data is missing or stale and how to fix it; respect the account type (ironmen can't trade, ultimate ironmen have no bank, hardcore ironmen get risk warnings); take numbers from the calculation tools; check and cite the wiki for every specific game fact; ask before guessing; decline botting, real-world trading and similar; be concise; and add goals only with approval.
+The system prompt tells the model to: act as an advisor for this one account; take facts about it only from tools, saying when data is missing or stale and how to fix it; respect the account type (ironmen can't trade, ultimate ironmen have no bank, hardcore ironmen get risk warnings); take numbers from the calculation tools; check and cite the wiki for every specific game fact; ask before guessing; decline botting, real-world trading and similar; and add goals only with approval.
+
+Its Style rule asks for answers anyone can follow, as WCAG AAA asks of the rest of the app: be concise; open with the answer in a plain sentence or two, then the reasons; spell out each abbreviation the first time, as in experience (XP); the first time a game term comes up, say in a few words what it means or link it to its wiki page, leaving terms everyone knows (level, quest, bank, boss) alone; and make link text name the page it goes to. A model's text can't be guaranteed to follow it, but it makes plain answers much more likely.
 
 ### Tools
 

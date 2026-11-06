@@ -127,6 +127,11 @@ describe('Settings → Display', () => {
     expect(options[0]).toBe('auto');
     expect(within(select).getByRole('option', { name: `Automatic (${browserZone})` })).toBeTruthy();
     expect(options).toContain('UTC');
+    expect(
+      within(select).getByRole<HTMLOptionElement>('option', {
+        name: 'UTC (Coordinated Universal Time)',
+      }).value,
+    ).toBe('UTC');
     expect(options).toContain('Asia/Tokyo');
     expect(options.length).toBe(new Set(['UTC', ...Intl.supportedValuesOf('timeZone')]).size + 1);
 
@@ -489,6 +494,10 @@ describe('Settings → AI', () => {
     const ai = await screen.findByRole('region', { name: 'AI' });
     const claude = await within(ai).findByRole('radio', { name: 'Claude' });
     expect(claude).toHaveProperty('checked', true);
+    // The choice is named in plain words, not "Provider".
+    expect(within(ai).getByRole('group', { name: 'Which AI answers' })).toBe(
+      claude.closest('fieldset'),
+    );
     const gemini = within(ai).getByRole('radio', { name: 'Gemini' });
     expect(gemini).toHaveProperty('disabled', true);
     // Why it can't be picked, read with it.
@@ -538,7 +547,7 @@ describe('Settings → AI', () => {
 
     fireEvent.click(within(ai).getByRole('radio', { name: 'API key' }));
     const cap = await within(ai).findByRole('spinbutton', {
-      name: 'Spending cap per question (US$)',
+      name: 'Spending cap per question, in US dollars',
     });
     expect(patches).toEqual([{ billing: 'api_key' }]);
     expect(ai.textContent).toContain(
@@ -723,7 +732,7 @@ describe('Settings → About', () => {
       'OPENAI_COMPAT_NAMENot set (OpenAI-compatible)',
       'OPENAI_COMPAT_MODELNot set (the first of its models by name)',
       'GEMINI_API_KEYNot set (no Gemini)',
-      'GEMINI_MODELNot set (the first it lists that thinks)',
+      'GEMINI_MODELNot set (the first it lists that thinks before answering)',
     ]);
     expect(about.textContent).toContain('Game images © Jagex Ltd.');
     const license = within(about).getByRole('link', {

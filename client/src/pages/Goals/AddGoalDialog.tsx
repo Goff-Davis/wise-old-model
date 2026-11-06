@@ -241,11 +241,12 @@ function KindFields(props: {
             </Field>
           )}
           <Choice
-            legend="A level or an amount of XP"
+            legend="A level or an amount of experience (XP)"
             value={fields.by}
             options={[
               ['level', 'A level'],
-              ['xp', 'XP'],
+              // The dialog's first XP, so it's spelled out.
+              ['xp', 'An amount of experience (XP)'],
             ]}
             onChange={(by) => set({ by })}
           />

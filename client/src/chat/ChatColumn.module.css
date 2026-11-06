@@ -125,6 +125,8 @@
   overflow: auto;
   /* Something given the focus near the bottom scrolls clear of New message (WCAG 2.4.12). */
   scroll-padding-block-end: 64px;
+  /* Hidden text in it (a link's "opens in a new tab") scrolls with it, not out past it. */
+  position: relative;
 }
 
 /*
@@ -234,6 +236,7 @@
 }
 
 .answerText pre {
+  position: relative;
   overflow-x: auto;
 }
 
@@ -250,6 +253,7 @@
   display: block;
   width: max-content;
   max-width: 100%;
+  position: relative;
   overflow-x: auto;
   margin: 0 0 8px;
   border-collapse: collapse;

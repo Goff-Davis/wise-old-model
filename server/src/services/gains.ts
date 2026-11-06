@@ -360,8 +360,8 @@ export async function buildGains(
     start: range.start,
     end: range.end,
     summary: gains
-      ? `${formatCompact(xp, 2)} XP, ${count(bossKills, 'boss kill', 'boss kills')} and ${logged} ${range.when}.`
-      : `XP and boss kills aren't known; ${logged} ${range.when}.`,
+      ? `${formatCompact(xp, 2)} experience (XP), ${count(bossKills, 'boss kill', 'boss kills')} and ${logged} ${range.when}.`
+      : `Experience (XP) and boss kills aren't known; ${logged} ${range.when}.`,
     skills,
     kills: [...bosses, ...clues],
     progress: await progressIn(deps, row, range),

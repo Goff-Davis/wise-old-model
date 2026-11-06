@@ -32,7 +32,7 @@ const rows = (page: HTMLElement, name: string) =>
 describe('ThisWeek', () => {
   it('sums up the last 7 days, the period it opens on', async () => {
     const page = renderWeek();
-    await within(page).findByText(/^21\.85M XP/);
+    await within(page).findByText(/^21\.85M experience \(XP\)/);
     expect(page.asked).toEqual(['period=week']);
     const week = within(page).getByRole('button', { name: '7 days' });
     expect(week.getAttribute('aria-pressed')).toBe('true');
@@ -69,7 +69,7 @@ describe('ThisWeek', () => {
 
   it('asks for today, or the last 30 days, when picked', async () => {
     const page = renderWeek();
-    await within(page).findByText(/^21\.85M XP/);
+    await within(page).findByText(/^21\.85M experience \(XP\)/);
     fireEvent.click(within(page).getByRole('button', { name: 'Today' }));
     fireEvent.click(within(page).getByRole('button', { name: '30 days' }));
     await within(page).findByRole('button', { name: '30 days', pressed: true });
@@ -89,21 +89,21 @@ describe('ThisWeek', () => {
               }),
       },
     });
-    await within(page).findByText(/^21\.85M XP/);
+    await within(page).findByText(/^21\.85M experience \(XP\)/);
     // The header's status line, not Refresh's.
     const status = page.querySelector('header [role="status"]') as HTMLElement;
     expect(status.textContent).toBe('');
     fireEvent.click(within(page).getByRole('button', { name: '30 days' }));
     await waitFor(() => expect(status.textContent).toBe('Updating…'));
     // The last period stays readable meanwhile.
-    expect(within(page).getByText(/^21\.85M XP/)).toBeTruthy();
+    expect(within(page).getByText(/^21\.85M experience \(XP\)/)).toBeTruthy();
     answer(testGains());
     await waitFor(() => expect(status.textContent).toBe(''));
   });
 
   it('asks for the days picked, from the start of the first to the end of the last in the settings zone', async () => {
     const page = renderWeek();
-    await within(page).findByText(/^21\.85M XP/);
+    await within(page).findByText(/^21\.85M experience \(XP\)/);
     fireEvent.click(within(page).getByRole('button', { name: 'Custom' }));
     const show = within(page).getByRole('button', { name: 'Show' }) as HTMLButtonElement;
     expect(show.disabled).toBe(true);
@@ -122,7 +122,8 @@ describe('ThisWeek', () => {
   it("says when Wise Old Man doesn't track the account, and when nothing happened", async () => {
     const page = renderWeek(
       testGains({
-        summary: "XP and boss kills aren't known; 0 new collection log items in the last 7 days.",
+        summary:
+          "Experience (XP) and boss kills aren't known; 0 new collection log items in the last 7 days.",
         skills: [],
         kills: [],
         progress: [],
@@ -130,7 +131,7 @@ describe('ThisWeek', () => {
         gainsSource: { fetchedAt: null, error: null, notFound: true },
       }),
     );
-    await within(page).findByText(/^XP and boss kills aren't known/);
+    await within(page).findByText(/^Experience \(XP\) and boss kills aren't known/);
     expect(within(page).getByText(/Wise Old Man doesn't track Lumby Pete/)).toBeTruthy();
     expect(within(page).getByText('Nothing completed.')).toBeTruthy();
     expect(within(page).getByText('No new items.')).toBeTruthy();

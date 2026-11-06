@@ -710,7 +710,8 @@ describe('GET /api/accounts/:id/gains', () => {
     const res = await call(app, { path: `/api/accounts/${account.id}/gains?period=week` });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      summary: '21.85M XP, 895 boss kills and 0 new collection log items in the last 7 days.',
+      summary:
+        '21.85M experience (XP), 895 boss kills and 0 new collection log items in the last 7 days.',
       skills: [{ name: 'Firemaking' }, {}, {}, {}],
     });
   });

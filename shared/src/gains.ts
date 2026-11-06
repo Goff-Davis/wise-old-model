@@ -39,7 +39,10 @@ export const PROGRESS_KINDS = [
 export const GainsSchema = z.object({
   start: z.string(),
   end: z.string(),
-  /** "1.24M XP, 52 boss kills and 3 new collection log items in the last 7 days." */
+  /**
+   * "1.24M experience (XP), 52 boss kills and 3 new collection log items in the last 7 days.":
+   * This week's first use of XP, so it's spelled out.
+   */
   summary: z.string(),
   /** Skills that gained XP, most first. */
   skills: z.array(

@@ -266,7 +266,7 @@ describe('buildGains', () => {
     await online({ gains: gainsWith({ skills: { overall: 1_240_000 } }) });
     const gains = await buildGains(deps, row, { period: 'week' }, NOW);
     expect(gains.summary).toBe(
-      '1.24M XP, 895 boss kills and 0 new collection log items in the last 7 days.',
+      '1.24M experience (XP), 895 boss kills and 0 new collection log items in the last 7 days.',
     );
     expect(gains).toMatchObject({ start: ago(7 * DAY_MS), end: NOW.toISOString() });
     // The week's own state is in gainsSource; the others' in freshness.
@@ -280,7 +280,7 @@ describe('buildGains', () => {
     const end = '2025-10-19T00:00:00.000Z';
     const gains = await buildGains(deps, row, { start, end }, NOW);
     expect(gains.summary).toBe(
-      '21.85M XP, 1 boss kill and 1 new collection log item on Oct 18, 2025.',
+      '21.85M experience (XP), 1 boss kill and 1 new collection log item on Oct 18, 2025.',
     );
   });
 
@@ -412,7 +412,7 @@ describe('buildGains', () => {
     expect(gains).toMatchObject({ skills: [], kills: [] });
     expect(gains.gainsSource).toMatchObject({ notFound: true });
     expect(gains.summary).toBe(
-      "XP and boss kills aren't known; 0 new collection log items in the last 7 days.",
+      "Experience (XP) and boss kills aren't known; 0 new collection log items in the last 7 days.",
     );
   });
 
@@ -430,7 +430,7 @@ describe('buildGains', () => {
       error: 'Wise Old Man: server error (500)',
       notFound: false,
     });
-    expect(gains.summary).toMatch(/^XP and boss kills aren't known/);
+    expect(gains.summary).toMatch(/^Experience \(XP\) and boss kills aren't known/);
   });
 
   it("shows the last gains with why they couldn't be fetched again", async () => {

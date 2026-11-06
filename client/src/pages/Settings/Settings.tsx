@@ -48,7 +48,7 @@ function Display(): JSX.Element | null {
           </option>
           {zones.map((zone) => (
             <option key={zone} value={zone}>
-              {zone}
+              {zone === 'UTC' ? 'UTC (Coordinated Universal Time)' : zone}
             </option>
           ))}
         </select>

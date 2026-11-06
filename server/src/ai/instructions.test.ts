@@ -34,6 +34,28 @@ describe('instructions', () => {
     expect(prompt).toMatch(/add_goal/);
   });
 
+  it('asks for plain words: a plain opening, abbreviations and game terms explained, links named', () => {
+    // A plain sentence or two anyone could follow first, then the reasons.
+    expect(prompt).toMatch(
+      /open with the answer in a plain sentence or two that anyone could follow/i,
+    );
+    // Each abbreviation spelled out the first time, as experience (XP).
+    expect(prompt).toMatch(/spell out each abbreviation the first time/i);
+    expect(prompt).toMatch(/experience \(XP\)/);
+    // Still concise.
+    expect(prompt).toMatch(/concise/i);
+    // A game term explained in a few words, or linked to its wiki page, the first time; not the
+    // ones everyone knows.
+    expect(prompt).toMatch(
+      /the first time a game term comes up, say in a few words what it means or link it to its wiki page/i,
+    );
+    expect(prompt).toMatch(
+      /terms everyone knows, like level, quest, bank or boss, need no explaining/i,
+    );
+    // Link text that names the page it goes to.
+    expect(prompt).toMatch(/link text names the page it goes to/i);
+  });
+
   it("gives each type its own name and rule, and no other type's", () => {
     const of = (type: AccountType) => buildSystemPrompt({ name: 'Lumby Pete', type });
     const names: Record<AccountType, string> = {

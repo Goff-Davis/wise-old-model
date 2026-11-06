@@ -85,7 +85,7 @@ Settings that rarely change, and secrets, live in `.env` in the repo root. It's 
 | `OPENAI_COMPAT_NAME` | No | `OpenAI-compatible` | What the app calls it ("OpenRouter", "Ollama"), up to 40 characters. |
 | `OPENAI_COMPAT_MODEL` | No | The first of its models by name | The model it answers with until you pick one in Settings. |
 | `GEMINI_API_KEY` | No | (none) | Turns on Gemini. |
-| `GEMINI_MODEL` | No | The first it lists that thinks | The Gemini model it answers with until you pick one in Settings. |
+| `GEMINI_MODEL` | No | The first it lists that thinks before answering | The Gemini model it answers with until you pick one in Settings. |
 
 The default data folder is `%LOCALAPPDATA%\wise-old-model` on Windows, `~/Library/Application Support/wise-old-model` on macOS and `~/.local/share/wise-old-model` on Linux and WSL. Folder settings accept `~` for your home folder. The server checks every value at startup and stops with a message saying what to fix.
 

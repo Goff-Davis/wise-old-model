@@ -26,7 +26,10 @@ function envRows(env: AboutAnswer['env']): [name: string, value: string][] {
     ['OPENAI_COMPAT_NAME', env.OPENAI_COMPAT_NAME ?? 'Not set (OpenAI-compatible)'],
     ['OPENAI_COMPAT_MODEL', env.OPENAI_COMPAT_MODEL ?? 'Not set (the first of its models by name)'],
     ['GEMINI_API_KEY', setOrNot(env.GEMINI_API_KEY, 'Not set (no Gemini)')],
-    ['GEMINI_MODEL', env.GEMINI_MODEL ?? 'Not set (the first it lists that thinks)'],
+    [
+      'GEMINI_MODEL',
+      env.GEMINI_MODEL ?? 'Not set (the first it lists that thinks before answering)',
+    ],
   ];
 }
 

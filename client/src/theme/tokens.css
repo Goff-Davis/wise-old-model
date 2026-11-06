@@ -103,6 +103,8 @@ textarea {
 }
 
 /* Text only screen readers get. */
+/* Absolutely positioned, so a scroll box it's in must be positioned too, or the text escapes it
+   and scrolls what's around it (scrollBoxes.test.ts checks). */
 .visually-hidden {
   position: absolute;
   width: 1px;

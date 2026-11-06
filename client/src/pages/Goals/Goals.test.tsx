@@ -467,6 +467,11 @@ describe('AddGoalDialog', () => {
   it('adds a skill goal, titled from its target unless given a title', async () => {
     const page = renderGoals();
     const dialog = await openDialog(page);
+    // The dialog's first XP is spelled out, for the eye and in the choice's name.
+    const by = within(dialog).getByRole('group', {
+      name: 'A level or an amount of experience (XP)',
+    });
+    expect(within(by).getByLabelText('An amount of experience (XP)')).toBeTruthy();
     fireEvent.change(within(dialog).getByLabelText('Skill'), { target: { value: 'Magic' } });
     fireEvent.change(within(dialog).getByLabelText('Level'), { target: { value: '75' } });
     expect((within(dialog).getByLabelText('Title') as HTMLInputElement).placeholder).toBe(
@@ -523,11 +528,13 @@ describe('AddGoalDialog', () => {
       await expect.poll(() => within(page).queryByRole('dialog')).toBeNull();
       return page.sent.at(-1)?.body;
     }
-    expect(await addVia('skill', [['XP'], ['Skill', 'Slayer'], ['XP amount', '13034431']])).toEqual(
-      {
-        target: { kind: 'skill', skill: 'Slayer', xp: 13_034_431 },
-      },
-    );
+    expect(
+      await addVia('skill', [
+        ['An amount of experience (XP)'],
+        ['Skill', 'Slayer'],
+        ['XP amount', '13034431'],
+      ]),
+    ).toEqual({ target: { kind: 'skill', skill: 'Slayer', xp: 13_034_431 } });
     expect(await addVia('quest', [['Quest', 'Dragon Slayer II']])).toEqual({
       target: { kind: 'quest', quest: 'Dragon Slayer II' },
     });

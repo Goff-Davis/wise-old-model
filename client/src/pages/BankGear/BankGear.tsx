@@ -115,11 +115,21 @@ function ItemRow(props: { item: OwnedItem; showWhere?: boolean }) {
   );
 }
 
-/** The worn gear laid out like the in-game equipment screen. */
+/** What a worn slot holds, as its button and the line under the gear say it. */
+const slotText = (name: string, item: OwnedItem | undefined) =>
+  `${name}: ${item ? withQuantity(item) : 'empty'}`;
+
+/**
+ * The worn gear laid out like the in-game equipment screen. Picking a slot says what it holds on
+ * a line below, where keys and touch can reach it as well as a mouse. The line isn't read out:
+ * the slot's own name says the same, and the gear reloading as you play would speak up.
+ */
 function Worn(props: { view: BankView }) {
   const id = useId();
   const { worn } = props.view;
   const bySlot = new Map(worn?.map((item) => [item.slot, item]));
+  const [picked, setPicked] = useState<string | null>(null);
+  const pickedSlot = EQUIPMENT_SCREEN.find((each) => each.name === picked);
   return (
     <section aria-labelledby={id} className={styles.section}>
       <h3 id={id}>Worn</h3>
@@ -128,41 +138,60 @@ function Worn(props: { view: BankView }) {
       {worn === null ? (
         <p className={styles.note}>{withFix('Not known yet.', props.view, 'ce_equipment')}</p>
       ) : (
-        <ul aria-labelledby={id} className={styles.equipment}>
-          {EQUIPMENT_SCREEN.map(({ slot, name, row, column }) => {
-            const item = bySlot.get(slot);
-            return (
-              <li
-                key={slot}
-                className={item ? styles.slot : `${styles.slot} ${styles.empty}`}
-                style={{ gridArea: `${row} / ${column}` }}
-                title={`${name}: ${item ? item.name : 'empty'}`}
-              >
-                <span className="visually-hidden">{name}</span>
-                {item && <Icon kind="item" id={item.id} name={item.name} size={30} />}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul aria-labelledby={id} className={styles.equipment}>
+            {EQUIPMENT_SCREEN.map(({ slot, name, row, column }) => {
+              const item = bySlot.get(slot);
+              return (
+                <li key={slot} style={{ gridArea: `${row} / ${column}` }}>
+                  <button
+                    type="button"
+                    className={item ? styles.slot : `${styles.slot} ${styles.empty}`}
+                    aria-pressed={name === picked}
+                    onClick={() => setPicked(name)}
+                  >
+                    <span className="visually-hidden">{slotText(name, item)}</span>
+                    {item && (
+                      <Icon kind="item" id={item.id} name={item.name} size={30} decorative />
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className={styles.picked}>
+            {pickedSlot
+              ? `${slotText(pickedSlot.name, bySlot.get(pickedSlot.slot))}.`
+              : "Pick a slot to see what's in it."}
+          </p>
+        </>
       )}
     </section>
   );
 }
 
-/** A stack's size on its icon, as the game writes it and in its color. */
+/**
+ * A stack's size on its icon, as the game writes it and in its color: for the eye, since its
+ * slot's name says the whole number.
+ */
 function StackSize(props: { quantity: number }) {
   const { text, size } = stackSize(props.quantity);
   return (
-    <span className={styles.stack} data-size={size}>
+    <span className={styles.stack} data-size={size} aria-hidden="true">
       {text}
     </span>
   );
 }
 
-/** The 28-slot inventory, 4 across, each stack's size on its icon. */
+/**
+ * The 28-slot inventory, 4 across, each stack's size on its icon. Picking an item says what it
+ * is and how many on a line below.
+ */
 function Inventory(props: { view: BankView }) {
   const id = useId();
   const { inventory } = props.view;
+  const [picked, setPicked] = useState<number | null>(null);
+  const pickedItem = picked === null ? null : inventory?.[picked];
   return (
     <section aria-labelledby={id} className={styles.section}>
       <h3 id={id}>Inventory</h3>
@@ -171,20 +200,35 @@ function Inventory(props: { view: BankView }) {
       {inventory === null ? (
         <p className={styles.note}>{withFix('Not known yet.', props.view, 'ce_inventory')}</p>
       ) : (
-        <ul aria-labelledby={id} className={styles.inventory}>
-          {inventory.map((item, slot) =>
-            item ? (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a slot's number is what it is.
-              <li key={slot} title={withQuantity(item)}>
-                <Icon kind="item" id={item.id} name={item.name} size={30} />
-                {item.quantity > 1 && <StackSize quantity={item.quantity} />}
-              </li>
-            ) : (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a slot's number is what it is.
-              <li key={slot} aria-hidden="true" />
-            ),
-          )}
-        </ul>
+        <>
+          <ul aria-labelledby={id} className={styles.inventory}>
+            {inventory.map((item, slot) =>
+              item ? (
+                // biome-ignore lint/suspicious/noArrayIndexKey: a slot's number is what it is.
+                <li key={slot}>
+                  <button
+                    type="button"
+                    className={styles.carried}
+                    aria-pressed={slot === picked}
+                    onClick={() => setPicked(slot)}
+                  >
+                    <span className="visually-hidden">{withQuantity(item)}</span>
+                    <Icon kind="item" id={item.id} name={item.name} size={30} decorative />
+                    {item.quantity > 1 && <StackSize quantity={item.quantity} />}
+                  </button>
+                </li>
+              ) : (
+                // biome-ignore lint/suspicious/noArrayIndexKey: a slot's number is what it is.
+                <li key={slot} aria-hidden="true" />
+              ),
+            )}
+          </ul>
+          <p className={styles.picked}>
+            {pickedItem
+              ? `${withQuantity(pickedItem)}.`
+              : 'Pick an item to see what it is and how many.'}
+          </p>
+        </>
       )}
     </section>
   );

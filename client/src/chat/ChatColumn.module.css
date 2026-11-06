@@ -20,9 +20,8 @@
   gap: 12px;
 }
 
-.top strong {
-  font-family: var(--font-serif);
-  font-weight: 500;
+.top h2 {
+  margin: 0;
   font-size: 1.3rem;
 }
 
@@ -389,6 +388,27 @@
 .controls select {
   padding: 3px 6px;
   font-size: 0.88rem;
+}
+
+/* A picker with its label, small beside it. */
+.pick {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pickLabel {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Why the models couldn't be listed: a line of its own above the pickers. */
+.listProblem {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: end;
 }
 
 .composer textarea {

@@ -54,6 +54,8 @@ export function Layout(props: { chat: ReactNode; page: ReactNode; menu: ReactNod
 
   return (
     <div className={styles.layout} data-narrow={narrow ? '' : undefined}>
+      {/* The app's name heads it all, for screen readers; the chat and the page head their parts. */}
+      <h1 className="visually-hidden">Wise Old Model</h1>
       {narrow && (
         <div className={styles.bar}>
           <button
@@ -88,9 +90,9 @@ export function Layout(props: { chat: ReactNode; page: ReactNode; menu: ReactNod
         {props.chat}
       </section>
       <div id={panelId} className={styles.side} hidden={narrow && !open}>
-        <section aria-label="Page" className={styles.page}>
+        <main aria-label="Page" className={styles.page}>
           {props.page}
-        </section>
+        </main>
         <nav aria-label="Menu" className={styles.menu}>
           {props.menu}
         </nav>

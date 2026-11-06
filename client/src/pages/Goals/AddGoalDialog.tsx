@@ -121,13 +121,26 @@ function Choice<T extends string>(props: {
   );
 }
 
-/** A labelled field: its control is made with the id the label points at. */
-function Field(props: { label: string; children: (id: string) => JSX.Element }): JSX.Element {
+/**
+ * A labelled field: its control is made with the id the label points at, and with the id of the
+ * hint under it, when it has one (`hintId`, for its aria-describedby).
+ */
+function Field(props: {
+  label: string;
+  hint?: string;
+  children: (id: string, hintId?: string) => JSX.Element;
+}): JSX.Element {
   const id = useId();
+  const hintId = props.hint ? `${id}-hint` : undefined;
   return (
     <div className={styles.field}>
       <label htmlFor={id}>{props.label}</label>
-      {props.children(id)}
+      {props.children(id, hintId)}
+      {props.hint && (
+        <p id={hintId} className={styles.hint}>
+          {props.hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -158,9 +171,10 @@ function KindFields(props: {
 }): JSX.Element | null {
   const { fields, set, options } = props;
   const waiting = props.failed ? "Couldn't load the list" : 'Loading…';
-  const amount = (key: keyof Fields, placeholder?: string) => (id: string) => (
+  const amount = (key: keyof Fields, placeholder?: string) => (id: string, hintId?: string) => (
     <input
       id={id}
+      aria-describedby={hintId}
       type="number"
       min={1}
       inputMode="numeric"
@@ -328,7 +342,9 @@ function KindFields(props: {
               />
             )}
           </Field>
-          <Field label="How many">{amount('quantity', '1')}</Field>
+          <Field label="How many" hint="Leave it empty for one.">
+            {amount('quantity', '1')}
+          </Field>
         </>
       );
     case 'custom':
@@ -415,10 +431,11 @@ function AddGoalForm(props: { accountId: string; onDone: () => void }): JSX.Elem
         <Problem>Couldn't load the account's lists. {options.error.message}</Problem>
       )}
       <KindFields fields={fields} set={set} options={options.data} failed={options.isError} />
-      <Field label="Title">
-        {(id) => (
+      <Field label="Title" hint={placeholder ? `Leave it empty for “${placeholder}”.` : undefined}>
+        {(id, hintId) => (
           <input
             id={id}
+            aria-describedby={hintId}
             type="text"
             value={fields.title}
             placeholder={placeholder}

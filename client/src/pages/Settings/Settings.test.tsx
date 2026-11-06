@@ -590,9 +590,20 @@ describe('Settings → AI', () => {
     const effort = within(ai).getByRole('combobox', { name: 'Effort' });
     expect(effort).toHaveProperty('value', 'medium');
     expect(within(effort).getAllByRole('option')).toHaveLength(6);
+    // What the picked model is, and what effort means, are shown and tied to their boxes.
+    const described = (box: HTMLElement) =>
+      document.getElementById(box.getAttribute('aria-describedby') ?? '')?.textContent;
+    expect(described(model)).toBe('For complex work');
+    expect(described(effort)).toBe(
+      'How long it thinks before answering: more is slower, and more careful.',
+    );
+    expect(model.querySelector('[title]')).toBeNull();
 
     fireEvent.change(model, { target: { value: 'claude-haiku-5-5' } });
     await waitFor(() => expect(patches).toEqual([{ model: 'claude-haiku-5-5' }]));
+    expect(described(model)).toBe(
+      TEST_MODELS.find((each) => each.id === 'claude-haiku-5-5')?.description,
+    );
     // Haiku has no effort setting.
     expect(within(ai).queryByRole('combobox', { name: 'Effort' })).toBeNull();
 
@@ -715,7 +726,9 @@ describe('Settings → About', () => {
       'GEMINI_MODELNot set (the first it lists that thinks)',
     ]);
     expect(about.textContent).toContain('Game images © Jagex Ltd.');
-    const license = within(about).getByRole('link', { name: 'CC BY-NC-SA 3.0' });
+    const license = within(about).getByRole('link', {
+      name: 'CC BY-NC-SA 3.0\u00a0(opens in a new tab)',
+    });
     expect(license.getAttribute('href')).toBe('https://creativecommons.org/licenses/by-nc-sa/3.0/');
     for (const [name, href] of [
       ['Wise Old Man', 'https://wiseoldman.net'],
@@ -726,7 +739,7 @@ describe('Settings → About', () => {
       ['OSRS Hiscores', 'https://secure.runescape.com/m=hiscore_oldschool/overall'],
       ['Character Export', 'https://github.com/DZWNK/Character-Export'],
     ]) {
-      const link = within(about).getByRole('link', { name });
+      const link = within(about).getByRole('link', { name: `${name}\u00a0(opens in a new tab)` });
       expect([link.getAttribute('href'), link.getAttribute('target')]).toEqual([href, '_blank']);
     }
   });

@@ -1,12 +1,12 @@
 import { type ChatModel, effortLabel } from '@wom/shared';
 import type { JSX } from 'react';
 
-/** A model select's options, each model's description as its tooltip. */
+/** A model select's options. */
 export function ModelOptions(props: { models: ChatModel[] }): JSX.Element {
   return (
     <>
       {props.models.map((model) => (
-        <option key={model.id} value={model.id} title={model.description || undefined}>
+        <option key={model.id} value={model.id}>
           {model.label}
         </option>
       ))}

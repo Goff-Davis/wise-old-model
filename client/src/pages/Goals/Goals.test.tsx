@@ -64,6 +64,17 @@ function renderGoals(
   return Object.assign(page, { sent, queryClient });
 }
 
+/** What the page says of the last move (it has Refresh's status line too). */
+const moveStatus = (page: HTMLElement) =>
+  within(page)
+    .getAllByRole('status')
+    .map((status) => status.textContent)
+    .find((text) => text?.includes(' moved to '));
+
+/** What an element's aria-describedby points at says. */
+const describedBy = (element: HTMLElement) =>
+  document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent;
+
 /** The active goals' titles, in the order shown. */
 const activeTitles = (page: HTMLElement) =>
   within(within(page).getByRole('list', { name: 'Active goals' }))
@@ -153,6 +164,8 @@ describe('Goals', () => {
     ).toEqual(['●75 Magic (you have 71) (not met)', '◐Dream Mentor (under way)']);
     const plan = within(quest).getByRole('button', { name: 'Ask the AI for a plan' });
     expect(plan.getAttribute('aria-disabled')).toBeNull();
+    // Nothing to wait for, so nothing said of it.
+    expect(plan.getAttribute('aria-describedby')).toBeNull();
     // Only quest and diary goals offer one.
     expect(within(page).getAllByRole('button', { name: 'Ask the AI for a plan' })).toHaveLength(1);
   });
@@ -161,11 +174,12 @@ describe('Goals', () => {
     const page = renderGoals();
     const suggest = await within(page).findByRole('button', { name: 'Suggest goals' });
     expect(suggest.getAttribute('aria-disabled')).toBeNull();
+    expect(suggest.getAttribute('aria-describedby')).toBeNull();
   });
 
-  it('moves a goal up with Alt+↑ on its handle, saving the new order', async () => {
+  it('moves a goal up with Alt+↑ on either of its move buttons, saving the new order', async () => {
     const page = renderGoals();
-    const handle = await within(page).findByRole('button', { name: 'Move Reach 75 Magic' });
+    const handle = await within(page).findByRole('button', { name: 'Move Reach 75 Magic down' });
     handle.focus();
     fireEvent.keyDown(handle, { key: 'ArrowUp', altKey: true });
     await expect
@@ -177,9 +191,9 @@ describe('Goals', () => {
         { method: 'POST', path: '/api/accounts/1/goals/reorder', body: { ids: [2, 1, 3, 4, 5] } },
       ]);
     expect(document.activeElement).toBe(
-      within(page).getByRole('button', { name: 'Move Reach 75 Magic' }),
+      within(page).getByRole('button', { name: 'Move Reach 75 Magic down' }),
     );
-    expect(within(page).getByRole('status').textContent).toBe('Reach 75 Magic moved to 1 of 5.');
+    expect(moveStatus(page)).toBe('Reach 75 Magic moved to 1 of 5.');
   });
 
   it('moves a goal down with Alt+↓, and leaves the first and last where they are', async () => {
@@ -197,7 +211,7 @@ describe('Goals', () => {
     }
     const page = renderGoals();
     const first = await within(page).findByRole('button', {
-      name: 'Move Complete Dragon Slayer II',
+      name: 'Move Complete Dragon Slayer II down',
     });
     fireEvent.keyDown(first, { key: 'ArrowUp', altKey: true });
     // An arrow alone moves nothing.
@@ -209,10 +223,47 @@ describe('Goals', () => {
     await expect
       .poll(() => activeTitles(page).slice(0, 2))
       .toEqual(['Reach 75 Magic', 'Complete Dragon Slayer II']);
-    // Its row moved, and its handle has the focus still.
+    // Its row moved, and its button has the focus still.
     expect(document.activeElement).toBe(
-      within(page).getByRole('button', { name: 'Move Complete Dragon Slayer II' }),
+      within(page).getByRole('button', { name: 'Move Complete Dragon Slayer II down' }),
     );
+  });
+
+  it('moves a goal with its Move up and Move down buttons, for anyone who can’t drag', async () => {
+    const page = renderGoals();
+    const up = await within(page).findByRole('button', { name: 'Move Reach 75 Magic up' });
+    up.focus();
+    fireEvent.click(up);
+    await expect.poll(() => page.sent.map((each) => each.body)).toEqual([{ ids: [2, 1, 3, 4, 5] }]);
+    await expect
+      .poll(() => activeTitles(page).slice(0, 2))
+      .toEqual(['Reach 75 Magic', 'Complete Dragon Slayer II']);
+    expect(moveStatus(page)).toBe('Reach 75 Magic moved to 1 of 5.');
+    // At the top, Move up says it can go no further but keeps the focus, and does nothing.
+    expect(up.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(up);
+    fireEvent.click(up);
+    fireEvent.click(within(page).getByRole('button', { name: 'Move Clear out the bank down' }));
+    expect(page.sent).toHaveLength(1);
+    fireEvent.click(within(page).getByRole('button', { name: 'Move Reach 75 Magic down' }));
+    await expect.poll(() => page.sent.map((each) => each.body)).toHaveLength(2);
+    expect(page.sent[1]?.body).toEqual({ ids: [1, 2, 3, 4, 5] });
+  });
+
+  it('says which move buttons can go no further: the first goal’s up and the last one’s down', async () => {
+    const page = renderGoals();
+    await within(page).findByRole('list', { name: 'Active goals' });
+    const disabled = within(page)
+      .getAllByRole('button', { name: /^Move / })
+      .filter((button) => button.getAttribute('aria-disabled') === 'true')
+      .map((button) => button.getAttribute('aria-label'));
+    expect(disabled).toEqual(['Move Complete Dragon Slayer II up', 'Move Clear out the bank down']);
+    // Screen readers are told of the keys that move a goal too.
+    expect(
+      within(page)
+        .getByRole('button', { name: 'Move Reach 75 Magic up' })
+        .getAttribute('aria-keyshortcuts'),
+    ).toBe('Alt+ArrowUp Alt+ArrowDown');
   });
 
   it('moves a goal dragged onto another to its place', async () => {
@@ -230,7 +281,7 @@ describe('Goals', () => {
     // Dropped back on itself, it stays put: the next order saved is the keyboard's.
     fireEvent.dragStart(row('Get Vorki'));
     fireEvent.drop(row('Get Vorki'));
-    fireEvent.keyDown(within(page).getByRole('button', { name: 'Move Get Vorki' }), {
+    fireEvent.keyDown(within(page).getByRole('button', { name: 'Move Get Vorki up' }), {
       key: 'ArrowUp',
       altKey: true,
     });
@@ -247,7 +298,7 @@ describe('Goals', () => {
           }) as unknown as Response)
         : undefined,
     );
-    const handle = await within(page).findByRole('button', { name: 'Move Get Vorki' });
+    const handle = await within(page).findByRole('button', { name: 'Move Get Vorki up' });
     fireEvent.keyDown(handle, { key: 'ArrowUp', altKey: true });
     await expect.poll(() => page.sent).toHaveLength(1);
     await expect
@@ -442,10 +493,17 @@ describe('AddGoalDialog', () => {
     const title = within(dialog).getByLabelText('Title') as HTMLInputElement;
     expect(title.placeholder).toBe('Get Mark of grace');
     const quantity = within(dialog).getByLabelText('How many') as HTMLInputElement;
-    // Empty is one of it, as the field shows.
+    // Empty is one of it, as the field shows, and as a hint under it says (a placeholder goes
+    // as soon as anything's typed).
     expect(quantity.placeholder).toBe('1');
+    expect(describedBy(quantity)).toBe('Leave it empty for one.');
+    expect(describedBy(title)).toBe('Leave it empty for “Get Mark of grace”.');
     fireEvent.change(quantity, { target: { value: '260' } });
     expect(title.placeholder).toBe('Get 260 × Mark of grace');
+    expect(describedBy(title)).toBe('Leave it empty for “Get 260 × Mark of grace”.');
+    // A custom goal has no title to fall back on, so no hint.
+    fireEvent.change(within(dialog).getByLabelText('Kind'), { target: { value: 'custom' } });
+    expect(title.getAttribute('aria-describedby')).toBeNull();
   });
 
   it('builds each kind of target from its fields', async () => {
@@ -724,10 +782,13 @@ describe('Goals with the chat', () => {
       </QueryClientProvider>,
     );
     await screen.findByRole('list', { name: 'Active goals' });
+    // Why they wait is shown beside each, and tied to it, not left in a tooltip.
+    expect(screen.getAllByText('Available once the chat is set up')).toHaveLength(2);
     for (const name of ['Suggest goals', 'Ask the AI for a plan']) {
       const button = screen.getByRole('button', { name });
       expect(button.getAttribute('aria-disabled')).toBe('true');
-      expect(button.getAttribute('title')).toBe('Available once the chat is set up');
+      expect(describedBy(button)).toBe('Available once the chat is set up');
+      expect(button.getAttribute('title')).toBeNull();
     }
   });
 
@@ -764,9 +825,11 @@ describe('Goals with the chat', () => {
     for (const name of ['Suggest goals', 'Ask the AI for a plan']) {
       const button = screen.getByRole('button', { name });
       expect(button.getAttribute('aria-disabled')).toBe('true');
-      expect(button.getAttribute('title')).toBe(why);
+      expect(describedBy(button)).toBe(why);
       fireEvent.click(button);
     }
+    // Shown beside each, as a goal's may be far down the page from the header's.
+    expect(screen.getAllByText(why)).toHaveLength(2);
     expect(ask).not.toHaveBeenCalled();
   });
 });

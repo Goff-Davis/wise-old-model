@@ -107,7 +107,6 @@ function EntryItems(props: { category: Category }) {
               type="button"
               aria-pressed={each.id === picked}
               data-missing={!each.obtained}
-              title={each.name}
               onClick={() => setPicked(each.id)}
             >
               <Icon kind="item" id={each.id} name={each.name} size={32} />

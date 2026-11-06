@@ -16,7 +16,7 @@ export function renderApp(path: string, api: Parameters<typeof fakeApi>[0] = {})
     router,
     queryClient,
     get page() {
-      return screen.getByRole('region', { name: 'Page' });
+      return screen.getByRole('main', { name: 'Page' });
     },
   };
 }

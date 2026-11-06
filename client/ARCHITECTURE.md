@@ -42,6 +42,8 @@ flowchart LR
 
 Built for a second monitor to the right of the user: the chat on the left as the main feature, the selected page in the middle, and the menu on the right edge next to the page it controls. Below 1000 px the page and menu collapse behind a Menu button above the chat; the panel opens over the chat, closes with Escape or when the focus goes into the chat (as when a page asks the chat something), and keeps its state (scroll, searches, typing) while closed.
 
+A visually hidden `h1` names the app; the page is the `main` landmark, the chat a region headed with the account's name ("Chat about" for screen readers), and the menu the navigation. Each page names the browser tab, as in "Goals – Lumby Pete – Wise Old Model" (`layout/useDocumentTitle.ts`).
+
 ## Routes
 
 | URL | Shows |
@@ -75,10 +77,10 @@ flowchart LR
 
 | Page | Shows |
 |---|---|
-| Overview | Name, type, combat and total level; stats tiles like the in-game stats tab; progress rows (quests, diaries, combat achievements, collection log); the top five boss kill counts, expandable; worn gear; what's missing and how to get it; when each source was fetched, Refresh, and a suggested rename |
+| Overview | Name, type, combat and total level; stats tiles like the in-game stats tab (picking one says its experience on a line below); progress rows (quests, diaries, combat achievements, collection log); the top five boss kill counts, expandable; worn gear; what's missing and how to get it; when each source was fetched, Refresh, and a suggested rename |
 | This week | Today, 7 days, 30 days or a custom range: a one-line summary, XP per skill with level-ups, kills and clues, what was completed (dated), new collection log items |
-| Goals | Add goal and Suggest goals; active goals in your order (drag, or Alt+↑/↓ on the handle) with progress and what's still needed; Done with dates; Add goal as a dialog picking names from the account's own lists |
-| Bank and gear | The bank's value; one search across bank, seed vault, inventory and gear; worn gear in the equipment screen's grid; the 28-slot inventory with stack sizes as the game writes them; the priciest stacks |
+| Goals | Add goal and Suggest goals (with why they wait, when they do); active goals in your order (drag, Move up and Move down, or Alt+↑/↓ on either) with progress and what's still needed; Done with dates; Add goal as a dialog picking names from the account's own lists |
+| Bank and gear | The bank's value; one search across bank, seed vault, inventory and gear; worn gear in the equipment screen's grid; the 28-slot inventory with stack sizes as the game writes them (picking a slot says what it holds on a line below); the priciest stacks |
 | Collection log | Totals and Temple's last sync; tabs like the in-game log; entries (complete ones in green) and the picked entry's items |
 | Settings | Accounts (rename, change type, delete after a question), Game data (RuneLite folder, Automatic or Manual and its interval), AI (which AI answers, from those `.env` sets up, each other one saying what it needs; its model and effort; the most tool rounds; Claude's billing and spending cap), Display (theme, time zone), About (data folder, backups, `.env` settings with keys only as set or not, credits) |
 
@@ -100,7 +102,7 @@ stateDiagram-v2
 
 - `useChat(accountId)` holds the account's chat: the chat list, the open chat, its messages and the turn being answered. A message is posted with `fetch`, and its answer read as it streams (`readEvents` with the shared `parseSse`). While it streams, the answer is built from the events and shown as it will be stored; once done, the stored chat replaces it.
 - Pages ask the chat things through `useChatAsk()` (Suggest goals, Ask the AI for a plan), which also says why it can't yet ("The chat is answering."). Asking moves the focus into the chat, which closes the narrow window's panel so the answer shows.
-- **The column:** the account's name, New chat and Earlier chats (open, rename, delete; it closes when the focus moves on past it or its button); your messages with any note ("From Goals"); each answer's lookups as one line ("Looked at 4 things") that opens to each lookup with its icon; the answer's Markdown in the serif (`Markdown.tsx`: headings, lists, tables, bold, italics, code, and links that open in a new tab; HTML shown as text); Approve / Decline rows; problems with what to do; sources and token usage under each answer; and the message box (Enter sends, Shift+Enter for a new line) with the model and effort pickers and Stop.
+- **The column:** the account's name, New chat and Earlier chats (open, rename, delete; it closes when the focus moves on past it or its button); your messages with any note ("From Goals"); each answer's lookups as one line ("Looked at 4 things") that opens to each lookup with its icon; the answer's Markdown in the serif (`Markdown.tsx`: headings, lists, tables, bold, italics, code, and links that open in a new tab; HTML shown as text); Approve / Decline rows; problems with what to do; sources and token usage under each answer; and the message box (Enter sends, Shift+Enter for a new line) with the labelled model and effort pickers (and why the models couldn't be listed, when they couldn't) and Stop.
 - **Scrolling:** the chat follows the newest while you're at the end. Scrolled up to read, it stays where it is, and a New message button floats over the bottom when the answer gets something out of sight below; it goes to the answer's start, and goes away once you've seen that. Sending (from the box, a starter or a page) and opening a chat go to the end.
 - The model and effort lists come from the chosen AI through `GET /api/chat/models?provider=&billing=`, one list per AI (Claude's per billing), so switching AI in Settings lists the new one's and shows the model and effort picked for it (`useModelChoice`, shared with Settings → AI). An AI with no model picked shows the one it answers with then. Switching to a model without the current effort picks the nearest level it has; a model with no effort setting has no effort picker.
 - A setup problem names the AI it came from ("Gemini isn't available yet", then what to do and what it said), and usage reads as Claude's billing has it ("8.2k tokens on your plan", "$0.04 with your API key") or, for another AI, its tokens and the cost when it gave one ("8.2k tokens ($0.03)").
@@ -132,6 +134,9 @@ stateDiagram-v2
   - Windows contrast themes (forced colors) keep the goal bar.
   - Everything to click or tap is at least 44 × 44 px (`tokens.css` sets it for buttons, selects and boxes, and a checkbox's label takes the clicks for it); only links inside a sentence are smaller.
   - Text is set for reading: lines 1.5 apart; paragraphs one after another 1.5em apart (answers, Settings, problems); no paragraph wider than `55ch`, about 75 characters, since a "0" (which `ch` measures) is wider than the average letter, except in answers, which take the chat's full width by choice (so they can run past 1.4.8's 80 characters); font sizes in `rem`; and names wrapping (hyphenated in the stats tiles) rather than cut off with an ellipsis.
+  - Nothing is said only in a tooltip, which keys and touch can't reach: a skill's experience and a bank slot's contents show on a line below when it's picked (the bank's lines aren't read out, as each slot's name says the same), why a button waits shows beside it, a model's description and what effort means show under their pickers in Settings, and what a field wants shows under it.
+  - Links to other sites, which open in a new tab, say so: a mark for the eye and "(opens in a new tab)" for screen readers (`ExternalLink`).
+  - Goals move without dragging, by Move up and Move down. Buttons that can't act yet (the end of the list, Refresh while it works) use `aria-disabled`, so the focus stays on them; Refresh's status line says when it's done.
   - Focus rings are 2 px everywhere, including round the message box and on the option a search picker's arrow keys are on. Nothing floating covers what has focus: Earlier chats closes when the focus moves past it or its button, the messages scroll clear of New message, and a collection log item scrolls clear of the picked item's line, even when that wraps to three lines.
 
 ## Testing

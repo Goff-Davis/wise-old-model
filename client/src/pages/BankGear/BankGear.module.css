@@ -80,27 +80,34 @@
 
 .equipment {
   display: grid;
-  grid-template-columns: repeat(3, 40px);
-  grid-template-rows: repeat(5, 38px);
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(5, 44px);
   gap: 4px;
 }
 
-.slot {
+/* Each slot a 44 px button, as every target is (WCAG 2.5.5). */
+.slot,
+.carried {
   display: grid;
   place-items: center;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  background: var(--raised);
+  width: 100%;
+  height: 100%;
+  padding: 0;
 }
 
+.slot {
+  border-radius: 3px;
+}
+
+/* An empty slot: its edge without the fill, not faded, which would fade its focus ring too. */
 .empty {
-  opacity: 0.45;
+  background: none;
 }
 
 .inventory {
   display: grid;
-  grid-template-columns: repeat(4, 36px);
-  grid-auto-rows: 32px;
+  grid-template-columns: repeat(4, 44px);
+  grid-auto-rows: 44px;
   gap: 3px;
   padding: 4px;
   border: 1px solid var(--rule);
@@ -108,10 +115,22 @@
   background: var(--bg);
 }
 
-.inventory li {
+.carried {
   position: relative;
-  display: grid;
-  place-items: center;
+  border: 0;
+  background: none;
+}
+
+/* Picked: a thicker accent edge, not color alone (WCAG 1.4.1); above a button's hover edge. */
+.equipment .slot[aria-pressed="true"],
+.inventory .carried[aria-pressed="true"] {
+  border: 2px solid var(--accent);
+}
+
+/* What a picked slot holds, wrapping to its grid's width so a long one moves nothing beside it. */
+.picked {
+  margin: 0;
+  contain: inline-size;
 }
 
 /* A stack's size in its corner, in the game's colors for it. */

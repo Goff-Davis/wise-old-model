@@ -41,11 +41,11 @@ describe('Markdown', () => {
     render(
       <Markdown text="See [Dragon Slayer II](https://oldschool.runescape.wiki/w/Dragon_Slayer_II) and [this](javascript:alert(1))." />,
     );
-    const link = screen.getByRole('link', { name: 'Dragon Slayer II' });
+    const link = screen.getByRole('link', { name: 'Dragon Slayer II\u00a0(opens in a new tab)' });
     expect(link.getAttribute('href')).toBe('https://oldschool.runescape.wiki/w/Dragon_Slayer_II');
     expect(link.getAttribute('target')).toBe('_blank');
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
-    expect(screen.queryByRole('link', { name: 'this' })).toBeNull();
+    expect(screen.getAllByRole('link')).toEqual([link]);
     expect(screen.getByText(/and this\./)).toBeTruthy();
   });
 

@@ -44,9 +44,12 @@ const linksIn = (region: HTMLElement) =>
 
 describe('routes', () => {
   it("shows the account's selected page, with the menu linking every page", async () => {
+    document.title = '';
     renderAt('/1/goals');
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     expect(await within(page).findByRole('heading', { name: 'Goals' })).toBeTruthy();
+    // The tab's title names the page and the account.
+    expect(document.title).toBe('Goals – Lumby Pete – Wise Old Model');
 
     const pages = within(menu()).getByRole('region', { name: 'Pages' });
     expect(linksIn(pages)).toEqual([
@@ -60,6 +63,18 @@ describe('routes', () => {
     expect(within(pages).getByRole('link', { name: 'Goals' }).getAttribute('aria-current')).toBe(
       'page',
     );
+  });
+
+  it('titles the tab with the app alone while it finds out whether there are accounts', async () => {
+    document.title = '';
+    renderApp('/', { routes: { 'GET /api/accounts': () => new Promise(() => {}) } });
+    await waitFor(() => expect(document.title).toBe('Wise Old Model'));
+  });
+
+  it("titles the tab with the page alone until the account's name is known", async () => {
+    document.title = '';
+    renderApp('/1/goals', { routes: { 'GET /api/accounts': () => new Promise(() => {}) } });
+    await waitFor(() => expect(document.title).toBe('Goals – Wise Old Model'));
   });
 
   it('lists the accounts in the menu, each opening the same page, the current one marked', async () => {
@@ -76,6 +91,8 @@ describe('routes', () => {
     expect(
       within(accounts).getByRole('link', { name: 'Iron Pete' }).getAttribute('aria-current'),
     ).toBeNull();
+    fireEvent.click(within(accounts).getByRole('link', { name: 'Iron Pete' }));
+    await waitFor(() => expect(document.title).toBe('Goals – Iron Pete – Wise Old Model'));
   });
 
   it('opens the add-account dialog from the menu', async () => {
@@ -88,7 +105,7 @@ describe('routes', () => {
   it('sends an unknown page to the overview', async () => {
     const router = renderAt('/1/nope');
     await waitFor(() => expect(router.state.location.pathname).toBe('/1/overview'));
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     expect(await within(page).findByRole('heading', { name: 'Lumby Pete' })).toBeTruthy();
   });
 
@@ -108,7 +125,7 @@ describe('routes', () => {
 
   it('shows the Settings page under an account', async () => {
     renderAt('/1/settings', undefined, {});
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     expect(await within(page).findByRole('region', { name: 'Display' })).toBeTruthy();
   });
 
@@ -121,13 +138,13 @@ describe('routes', () => {
         return new Response(null, { status: 204 });
       },
     });
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     const entry = await within(page).findByRole('listitem', { name: 'Lumby Pete' });
     fireEvent.click(within(entry).getByRole('button', { name: 'Delete' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Lumby Pete' }));
     // Iron Pete's Overview, not Settings (which names each account too). Going home remounts the
     // layout, so the page is found again.
-    const current = () => screen.getByRole('region', { name: 'Page' });
+    const current = () => screen.getByRole('main', { name: 'Page' });
     await waitFor(() =>
       expect(within(current()).getByRole('heading', { level: 2, name: 'Iron Pete' })).toBeTruthy(),
     );
@@ -144,7 +161,7 @@ describe('routes', () => {
     renderAt('/2/overview', [LUMBY_PETE, IRON_PETE], {
       'POST /api/accounts/1/refresh': () => ({ freshness: [], renameSuggestion: 'Lumby Peter' }),
     });
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     await within(page).findByRole('heading', { name: 'Iron Pete' });
     fireEvent.click(await within(menu()).findByRole('link', { name: 'Lumby Pete' }));
     await within(page).findByRole('heading', { name: 'Lumby Pete' });
@@ -171,7 +188,7 @@ describe('routes', () => {
         'GET /api/accounts/1/goals': () => testGoalsView(),
       },
     });
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     await within(page).findByRole('heading', { name: 'Goals' });
     await queryClient.invalidateQueries();
     expect(
@@ -213,7 +230,7 @@ describe('routes', () => {
         'GET /api/accounts/1/overview': () => testOverview(),
       },
     });
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     fireEvent.change(await within(page).findByRole('textbox', { name: 'Name' }), {
       target: { value: 'Lumby Pete' },
     });
@@ -229,14 +246,16 @@ describe('routes', () => {
   });
 
   it('asks for an account beside the chat until one exists', async () => {
+    document.title = '';
     const router = renderAt('/', []);
     expect(screen.getByRole('region', { name: 'Chat' })).toBeTruthy();
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     expect(
       await within(page).findByRole('heading', { name: 'Add an account to get started' }),
     ).toBeTruthy();
     expect(within(page).getByRole('textbox', { name: 'Name' })).toBeTruthy();
     expect(router.state.location.pathname).toBe('/');
+    expect(document.title).toBe('Add an account – Wise Old Model');
   });
 });
 
@@ -262,7 +281,7 @@ describe('the chat in the app', () => {
   it('asks the chat from Goals: the message goes with its note, and shows with it in the chat', async () => {
     const sent: unknown[] = [];
     renderAt('/1/goals', [LUMBY_PETE], routes(sent));
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     fireEvent.click(await within(page).findByRole('button', { name: 'Suggest goals' }));
     const text = 'Suggest a few goals for Lumby Pete based on my progress and current goals.';
     await waitFor(() => expect(sent).toEqual([{ text, note: 'From Suggest goals' }]));
@@ -280,7 +299,7 @@ describe('the chat in the app', () => {
     }));
     renderAt('/1/goals', [LUMBY_PETE], routes([]));
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
-    const page = screen.getByRole('region', { name: 'Page' });
+    const page = screen.getByRole('main', { name: 'Page' });
     fireEvent.click(await within(page).findByRole('button', { name: 'Suggest goals' }));
     expect(screen.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded')).toBe(
       'false',

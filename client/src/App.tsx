@@ -23,6 +23,7 @@ import { Menu } from './components/Menu.tsx';
 import { AccountsProblem } from './components/Problem.tsx';
 import { useFileCheck } from './data/useFileCheck.ts';
 import { Layout } from './layout/Layout.tsx';
+import { useDocumentTitle } from './layout/useDocumentTitle.ts';
 import { BankGear } from './pages/BankGear/BankGear.tsx';
 import { CollectionLog } from './pages/CollectionLog/CollectionLog.tsx';
 import { Goals } from './pages/Goals/Goals.tsx';
@@ -66,6 +67,8 @@ function Home(): JSX.Element {
   const navigate = useNavigate();
   const headingId = useId();
   const [asked, setAsked] = useState(false);
+  // "Add an account" only once it's asking for one, not while it finds out whether there are any.
+  useDocumentTitle(...(asked ? ['Add an account'] : []));
   if (accounts.data?.length === 0 && !asked) setAsked(true);
   const first = accounts.data?.[0];
   if (first && !asked) return <Navigate to={pagePath(first.id, 'overview')} replace />;
@@ -96,6 +99,8 @@ function AccountPage(): JSX.Element {
   const exists = accounts.data?.some((account) => String(account.id) === accountId) ?? false;
   useFileCheck(exists ? accountId : null);
   const current = PAGES.find((p) => p.id === page);
+  // The account's name once it's known, never the stand-in ("this account").
+  useDocumentTitle(...(current ? [current.label] : []), ...(exists ? [name] : []));
   if (!current) return <Navigate to={pagePath(accountId, 'overview')} replace />;
   // An account that doesn't exist (deleted, or a mistyped URL) goes home.
   if (accounts.data && !exists) return <Navigate to="/" replace />;

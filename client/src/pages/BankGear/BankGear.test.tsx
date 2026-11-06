@@ -180,33 +180,56 @@ describe('BankGear', () => {
     );
     const worn = await within(page).findByRole('list', { name: 'Worn' });
     const slots = within(worn).getAllByRole('listitem');
-    expect(slots.map((slot) => slot.textContent)).toEqual([
-      'Head',
-      'Cape',
-      'Neck',
-      'Ammo',
-      'Weapon',
-      'Body',
-      'Shield',
-      'Legs',
-      'Hands',
-      'Feet',
-      'Ring',
+    // Each slot is a button named for the slot and what's in it.
+    expect(slots.map((slot) => within(slot).getByRole('button').textContent)).toEqual([
+      'Head: Blood Moon helm',
+      'Cape: empty',
+      'Neck: Amulet of fury (or)',
+      'Ammo: Unholy blessing',
+      'Weapon: Dual macuahuitl',
+      'Body: empty',
+      'Shield: empty',
+      'Legs: empty',
+      'Hands: empty',
+      'Feet: empty',
+      'Ring: empty',
     ]);
-    const at = (name: string) => slots.find((slot) => slot.textContent === name);
+    const at = (name: string) =>
+      slots.find((slot) => slot.textContent?.startsWith(`${name}:`)) as HTMLElement;
     // The third column of the second row, as in game.
-    expect(at('Ammo')?.style.gridArea).toBe('2 / 3');
-    expect(
-      within(at('Ammo') as HTMLElement).getByRole('img', { name: 'Unholy blessing' }),
-    ).toBeTruthy();
-    expect(at('Head')?.style.gridArea).toBe('1 / 2');
-    expect(
-      within(at('Weapon') as HTMLElement)
-        .getByRole('img')
-        .getAttribute('src'),
-    ).toBe('/api/icons/item/28997');
-    expect(within(at('Shield') as HTMLElement).queryByRole('img')).toBeNull();
-    expect(at('Shield')?.title).toBe('Shield: empty');
+    expect(at('Ammo').style.gridArea).toBe('2 / 3');
+    expect(at('Head').style.gridArea).toBe('1 / 2');
+    expect(at('Weapon').querySelector('img')?.getAttribute('src')).toBe('/api/icons/item/28997');
+    expect(at('Shield').querySelector('img')).toBeNull();
+    expect(worn.closest('section')?.querySelector('[title]')).toBeNull();
+  });
+
+  it('says what a picked slot holds, on a line under the gear, as hovering never could for keys or touch', async () => {
+    const inventory: (OwnedItem | null)[] = Array(28).fill(null);
+    inventory[2] = item('inventory', 2, 560, 'Death rune', 1_500_000);
+    const { page } = renderBank(
+      testBankView({ worn: [item('equipment', 13, 20223, 'Unholy blessing', 250)], inventory }),
+    );
+    const worn = await within(page).findByRole('region', { name: 'Worn' });
+    const wornLine = within(worn).getByText("Pick a slot to see what's in it.");
+    // Not read out: the slot's own name says the same, and a reload of the gear would speak up.
+    expect(wornLine.getAttribute('aria-live')).toBeNull();
+    const ammo = within(worn).getByRole('button', { name: 'Ammo: Unholy blessing ×250' });
+    fireEvent.click(ammo);
+    expect(ammo.getAttribute('aria-pressed')).toBe('true');
+    expect(wornLine.textContent).toBe('Ammo: Unholy blessing ×250.');
+    fireEvent.click(within(worn).getByRole('button', { name: 'Shield: empty' }));
+    expect(ammo.getAttribute('aria-pressed')).toBe('false');
+    expect(wornLine.textContent).toBe('Shield: empty.');
+    const carried = within(page).getByRole('region', { name: 'Inventory' });
+    const carriedLine = within(carried).getByText('Pick an item to see what it is and how many.');
+    expect(carriedLine.getAttribute('aria-live')).toBeNull();
+    const runes = within(carried).getByRole('button', { name: 'Death rune ×1,500,000' });
+    fireEvent.click(runes);
+    expect(runes.getAttribute('aria-pressed')).toBe('true');
+    expect(carriedLine.textContent).toBe('Death rune ×1,500,000.');
+    // Picking in one grid leaves the other's line as it was.
+    expect(wornLine.textContent).toBe('Shield: empty.');
   });
 
   it('says when the worn gear and inventory were saved, and how to catch the plugin up', async () => {
@@ -238,25 +261,32 @@ describe('BankGear', () => {
     // The empty slots keep their places, unannounced.
     expect(carried.querySelectorAll('li')).toHaveLength(28);
     const items = within(carried).getAllByRole('listitem');
-    // As the game writes them: in full under 100,000, then in thousands, then millions.
+    // As the game writes them: in full under 100,000, then in thousands, then millions. The size
+    // is for the eye; each button's name says the whole number.
     expect(
-      items.map((slot) => [
-        slot.textContent,
-        slot.querySelector('span[data-size]')?.getAttribute('data-size'),
-      ]),
+      items.map((slot) => {
+        const size = slot.querySelector('span[data-size]');
+        return [
+          size?.textContent,
+          size?.getAttribute('data-size'),
+          size?.getAttribute('aria-hidden'),
+        ];
+      }),
     ).toEqual([
-      ['', undefined],
-      ['63', 'units'],
-      ['1500K', 'thousands'],
-      ['109M', 'millions'],
+      [undefined, undefined, undefined],
+      ['63', 'units', 'true'],
+      ['1500K', 'thousands', 'true'],
+      ['109M', 'millions', 'true'],
     ]);
-    expect(items.map((slot) => slot.title)).toEqual([
+    for (const name of [
       'Burning claws',
       'Earth rune ×63',
       'Death rune ×1,500,000',
       'Coins ×109,655,321',
-    ]);
-    expect(carried.querySelectorAll('li')[4]?.title).toBe('Coins ×109,655,321');
+    ]) {
+      expect(within(carried).getByRole('button', { name })).toBeTruthy();
+    }
+    expect(carried.querySelector('[title]')).toBeNull();
   });
 
   it('lists the most valuable stacks in the bank with their worth', async () => {

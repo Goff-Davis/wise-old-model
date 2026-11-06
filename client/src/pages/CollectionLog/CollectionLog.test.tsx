@@ -95,6 +95,8 @@ describe('CollectionLog', () => {
     );
     fireEvent.click(within(page).getByRole('button', { name: /^Vorki/ }));
     expect(within(page).getByText(/^Vorki:/).textContent).toBe('Vorki: not obtained yet.');
+    // No tooltip says the name again: the icon names it.
+    expect(within(page).getByRole('list', { name: 'Vorkath' }).querySelector('[title]')).toBeNull();
   });
 
   it("switches tabs, showing that tab's first entry, by click or by arrow keys", async () => {

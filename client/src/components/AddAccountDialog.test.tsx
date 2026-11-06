@@ -53,7 +53,19 @@ async function lookUp(name: string) {
   return dialog;
 }
 
+/** What an element's aria-describedby points at says. */
+const describedBy = (element: HTMLElement) =>
+  document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent;
+
 describe('AddAccountDialog', () => {
+  it('says which name it asks for, under the box', () => {
+    renderDialog({});
+    const dialog = screen.getByRole('dialog', { name: 'Add an account' });
+    expect(describedBy(within(dialog).getByRole('textbox', { name: 'Name' }))).toBe(
+      'Your name in the game, as the hiscores show it.',
+    );
+  });
+
   it('looks up a name and shows what the hiscores and Wise Old Man know', async () => {
     const asked: string[] = [];
     renderDialog({

@@ -1,0 +1,10 @@
+/* The new-tab mark: a box with an arrow out of it, in the link's color, sized to its text. */
+.mark {
+  width: 0.7em;
+  height: 0.7em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

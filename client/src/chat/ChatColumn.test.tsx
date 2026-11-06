@@ -183,6 +183,13 @@ function Watcher(props: { whys: (string | undefined)[] }): null {
 }
 
 describe('ChatColumn', () => {
+  it('heads the chat with the account’s name, saying it’s the chat to screen readers', async () => {
+    renderChat({ routes: { 'GET /api/chats/c1/messages': () => [] } });
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Chat about Lumby Pete' });
+    // Only the name shows; the page beside it may be headed with the name too.
+    expect(heading.querySelector('.visually-hidden')?.textContent).toBe('Chat about');
+  });
+
   it('shows a new chat’s starter questions, and sends one when picked', async () => {
     const answer = stream();
     const { sent } = renderChat({
@@ -257,9 +264,11 @@ describe('ChatColumn', () => {
     const line = await screen.findByText(/Looked at 4 things/);
     expect(screen.getByText('Magic').tagName).toBe('STRONG');
     expect(screen.getByText('8.2k tokens on your plan')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Dream Mentor' }).getAttribute('target')).toBe(
-      '_blank',
-    );
+    expect(
+      screen
+        .getByRole('link', { name: 'Dream Mentor\u00a0(opens in a new tab)' })
+        .getAttribute('target'),
+    ).toBe('_blank');
     const show = within(line).getByRole('button', { name: 'Show' });
     const list = () => screen.getByText('Reading wiki: Dream Mentor…').closest('ul');
     expect(list()?.hidden).toBe(true);
@@ -935,6 +944,11 @@ describe('ChatColumn', () => {
     const model = (await screen.findByRole('combobox', { name: 'Model' })) as HTMLSelectElement;
     const effort = () =>
       screen.queryByRole('combobox', { name: 'Effort' }) as HTMLSelectElement | null;
+    // Each is labelled where it can be seen, not only for screen readers.
+    expect(screen.getByText('Model', { selector: 'label' }).getAttribute('for')).toBe(model.id);
+    expect(screen.getByText('Effort', { selector: 'label' }).getAttribute('for')).toBe(
+      effort()?.id,
+    );
     const labels = (select: HTMLElement | null) =>
       within(select as HTMLElement)
         .getAllByRole('option')
@@ -1028,11 +1042,12 @@ describe('ChatColumn', () => {
       },
     });
     const alone = (await screen.findByRole('combobox', { name: 'Model' })) as HTMLSelectElement;
-    await waitFor(() =>
-      expect(alone.getAttribute('title')).toBe(
-        "Couldn't list the models: Not logged in · Please run /login",
-      ),
+    // Why the list is short is shown, and tied to the box, not left in a tooltip.
+    const why = await screen.findByText(
+      "Couldn't list the models: Not logged in · Please run /login",
     );
+    expect(alone.getAttribute('aria-describedby')).toBe(why.id);
+    expect(alone.getAttribute('title')).toBeNull();
     expect(
       within(alone)
         .getAllByRole('option')

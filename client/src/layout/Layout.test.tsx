@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Layout } from './Layout.tsx';
 
@@ -33,18 +33,24 @@ const parts = {
 };
 
 const menuButton = () => screen.getByRole('button', { name: 'Menu' });
-const page = () => screen.queryByRole('region', { name: 'Page' });
+const page = () => screen.queryByRole('main', { name: 'Page' });
 
 describe('Layout', () => {
   it('shows the chat, the page and the menu, in that order', () => {
     const { container } = render(<Layout {...parts} />);
     const chat = screen.getByRole('region', { name: 'Chat' });
-    const landmarks = [...container.querySelectorAll('section, nav')].map((element) =>
+    const landmarks = [...container.querySelectorAll('section, main, nav')].map((element) =>
       element.getAttribute('aria-label'),
     );
 
     expect(landmarks).toEqual(['Chat', 'Page', 'Menu']);
-    expect(container.firstElementChild?.firstElementChild).toBe(chat);
+    // The page is the main content: a landmark to jump to.
+    const main = screen.getByRole('main', { name: 'Page' });
+    expect(within(main).getByRole('textbox', { name: 'Search the bank' })).toBeTruthy();
+    // The app's name heads it all, for screen readers.
+    expect(screen.getByRole('heading', { level: 1, name: 'Wise Old Model' })).toBeTruthy();
+    // First after the app's heading.
+    expect(container.firstElementChild?.children[1]).toBe(chat);
     expect(chat.textContent).toBe('chat here');
     expect(screen.getByRole('navigation', { name: 'Menu' }).textContent).toBe('menu here');
     expect(screen.queryByRole('button', { name: 'Menu' })).toBeNull();

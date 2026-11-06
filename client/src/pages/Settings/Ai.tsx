@@ -10,16 +10,27 @@ import { Choices } from './Choices.tsx';
 import { NumberField } from './NumberField.tsx';
 import styles from './Settings.module.css';
 
+/** What effort means, under its picker. */
+const EFFORT_HINT = 'How long it thinks before answering: more is slower, and more careful.';
+
 const BILLING = [
   { value: 'plan', label: 'Claude plan' },
   { value: 'api_key', label: 'API key' },
 ] as const;
 
-/** The model and effort, from the models the AI lists (the chat bar has the same two). */
+/**
+ * The model and effort, from the models the AI lists (the chat bar has the same two), with what
+ * the picked model is (its description) and what effort means shown under each.
+ */
 function ModelPicker(): JSX.Element {
   const choice = useModelChoice();
   const modelId = useId();
   const effortId = useId();
+  const description = choice.models.find((model) => model.id === choice.model)?.description;
+  const modelHints =
+    [description && `${modelId}-about`, choice.listProblem && `${modelId}-problem`]
+      .filter(Boolean)
+      .join(' ') || undefined;
   return (
     <>
       <div className={styles.field}>
@@ -28,11 +39,21 @@ function ModelPicker(): JSX.Element {
           id={modelId}
           value={choice.model}
           disabled={!choice.ready}
+          aria-describedby={modelHints}
           onChange={(event) => choice.pickModel(event.target.value)}
         >
           <ModelOptions models={choice.models} />
         </select>
-        {choice.listProblem && <p className={styles.hint}>{choice.listProblem}</p>}
+        {description && (
+          <p id={`${modelId}-about`} className={styles.hint}>
+            {description}
+          </p>
+        )}
+        {choice.listProblem && (
+          <p id={`${modelId}-problem`} className={styles.hint}>
+            {choice.listProblem}
+          </p>
+        )}
       </div>
       {choice.showEffort && (
         <div className={styles.field}>
@@ -41,10 +62,14 @@ function ModelPicker(): JSX.Element {
             id={effortId}
             value={choice.effort}
             disabled={!choice.ready}
+            aria-describedby={`${effortId}-hint`}
             onChange={(event) => choice.pickEffort(event.target.value)}
           >
             <EffortOptions efforts={choice.efforts} />
           </select>
+          <p id={`${effortId}-hint`} className={styles.hint}>
+            {EFFORT_HINT}
+          </p>
         </div>
       )}
       {choice.saveError && <Problem>Couldn't save that change. {choice.saveError.message}</Problem>}

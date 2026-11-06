@@ -186,6 +186,39 @@ describe('Overview', () => {
     expect(refreshed).toBe(1);
   });
 
+  it('keeps the focus on Refresh while it works, and says when it is done', async () => {
+    let finish: (answer: unknown) => void = () => {};
+    let calls = 0;
+    const { page } = renderOverview(testOverview(), {
+      'POST /api/accounts/1/refresh': () => {
+        calls += 1;
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+    });
+    await within(page).findByRole('heading', { name: 'Lumby Pete' });
+    const button = within(page).getByRole('button', { name: 'Refresh' });
+    // Refresh's own status line, just after it.
+    const status = button.parentElement?.nextElementSibling as HTMLElement;
+    expect(status.getAttribute('role')).toBe('status');
+    const said = () => status.textContent;
+    expect(said()).toBe('');
+    fireEvent.click(button);
+    // Waiting, it says so but isn't disabled, which would take the focus off it.
+    await waitFor(() => expect(button.getAttribute('aria-disabled')).toBe('true'));
+    expect(button.textContent).toBe('Refreshing…');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    // The focused button says it; the status line would say it twice.
+    expect(said()).toBe('');
+    // A second press while it works sends nothing more.
+    fireEvent.click(button);
+    expect(calls).toBe(1);
+    finish({ freshness: testOverview().freshness, renameSuggestion: null });
+    await waitFor(() => expect(said()).toBe('Refreshed.'));
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+  });
+
   it('offers the rename Wise Old Man found, renames, then fetches under the new name', async () => {
     const renames: unknown[] = [];
     let refreshed = 0;

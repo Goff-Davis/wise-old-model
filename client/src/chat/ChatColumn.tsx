@@ -361,28 +361,45 @@ function EarlierChats(props: { chat: Chat; onClose: () => void }): JSX.Element {
 function ChatOptions(props: { busy: boolean }): JSX.Element {
   const choice = useModelChoice();
   const disabled = props.busy || !choice.ready;
+  const id = useId();
   return (
     <>
       {choice.saveError && <Problem>Couldn't save that: {choice.saveError.message}</Problem>}
-      <select
-        aria-label="Model"
-        title={choice.listProblem ?? 'The model for the next message'}
-        value={choice.model}
-        disabled={disabled}
-        onChange={(event) => choice.pickModel(event.target.value)}
-      >
-        <ModelOptions models={choice.models} />
-      </select>
-      {choice.showEffort && (
+      {/* Why the list is short, in view, on a line of its own above the pickers. */}
+      {choice.listProblem && (
+        <p id={`${id}-problem`} className={styles.listProblem}>
+          {choice.listProblem}
+        </p>
+      )}
+      {/* Each label kept on its select's line when the bar wraps. */}
+      <span className={styles.pick}>
+        <label htmlFor={`${id}-model`} className={styles.pickLabel}>
+          Model
+        </label>
         <select
-          aria-label="Effort"
-          title="How hard it thinks about the next message"
-          value={choice.effort}
+          id={`${id}-model`}
+          aria-describedby={choice.listProblem ? `${id}-problem` : undefined}
+          value={choice.model}
           disabled={disabled}
-          onChange={(event) => choice.pickEffort(event.target.value)}
+          onChange={(event) => choice.pickModel(event.target.value)}
         >
-          <EffortOptions efforts={choice.efforts} />
+          <ModelOptions models={choice.models} />
         </select>
+      </span>
+      {choice.showEffort && (
+        <span className={styles.pick}>
+          <label htmlFor={`${id}-effort`} className={styles.pickLabel}>
+            Effort
+          </label>
+          <select
+            id={`${id}-effort`}
+            value={choice.effort}
+            disabled={disabled}
+            onChange={(event) => choice.pickEffort(event.target.value)}
+          >
+            <EffortOptions efforts={choice.efforts} />
+          </select>
+        </span>
       )}
     </>
   );
@@ -439,7 +456,7 @@ function Composer(props: { chat: Chat; name: string }): JSX.Element {
         <p id={hintId} className={styles.hint}>
           Enter to send, Shift+Enter for a new line
         </p>
-        <span className={styles.controls}>
+        <div className={styles.controls}>
           <ChatOptions busy={chat.busy} />
           {chat.busy ? (
             <button
@@ -454,7 +471,7 @@ function Composer(props: { chat: Chat; name: string }): JSX.Element {
               Send
             </button>
           )}
-        </span>
+        </div>
       </div>
     </form>
   );
@@ -526,7 +543,10 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
   return (
     <div className={styles.column}>
       <header className={styles.top}>
-        <strong>{props.name}</strong>
+        {/* "Chat about" for screen readers, as the page beside it may be headed with the name. */}
+        <h2>
+          <span className="visually-hidden">Chat about</span> {props.name}
+        </h2>
         <span className={styles.topActions}>
           <button type="button" className={styles.link} disabled={chat.busy} onClick={chat.newChat}>
             New chat

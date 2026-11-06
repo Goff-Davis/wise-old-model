@@ -133,6 +133,7 @@ export function AddAccountForm(props: {
         <div className={styles.nameRow}>
           <input
             id={`${id}-name`}
+            aria-describedby={`${id}-name-hint`}
             value={name}
             autoComplete="off"
             spellCheck={false}
@@ -145,6 +146,9 @@ export function AddAccountForm(props: {
             {lookUp.isPending ? 'Looking up…' : 'Look up'}
           </button>
         </div>
+        <p id={`${id}-name-hint`} className={styles.hint}>
+          Your name in the game, as the hiscores show it.
+        </p>
         {nameProblem && <Problem>{nameProblem}</Problem>}
         {lookUp.isError && <Problem>Couldn't look that name up. {lookUp.error.message}</Problem>}
       </form>

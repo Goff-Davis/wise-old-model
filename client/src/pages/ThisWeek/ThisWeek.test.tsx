@@ -90,7 +90,8 @@ describe('ThisWeek', () => {
       },
     });
     await within(page).findByText(/^21\.85M XP/);
-    const status = within(page).getByRole('status');
+    // The header's status line, not Refresh's.
+    const status = page.querySelector('header [role="status"]') as HTMLElement;
     expect(status.textContent).toBe('');
     fireEvent.click(within(page).getByRole('button', { name: '30 days' }));
     await waitFor(() => expect(status.textContent).toBe('Updating…'));

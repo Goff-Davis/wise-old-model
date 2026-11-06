@@ -20,7 +20,21 @@
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+}
+
+/* Why the chat's buttons wait, beside them. */
+.wait {
+  color: var(--muted);
+}
+
+.askRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
 }
 
 .primary {
@@ -66,24 +80,33 @@
   list-style: none;
 }
 
-/* A goal: its handle, icon, what it says, and Drop. */
+/* A goal, which can be dragged: Move up and Move down, its icon, what it says, and Drop. */
 .goal {
   display: grid;
-  grid-template-columns: 44px 22px minmax(0, 1fr) auto;
+  grid-template-columns: auto 22px minmax(0, 1fr) auto;
   gap: 8px;
   /* On the title's line, so the 44 px buttons' labels sit level with it. */
   align-items: baseline;
   padding: 8px 6px;
   border-bottom: 1px solid var(--rule);
+  cursor: grab;
 }
 
-.grip {
+/* Move up and Move down: quiet arrows, side by side. */
+.move {
+  display: flex;
+}
+
+.move button {
   padding: 0;
   border: 0;
   background: none;
   color: var(--muted);
-  line-height: 20px;
-  cursor: grab;
+  font-size: 1.1rem;
+}
+
+.move button:hover:not([aria-disabled="true"]) {
+  color: var(--text);
 }
 
 /*
@@ -232,6 +255,12 @@
 .field input,
 .field select {
   color: var(--text);
+}
+
+/* What to type, or leave out, under a field: a placeholder goes as soon as anything's typed. */
+.hint {
+  margin: 0;
+  font-size: 0.92rem;
 }
 
 .choice {

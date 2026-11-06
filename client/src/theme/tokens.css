@@ -126,11 +126,13 @@ button {
   cursor: pointer;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled, [aria-disabled="true"]) {
   border-color: var(--muted);
 }
 
-button:disabled {
+/* A button that can't act yet; one that keeps the focus says so with aria-disabled. */
+button:disabled,
+button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.65;
 }

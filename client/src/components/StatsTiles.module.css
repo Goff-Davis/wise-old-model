@@ -32,8 +32,18 @@
   grid-template-columns: 24px minmax(0, 1fr) auto;
   gap: 5px;
   align-items: center;
-  min-height: 34px;
+  width: 100%;
   padding: 3px 7px 3px 4px;
+  border: 0;
+  color: inherit;
+  text-align: left;
+}
+
+/* Picked: a thicker accent edge and a bold name, not color alone (WCAG 1.4.1); above a button's
+   hover edge. */
+.grid .tile[aria-pressed="true"] {
+  padding: 1px 5px 1px 2px;
+  border: 2px solid var(--accent);
 }
 
 .name {
@@ -41,6 +51,10 @@
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
   hyphens: auto;
+}
+
+.grid .tile[aria-pressed="true"] .name {
+  font-weight: 700;
 }
 
 .level {
@@ -58,4 +72,15 @@
   justify-content: center;
   margin: 0;
   padding: 7px 10px;
+}
+
+/* The tiles, with what a picked one says just under them. */
+.withDetail {
+  display: grid;
+  gap: 6px;
+}
+
+/* What a picked tile says: its level and experience. */
+.detail {
+  margin: 0;
 }

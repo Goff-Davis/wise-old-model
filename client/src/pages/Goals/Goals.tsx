@@ -118,16 +118,21 @@ function ActiveGoal(props: {
       >
         ⋮⋮
       </button>
-      <GoalIcon target={goal.target} />
+      <span className={styles.icon}>
+        <GoalIcon target={goal.target} />
+      </span>
       <div className={styles.body}>
         <div className={styles.titleRow}>
           {goal.target.kind === 'custom' && (
-            <input
-              type="checkbox"
-              aria-label={`Done: ${goal.title}`}
-              checked={props.ticking}
-              onChange={() => props.onChange({ status: 'done' })}
-            />
+            // The label takes the clicks too, making the target big enough to hit.
+            <label>
+              <input
+                type="checkbox"
+                checked={props.ticking}
+                onChange={() => props.onChange({ status: 'done' })}
+              />
+              <span className="visually-hidden">Done: {goal.title}</span>
+            </label>
           )}
           <span data-testid="goal-title" className={styles.title}>
             {goal.title}

@@ -11,6 +11,7 @@ import {
   plural,
 } from '@wom/shared';
 import {
+  type FocusEvent,
   type FormEvent,
   type JSX,
   type KeyboardEvent,
@@ -485,6 +486,17 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
   const chat = useChatContext();
   const [showEarlier, setShowEarlier] = useState(false);
   const earlierId = useId();
+  const earlier = useRef<HTMLDivElement>(null);
+  const earlierButton = useRef<HTMLButtonElement>(null);
+  // Focus moving on past Earlier chats, from it or from its button, closes it, so it never covers
+  // what has focus. Into it, to its button (whose click closes it), or to nothing (a click on
+  // bare page), it stays.
+  const leaveEarlier = (event: FocusEvent) => {
+    const next = event.relatedTarget;
+    if (next && !earlier.current?.contains(next) && next !== earlierButton.current) {
+      setShowEarlier(false);
+    }
+  };
   const log = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   // Whether the reader is at the newest of the chat, which then stays in view as it grows;
@@ -520,18 +532,28 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
             New chat
           </button>
           <button
+            ref={earlierButton}
             type="button"
             className={styles.link}
             aria-expanded={showEarlier}
             aria-controls={earlierId}
             onClick={() => setShowEarlier(!showEarlier)}
+            onBlur={leaveEarlier}
           >
             Earlier chats
           </button>
         </span>
       </header>
       {/* Over the chat, out of its grid, like the status line below. */}
-      <div id={earlierId} className={styles.earlier} data-floating hidden={!showEarlier}>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: it hears the focus leave the controls in it, and isn't one itself. */}
+      <div
+        ref={earlier}
+        id={earlierId}
+        className={styles.earlier}
+        data-floating
+        hidden={!showEarlier}
+        onBlur={leaveEarlier}
+      >
         {showEarlier && <EarlierChats chat={chat} onClose={() => setShowEarlier(false)} />}
       </div>
       <div

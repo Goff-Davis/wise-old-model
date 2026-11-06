@@ -10,7 +10,7 @@
   padding: 0 10px;
   color: var(--muted);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 500;
 }
 
@@ -23,7 +23,9 @@
 }
 
 .links a {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-block-size: 44px;
   padding: 6px 10px;
   border-radius: 6px;
   color: var(--text);

@@ -91,7 +91,7 @@
 .section {
   display: grid;
   gap: 8px;
-  max-width: 34rem;
+  max-width: 70ch;
 }
 
 .section h3 {

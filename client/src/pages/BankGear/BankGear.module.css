@@ -11,7 +11,7 @@
 }
 
 .seen {
-  max-width: 34rem;
+  max-width: 70ch;
   margin: 4px 0 0;
   color: var(--muted);
 }
@@ -34,13 +34,13 @@
 
 /* What's shown is from before: the latest file couldn't be read. */
 .stale {
-  max-width: 34rem;
+  max-width: 70ch;
   margin: 4px 0 0;
   color: var(--in-progress);
 }
 
 .search {
-  max-width: 34rem;
+  max-width: 70ch;
 }
 
 /* The search's status stays in the page, so screen readers announce it; it takes room only
@@ -175,9 +175,7 @@
 }
 
 .name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .where {
@@ -194,7 +192,7 @@
   display: grid;
   gap: 8px;
   justify-items: start;
-  max-width: 34rem;
+  max-width: 70ch;
 }
 
 .lists .items {

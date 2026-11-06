@@ -29,6 +29,8 @@
 }
 
 .list [role="option"] {
+  align-content: center;
+  min-block-size: 44px;
   padding: 4px 8px;
   color: var(--text);
   cursor: pointer;
@@ -39,10 +41,11 @@
   outline-offset: -1px;
 }
 
+/* The option the arrow keys are on: a focus ring like any other, 2 px (WCAG 2.4.13). */
 .list [aria-selected="true"],
 .list [aria-selected="true"]:hover {
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .detail,

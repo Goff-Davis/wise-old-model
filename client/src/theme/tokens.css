@@ -78,8 +78,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 0.9375rem;
+  /* At least 1.5 (WCAG 1.4.8). */
+  line-height: 1.5;
 }
 
 h1,
@@ -137,6 +138,34 @@ button:disabled {
 input[type="checkbox"],
 input[type="radio"] {
   accent-color: var(--accent);
+}
+
+/*
+ * Everything to click or tap is at least 44 × 44 px (WCAG 2.5.5), buttons centring their label.
+ * Links inside a sentence are the exception the rule allows.
+ */
+button,
+select,
+input:not([type="checkbox"], [type="radio"]) {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+/* A box or choice is clicked through its label, which is the 44 px target. Pages may lay it out. */
+:where(label:has(> input[type="checkbox"], > input[type="radio"])) {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-block-size: 44px;
+  min-inline-size: 44px;
+}
+
+/*
+ * No paragraph runs past about 75 characters (WCAG 1.4.8 asks for 80 at most). A "0", which ch
+ * measures, is wider than the average letter in these fonts: 55ch holds about 75 of them.
+ */
+p {
+  max-inline-size: 55ch;
 }
 
 /* Boxes to type in or pick from, edged so they can be found (WCAG 1.4.11). */

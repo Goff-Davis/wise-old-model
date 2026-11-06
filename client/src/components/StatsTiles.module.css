@@ -37,17 +37,16 @@
 }
 
 .name {
-  overflow: hidden;
   color: var(--tile-name);
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .level {
   color: var(--tile-level);
   font-family: var(--font-pixel);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1;
   text-shadow: 1px 1px 0 var(--tile-level-shadow);
 }

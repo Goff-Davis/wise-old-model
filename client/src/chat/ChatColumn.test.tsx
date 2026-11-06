@@ -877,6 +877,34 @@ describe('ChatColumn', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep' }));
   });
 
+  it('closes Earlier chats once the focus moves on past it, so it never covers what has focus', async () => {
+    renderChat({ chats: [CHAT], routes: { 'GET /api/chats/c1/messages': () => [USER] } });
+    await screen.findByText('What next?');
+    const toggle = screen.getByRole('button', { name: 'Earlier chats' });
+    fireEvent.click(toggle);
+    const rename = screen.getByRole('button', { name: 'Rename What next?' });
+    // Within it, back to its own button (whose click closes it), or to nothing, it stays open.
+    const remove = screen.getByRole('button', { name: 'Delete What next?' });
+    fireEvent.focusOut(rename, { relatedTarget: remove });
+    fireEvent.focusOut(rename, { relatedTarget: toggle });
+    fireEvent.focusOut(rename, { relatedTarget: null });
+    // From its button into it, too.
+    fireEvent.focusOut(toggle, { relatedTarget: rename });
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.focusOut(rename, { relatedTarget: screen.getByRole('textbox', { name: 'Message' }) });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('closes Earlier chats when the focus leaves its button for the chat, as when it holds nothing to focus', async () => {
+    renderChat({ routes: { 'GET /api/chats/c1/messages': () => [] } });
+    const starter = await screen.findByRole('button', { name: 'What should I work on next?' });
+    const toggle = screen.getByRole('button', { name: 'Earlier chats' });
+    fireEvent.click(toggle);
+    expect(await screen.findByText('No earlier chats yet.')).toBeTruthy();
+    fireEvent.focusOut(toggle, { relatedTarget: starter });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('lays the chat out as its header, the messages, then the box, whatever floats over them', async () => {
     renderChat({ chats: [CHAT], routes: { 'GET /api/chats/c1/messages': () => [USER] } });
     await screen.findByText('What next?');

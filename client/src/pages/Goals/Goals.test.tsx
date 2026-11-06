@@ -277,9 +277,10 @@ describe('Goals', () => {
 
   it('ticks a custom goal off, and drops a goal', async () => {
     const page = renderGoals();
-    fireEvent.click(
-      await within(page).findByRole('checkbox', { name: 'Done: Clear out the bank' }),
-    );
+    const box = await within(page).findByRole('checkbox', { name: 'Done: Clear out the bank' });
+    // Its label takes the clicks too, so the target is big enough to hit.
+    expect(box.closest('label')).not.toBeNull();
+    fireEvent.click(box);
     fireEvent.click(within(page).getByRole('button', { name: 'Drop Complete Dragon Slayer II' }));
     await expect
       .poll(() => page.sent)

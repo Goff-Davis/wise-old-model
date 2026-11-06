@@ -12,7 +12,7 @@
 .section {
   display: grid;
   gap: 14px;
-  max-width: 40rem;
+  max-width: 70ch;
 }
 
 .section h3,
@@ -22,6 +22,11 @@
 
 .section p {
   margin: 0;
+}
+
+/* Paragraphs one after another are 1.5em apart (WCAG 1.4.8): the section's gap plus this. */
+.section p + p {
+  margin-block-start: calc(1.5em - 14px);
 }
 
 .field {

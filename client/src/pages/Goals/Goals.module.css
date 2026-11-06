@@ -48,7 +48,7 @@
 .section {
   display: grid;
   gap: 6px;
-  max-width: 36rem;
+  max-width: 70ch;
 }
 
 .section h3 {
@@ -69,9 +69,10 @@
 /* A goal: its handle, icon, what it says, and Drop. */
 .goal {
   display: grid;
-  grid-template-columns: 16px 22px minmax(0, 1fr) auto;
+  grid-template-columns: 44px 22px minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: start;
+  /* On the title's line, so the 44 px buttons' labels sit level with it. */
+  align-items: baseline;
   padding: 8px 6px;
   border-bottom: 1px solid var(--rule);
 }
@@ -83,6 +84,17 @@
   color: var(--muted);
   line-height: 20px;
   cursor: grab;
+}
+
+/*
+ * The icon, centred in a box as tall as the buttons beside it. An image's baseline is its bottom
+ * edge, so lining it up on the title's baseline would sit it a little high.
+ */
+.icon {
+  display: grid;
+  place-items: center;
+  align-self: start;
+  height: 44px;
 }
 
 .noIcon {

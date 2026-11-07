@@ -128,8 +128,7 @@ function Worn(props: { view: BankView }) {
   const id = useId();
   const { worn } = props.view;
   const bySlot = new Map(worn?.map((item) => [item.slot, item]));
-  const [picked, setPicked] = useState<string | null>(null);
-  const pickedSlot = EQUIPMENT_SCREEN.find((each) => each.name === picked);
+  const [picked, setPicked] = useState<(typeof EQUIPMENT_SCREEN)[number] | null>(null);
   return (
     <section aria-labelledby={id} className={styles.section}>
       <h3 id={id}>Worn</h3>
@@ -140,15 +139,16 @@ function Worn(props: { view: BankView }) {
       ) : (
         <>
           <ul aria-labelledby={id} className={styles.equipment}>
-            {EQUIPMENT_SCREEN.map(({ slot, name, row, column }) => {
+            {EQUIPMENT_SCREEN.map((place) => {
+              const { slot, name, row, column } = place;
               const item = bySlot.get(slot);
               return (
                 <li key={slot} style={{ gridArea: `${row} / ${column}` }}>
                   <button
                     type="button"
                     className={item ? styles.slot : `${styles.slot} ${styles.empty}`}
-                    aria-pressed={name === picked}
-                    onClick={() => setPicked(name)}
+                    aria-pressed={place === picked}
+                    onClick={() => setPicked(place)}
                   >
                     <span className="visually-hidden">{slotText(name, item)}</span>
                     {item && (
@@ -160,8 +160,8 @@ function Worn(props: { view: BankView }) {
             })}
           </ul>
           <p className={styles.picked}>
-            {pickedSlot
-              ? `${slotText(pickedSlot.name, bySlot.get(pickedSlot.slot))}.`
+            {picked
+              ? `${slotText(picked.name, bySlot.get(picked.slot))}.`
               : "Pick a slot to see what's in it."}
           </p>
         </>

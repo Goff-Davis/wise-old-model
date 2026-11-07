@@ -71,10 +71,6 @@ const moveStatus = (page: HTMLElement) =>
     .map((status) => status.textContent)
     .find((text) => text?.includes(' moved to '));
 
-/** What an element's aria-describedby points at says. */
-const describedBy = (element: HTMLElement) =>
-  document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent;
-
 /** The active goals' titles, in the order shown. */
 const activeTitles = (page: HTMLElement) =>
   within(within(page).getByRole('list', { name: 'Active goals' }))
@@ -179,9 +175,9 @@ describe('Goals', () => {
 
   it('moves a goal up with Alt+↑ on either of its move buttons, saving the new order', async () => {
     const page = renderGoals();
-    const handle = await within(page).findByRole('button', { name: 'Move Reach 75 Magic down' });
-    handle.focus();
-    fireEvent.keyDown(handle, { key: 'ArrowUp', altKey: true });
+    const down = await within(page).findByRole('button', { name: 'Move Reach 75 Magic down' });
+    down.focus();
+    fireEvent.keyDown(down, { key: 'ArrowUp', altKey: true });
     await expect
       .poll(() => activeTitles(page).slice(0, 2))
       .toEqual(['Reach 75 Magic', 'Complete Dragon Slayer II']);
@@ -298,8 +294,8 @@ describe('Goals', () => {
           }) as unknown as Response)
         : undefined,
     );
-    const handle = await within(page).findByRole('button', { name: 'Move Get Vorki up' });
-    fireEvent.keyDown(handle, { key: 'ArrowUp', altKey: true });
+    const up = await within(page).findByRole('button', { name: 'Move Get Vorki up' });
+    fireEvent.keyDown(up, { key: 'ArrowUp', altKey: true });
     await expect.poll(() => page.sent).toHaveLength(1);
     await expect
       .poll(() => activeTitles(page).slice(1, 3))
@@ -501,11 +497,13 @@ describe('AddGoalDialog', () => {
     // Empty is one of it, as the field shows, and as a hint under it says (a placeholder goes
     // as soon as anything's typed).
     expect(quantity.placeholder).toBe('1');
-    expect(describedBy(quantity)).toBe('Leave it empty for one.');
-    expect(describedBy(title)).toBe('Leave it empty for “Get Mark of grace”.');
+    const hinted = (role: string, name: string, description: string) =>
+      within(dialog).getByRole(role, { name, description });
+    expect(hinted('spinbutton', 'How many', 'Leave it empty for one.')).toBe(quantity);
+    expect(hinted('textbox', 'Title', 'Leave it empty for “Get Mark of grace”.')).toBe(title);
     fireEvent.change(quantity, { target: { value: '260' } });
     expect(title.placeholder).toBe('Get 260 × Mark of grace');
-    expect(describedBy(title)).toBe('Leave it empty for “Get 260 × Mark of grace”.');
+    expect(hinted('textbox', 'Title', 'Leave it empty for “Get 260 × Mark of grace”.')).toBe(title);
     // A custom goal has no title to fall back on, so no hint.
     fireEvent.change(within(dialog).getByLabelText('Kind'), { target: { value: 'custom' } });
     expect(title.getAttribute('aria-describedby')).toBeNull();
@@ -792,9 +790,11 @@ describe('Goals with the chat', () => {
     // Why they wait is shown beside each, and tied to it, not left in a tooltip.
     expect(screen.getAllByText('Available once the chat is set up')).toHaveLength(2);
     for (const name of ['Suggest goals', 'Ask the AI for a plan']) {
-      const button = screen.getByRole('button', { name });
+      const button = screen.getByRole('button', {
+        name,
+        description: 'Available once the chat is set up',
+      });
       expect(button.getAttribute('aria-disabled')).toBe('true');
-      expect(describedBy(button)).toBe('Available once the chat is set up');
       expect(button.getAttribute('title')).toBeNull();
     }
   });
@@ -830,9 +830,8 @@ describe('Goals with the chat', () => {
     );
     await screen.findByRole('list', { name: 'Active goals' });
     for (const name of ['Suggest goals', 'Ask the AI for a plan']) {
-      const button = screen.getByRole('button', { name });
+      const button = screen.getByRole('button', { name, description: why });
       expect(button.getAttribute('aria-disabled')).toBe('true');
-      expect(describedBy(button)).toBe(why);
       fireEvent.click(button);
     }
     // Shown beside each, as a goal's may be far down the page from the header's.

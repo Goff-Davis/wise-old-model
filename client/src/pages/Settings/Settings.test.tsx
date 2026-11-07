@@ -600,19 +600,17 @@ describe('Settings → AI', () => {
     expect(effort).toHaveProperty('value', 'medium');
     expect(within(effort).getAllByRole('option')).toHaveLength(6);
     // What the picked model is, and what effort means, are shown and tied to their boxes.
-    const described = (box: HTMLElement) =>
-      document.getElementById(box.getAttribute('aria-describedby') ?? '')?.textContent;
-    expect(described(model)).toBe('For complex work');
-    expect(described(effort)).toBe(
-      'How long it thinks before answering: more is slower, and more careful.',
-    );
+    const described = (name: string, description: string) =>
+      within(ai).getByRole('combobox', { name, description });
+    expect(described('Model', 'For complex work')).toBe(model);
+    expect(
+      described('Effort', 'How long it thinks before answering: more is slower, and more careful.'),
+    ).toBe(effort);
     expect(model.querySelector('[title]')).toBeNull();
 
     fireEvent.change(model, { target: { value: 'claude-haiku-5-5' } });
     await waitFor(() => expect(patches).toEqual([{ model: 'claude-haiku-5-5' }]));
-    expect(described(model)).toBe(
-      TEST_MODELS.find((each) => each.id === 'claude-haiku-5-5')?.description,
-    );
+    expect(described('Model', 'Fast')).toBe(model);
     // Haiku has no effort setting.
     expect(within(ai).queryByRole('combobox', { name: 'Effort' })).toBeNull();
 

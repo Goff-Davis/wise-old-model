@@ -19,7 +19,7 @@ export function Choices<T extends string>(props: {
       <legend>{props.legend}</legend>
       <div className={styles.choices}>
         {props.options.map((option) => (
-          <label key={option.value} className={styles.choice}>
+          <label key={option.value}>
             <input
               type="radio"
               name={name}
@@ -36,7 +36,7 @@ export function Choices<T extends string>(props: {
       {props.options.map(
         (option) =>
           option.hint && (
-            <p key={option.value} id={hintId(option.value)} className={styles.hint}>
+            <p key={option.value} id={hintId(option.value)} className="hint">
               {option.hint}
             </p>
           ),

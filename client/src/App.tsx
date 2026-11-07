@@ -68,7 +68,7 @@ function Home(): JSX.Element {
   const headingId = useId();
   const [asked, setAsked] = useState(false);
   // "Add an account" only once it's asking for one, not while it finds out whether there are any.
-  useDocumentTitle(...(asked ? ['Add an account'] : []));
+  useDocumentTitle(asked && 'Add an account');
   if (accounts.data?.length === 0 && !asked) setAsked(true);
   const first = accounts.data?.[0];
   if (first && !asked) return <Navigate to={pagePath(first.id, 'overview')} replace />;
@@ -100,7 +100,7 @@ function AccountPage(): JSX.Element {
   useFileCheck(exists ? accountId : null);
   const current = PAGES.find((p) => p.id === page);
   // The account's name once it's known, never the stand-in ("this account").
-  useDocumentTitle(...(current ? [current.label] : []), ...(exists ? [name] : []));
+  useDocumentTitle(current?.label, exists && name);
   if (!current) return <Navigate to={pagePath(accountId, 'overview')} replace />;
   // An account that doesn't exist (deleted, or a mistyped URL) goes home.
   if (accounts.data && !exists) return <Navigate to="/" replace />;

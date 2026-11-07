@@ -19,13 +19,6 @@
   min-width: 0;
 }
 
-/* What the name box asks for, under it. */
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.92rem;
-}
-
 .findings {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

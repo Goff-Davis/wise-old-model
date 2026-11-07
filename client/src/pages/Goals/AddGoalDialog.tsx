@@ -137,7 +137,7 @@ function Field(props: {
       <label htmlFor={id}>{props.label}</label>
       {props.children(id, hintId)}
       {props.hint && (
-        <p id={hintId} className={styles.hint}>
+        <p id={hintId} className="hint">
           {props.hint}
         </p>
       )}

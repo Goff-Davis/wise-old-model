@@ -39,9 +39,8 @@
   text-align: left;
 }
 
-/* Picked: a thicker accent edge and a bold name, not color alone (WCAG 1.4.1); above a button's
-   hover edge. */
-.grid .tile[aria-pressed="true"] {
+/* Picked: a thicker accent edge and a bold name, not color alone (WCAG 1.4.1). */
+.tile[aria-pressed="true"] {
   padding: 1px 5px 1px 2px;
   border: 2px solid var(--accent);
 }
@@ -53,7 +52,7 @@
   hyphens: auto;
 }
 
-.grid .tile[aria-pressed="true"] .name {
+.tile[aria-pressed="true"] .name {
   font-weight: 700;
 }
 

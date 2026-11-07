@@ -60,7 +60,7 @@ export function GameData(): JSX.Element {
             options={MODES}
             onChange={(runeliteMode) => update.mutate({ runeliteMode })}
           >
-            <p className={styles.hint}>
+            <p className="hint">
               Automatic reads Character Export's files as they change; Manual reads them only when
               you press Refresh.
             </p>

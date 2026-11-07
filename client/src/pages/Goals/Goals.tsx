@@ -6,7 +6,7 @@ import {
   type GoalWithProgress,
   PROGRESS_ICONS,
 } from '@wom/shared';
-import { type JSX, type KeyboardEvent, useId, useState } from 'react';
+import { type JSX, type KeyboardEvent, type ReactNode, useId, useState } from 'react';
 import { useParams } from 'react-router';
 import { useAccountName, useRefreshAccount } from '../../api/accounts.ts';
 import { goalsQuery, useChangeGoal, useReorderGoals } from '../../api/goals.ts';
@@ -57,10 +57,45 @@ function GoalIcon(props: { target: GoalTarget }): JSX.Element {
 /** Kinds whose progress has a measure worth a bar (an item's only when it's a number of it). */
 const BARRED = new Set<GoalTarget['kind']>(['skill', 'combat_achievement', 'item']);
 
-/** What a status means, for screen readers. */
-const STATUS_WORDS = { red: 'not met', yellow: 'under way' } as const;
-/** A status's mark, its shape saying it as well as its color (WCAG 1.4.1). */
-const STATUS_MARKS = { red: '●', yellow: '◐' } as const;
+/**
+ * Each status's mark, its shape saying it as well as its color (WCAG 1.4.1), and what it means,
+ * for screen readers.
+ */
+const STATUS = {
+  red: { mark: '●', className: styles.markRed, words: 'not met' },
+  yellow: { mark: '◐', className: styles.markYellow, words: 'under way' },
+};
+
+/**
+ * A button that asks the chat, with why it waits beside it while it does (a tooltip reaches no
+ * keyboard or touch). Waiting, it keeps the focus (aria-disabled) and does nothing.
+ */
+function ChatButton(props: {
+  onClick?: () => void;
+  waits?: string;
+  className?: string;
+  children: ReactNode;
+}): JSX.Element {
+  const whyId = useId();
+  return (
+    <>
+      <button
+        type="button"
+        className={props.className}
+        aria-disabled={props.onClick ? undefined : true}
+        aria-describedby={props.waits ? whyId : undefined}
+        onClick={() => props.onClick?.()}
+      >
+        {props.children}
+      </button>
+      {props.waits && (
+        <span id={whyId} className={styles.wait}>
+          {props.waits}
+        </span>
+      )}
+    </>
+  );
+}
 
 /**
  * One active goal, which can be dragged: Move up and Move down (Alt+↑ and Alt+↓ on either), its
@@ -85,7 +120,6 @@ function ActiveGoal(props: {
   waits?: string;
 }): JSX.Element {
   const { goal } = props;
-  const whyId = useId();
   const progress = goal.progress;
   const onKeyDown = (event: KeyboardEvent) => {
     if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
@@ -117,26 +151,24 @@ function ActiveGoal(props: {
       {/* A way to move it without dragging (WCAG 2.5.7). At an end, a button says it can go no
         further but keeps the focus, which a disabled one would drop. */}
       <span className={styles.move}>
-        <button
-          type="button"
-          aria-label={`Move ${goal.title} up`}
-          aria-disabled={props.first || undefined}
-          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-          onClick={() => props.onMove(-1)}
-          onKeyDown={onKeyDown}
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          aria-label={`Move ${goal.title} down`}
-          aria-disabled={props.last || undefined}
-          aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-          onClick={() => props.onMove(1)}
-          onKeyDown={onKeyDown}
-        >
-          ↓
-        </button>
+        {(
+          [
+            [-1, 'up', '↑', props.first],
+            [1, 'down', '↓', props.last],
+          ] as const
+        ).map(([step, way, arrow, end]) => (
+          <button
+            key={way}
+            type="button"
+            aria-label={`Move ${goal.title} ${way}`}
+            aria-disabled={end || undefined}
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+            onClick={() => props.onMove(step)}
+            onKeyDown={onKeyDown}
+          >
+            {arrow}
+          </button>
+        ))}
       </span>
       <span className={styles.icon}>
         <GoalIcon target={goal.target} />
@@ -178,14 +210,11 @@ function ActiveGoal(props: {
             <ul aria-label="Still needed">
               {progress.stillNeeded.map((item) => (
                 <li key={item.label}>
-                  <span
-                    aria-hidden="true"
-                    className={item.status === 'red' ? styles.markRed : styles.markYellow}
-                  >
-                    {STATUS_MARKS[item.status]}
+                  <span aria-hidden="true" className={STATUS[item.status].className}>
+                    {STATUS[item.status].mark}
                   </span>
                   {item.label}
-                  <span className="visually-hidden"> ({STATUS_WORDS[item.status]})</span>
+                  <span className="visually-hidden"> ({STATUS[item.status].words})</span>
                 </li>
               ))}
             </ul>
@@ -194,20 +223,9 @@ function ActiveGoal(props: {
         {planned && (
           // Why it waits shows beside it: the header's may be far up the page.
           <div className={styles.askRow}>
-            <button
-              type="button"
-              className={styles.ask}
-              aria-disabled={props.onAskForPlan ? undefined : true}
-              aria-describedby={props.waits ? whyId : undefined}
-              onClick={() => props.onAskForPlan?.()}
-            >
+            <ChatButton className={styles.ask} onClick={props.onAskForPlan} waits={props.waits}>
               Ask the AI for a plan
-            </button>
-            {props.waits && (
-              <span id={whyId} className={styles.wait}>
-                {props.waits}
-              </span>
-            )}
+            </ChatButton>
           </div>
         )}
       </div>
@@ -257,7 +275,6 @@ export function Goals(): JSX.Element {
   // Why the chat's buttons wait: there's no chat, or it says why (loading, answering).
   const chatWaits = chat ? chat.why : NEEDS_CHAT;
   const ask = chatWaits ? undefined : chat?.ask;
-  const waitId = useId();
   const suggestGoals =
     ask &&
     (() =>
@@ -302,20 +319,9 @@ export function Goals(): JSX.Element {
           <button type="button" className={styles.primary} onClick={() => setAdding(true)}>
             Add goal
           </button>
-          <button
-            type="button"
-            aria-disabled={suggestGoals ? undefined : true}
-            aria-describedby={chatWaits ? waitId : undefined}
-            onClick={() => suggestGoals?.()}
-          >
+          <ChatButton onClick={suggestGoals} waits={chatWaits}>
             Suggest goals
-          </button>
-          {/* Why the chat's buttons wait, in view: a tooltip reaches no keyboard or touch. */}
-          {chatWaits && (
-            <span id={waitId} className={styles.wait}>
-              {chatWaits}
-            </span>
-          )}
+          </ChatButton>
         </div>
       </header>
       <AddGoalDialog

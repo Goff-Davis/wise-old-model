@@ -43,7 +43,7 @@
   color: var(--bg);
 }
 
-/* A button waiting for the chat: it says why on hover, and does nothing. */
+/* A button that can't act yet (waiting for the chat, or a move past the list's end) does nothing. */
 .page [aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;
@@ -117,7 +117,7 @@
   display: grid;
   place-items: center;
   align-self: start;
-  height: 44px;
+  height: var(--target-size);
 }
 
 .noIcon {
@@ -258,21 +258,10 @@
 }
 
 /* What to type, or leave out, under a field: a placeholder goes as soon as anything's typed. */
-.hint {
-  margin: 0;
-  font-size: 0.92rem;
-}
-
 .choice {
   display: flex;
   gap: 16px;
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.choice label {
-  display: flex;
-  gap: 6px;
-  align-items: center;
 }

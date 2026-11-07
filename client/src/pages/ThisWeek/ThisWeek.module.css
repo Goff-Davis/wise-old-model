@@ -29,16 +29,6 @@
 }
 
 /* Picked: bold, with a thicker accent edge, so it isn't told by color alone (WCAG 1.4.1). */
-/* Each chip keeps room for its label in bold, so picking one moves none of the others. */
-.periods button::after {
-  content: attr(data-label);
-  display: block;
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  font-weight: 700;
-}
-
 .periods button[aria-pressed="true"] {
   padding: 3px 11px;
   border: 2px solid var(--accent);

@@ -50,11 +50,15 @@
   color: var(--not-started);
 }
 
-/* Earlier chats opens over the chat, under its button, as the mockup has it. */
-/* Its top: the column's padding, the header's 44 px row, then a small gap. */
+/*
+ * Earlier chats opens over the chat, just under the header's row, which holds its button: that
+ * row is its containing block. Both lines are named, as an absolutely positioned box's auto end
+ * line is the grid's padding edge, not the next line.
+ */
 .earlier {
   position: absolute;
-  top: calc(16px + 44px + 4px);
+  grid-row: 1 / 2;
+  top: calc(100% + 4px);
   right: 20px;
   z-index: 2;
   width: min(340px, calc(100% - 40px));
@@ -80,23 +84,28 @@
   list-style: none;
 }
 
+/* Room on the left for the open chat's bar and a gap after it, so every title starts in line. */
 .earlier li {
-  padding: 4px 6px;
+  padding: 4px 6px 4px 10px;
   border-radius: 4px;
 }
 
 /* The open chat: bold, with an accent bar, so it isn't told by color alone (WCAG 1.4.1). */
 .earlier li[aria-current="true"] {
-  padding-inline-start: 3px;
+  padding-inline-start: 7px;
   border-inline-start: 3px solid var(--accent);
   background: var(--raised);
 }
 
+/*
+ * A chat's row, centred: its 44 px buttons centre their words, so lining up baselines would drop
+ * a title that wraps to their middle line, leaving a gap above it.
+ */
 .row,
 .renameForm {
   display: flex;
   gap: 10px;
-  align-items: baseline;
+  align-items: center;
 }
 
 .open {
@@ -394,24 +403,16 @@
   font-size: 0.88rem;
 }
 
-/* A picker with its label, small beside it. */
+/* A picker with its label (a .hint), small beside it. */
 .pick {
   display: inline-flex;
   gap: 6px;
   align-items: center;
 }
 
-.pickLabel {
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-/* Why the models couldn't be listed: a line of its own above the pickers. */
+/* Why the models couldn't be listed (a .hint): a line of its own above the pickers. */
 .listProblem {
   flex-basis: 100%;
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.85rem;
   text-align: end;
 }
 
@@ -430,7 +431,7 @@
 }
 
 .composer:has(textarea:focus-visible) {
-  outline: 2px solid var(--accent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 

@@ -8,7 +8,7 @@
   --bg: #1f1c17;
   --panel: #28231c;
   --raised: #332c22;
-  /* Dividers, and the edges of buttons and panels; a box to type in or pick from has the next. */
+  /* Dividers, and the edges of buttons and panels. */
   --rule: #4a4134;
   /* The edge of a box to type in or pick from: 3:1 on every surface (WCAG 1.4.11). */
   --control-border: #85755d;
@@ -39,6 +39,10 @@
   --font-serif: "Alegreya", Georgia, serif;
   --font-sans: "Alegreya Sans", system-ui, sans-serif;
   --font-pixel: "Silkscreen", monospace;
+
+  /* The smallest thing to click or tap (WCAG 2.5.5), and every focus ring (WCAG 2.4.13). */
+  --target-size: 44px;
+  --focus-ring: 2px solid var(--accent);
 }
 
 :root[data-theme="light"] {
@@ -102,9 +106,8 @@ textarea {
   font: inherit;
 }
 
-/* Text only screen readers get. */
-/* Absolutely positioned, so a scroll box it's in must be positioned too, or the text escapes it
-   and scrolls what's around it (scrollBoxes.test.ts checks). */
+/* Text only screen readers get. It's absolutely positioned, so a scroll box it's in must be
+   positioned too, or it escapes the box and scrolls what's around it (scrollBoxes.test.ts). */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -115,7 +118,7 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -128,8 +131,26 @@ button {
   cursor: pointer;
 }
 
-button:hover:not(:disabled, [aria-disabled="true"]) {
+/* A picked button keeps its own accent edge under the pointer. */
+button:hover:not(
+  :disabled,
+  [aria-disabled="true"],
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  [aria-current="true"]
+) {
   border-color: var(--muted);
+}
+
+/* A button whose label turns bold when picked keeps room for it in bold, so picking one moves
+   none of its neighbours: its label again (data-label), bold, unseen and of no height. */
+button[data-label]::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font-weight: 700;
 }
 
 /* A button that can't act yet; one that keeps the focus says so with aria-disabled. */
@@ -151,8 +172,8 @@ input[type="radio"] {
 button,
 select,
 input:not([type="checkbox"], [type="radio"]) {
-  min-block-size: 44px;
-  min-inline-size: 44px;
+  min-block-size: var(--target-size);
+  min-inline-size: var(--target-size);
 }
 
 /* A box or choice is clicked through its label, which is the 44 px target. Pages may lay it out. */
@@ -160,8 +181,8 @@ input:not([type="checkbox"], [type="radio"]) {
   display: inline-flex;
   gap: 6px;
   align-items: center;
-  min-block-size: 44px;
-  min-inline-size: 44px;
+  min-block-size: var(--target-size);
+  min-inline-size: var(--target-size);
 }
 
 /*
@@ -184,6 +205,13 @@ select {
   border-radius: 6px;
   background: var(--raised);
   color: var(--text);
+}
+
+/* What a field wants, or what was picked, under it. */
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 /* A placeholder can say what the box is waiting for ("Answering…"), so it's read like text. */

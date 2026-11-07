@@ -16,9 +16,9 @@ export default defineConfig({
           root: './client',
           environment: 'jsdom',
           setupFiles: ['./src/test/setup.ts'],
-          // Vitest skips CSS, so stylesheets would read as empty: the contrast test checks the
-          // tokens, and the scroll box test reads every stylesheet as text (?raw).
-          css: { include: [/theme\/tokens\.css/, /\.css\?raw$/] },
+          // Vitest skips CSS, so stylesheets would read as empty: the contrast and scroll box
+          // tests read them as text (?raw).
+          css: { include: [/\.css\?raw$/] },
           ...restore,
         },
       },

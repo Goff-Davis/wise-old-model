@@ -78,9 +78,7 @@ export function About(): JSX.Element {
           </div>
           {backUp.isError && <Problem>Couldn't back up. {backUp.error.message}</Problem>}
           <h4 id={envId}>.env settings</h4>
-          <p className={styles.hint}>
-            Read-only here: change them in .env, then restart Wise Old Model.
-          </p>
+          <p className="hint">Read-only here: change them in .env, then restart Wise Old Model.</p>
           <ul aria-labelledby={envId} className={styles.env}>
             {envRows(data.env).map(([name, value]) => (
               <li key={name}>

@@ -367,13 +367,13 @@ function ChatOptions(props: { busy: boolean }): JSX.Element {
       {choice.saveError && <Problem>Couldn't save that: {choice.saveError.message}</Problem>}
       {/* Why the list is short, in view, on a line of its own above the pickers. */}
       {choice.listProblem && (
-        <p id={`${id}-problem`} className={styles.listProblem}>
+        <p id={`${id}-problem`} className={`${styles.hint} ${styles.listProblem}`}>
           {choice.listProblem}
         </p>
       )}
       {/* Each label kept on its select's line when the bar wraps. */}
       <span className={styles.pick}>
-        <label htmlFor={`${id}-model`} className={styles.pickLabel}>
+        <label htmlFor={`${id}-model`} className={styles.hint}>
           Model
         </label>
         <select
@@ -388,7 +388,7 @@ function ChatOptions(props: { busy: boolean }): JSX.Element {
       </span>
       {choice.showEffort && (
         <span className={styles.pick}>
-          <label htmlFor={`${id}-effort`} className={styles.pickLabel}>
+          <label htmlFor={`${id}-effort`} className={styles.hint}>
             Effort
           </label>
           <select
@@ -510,7 +510,7 @@ export function ChatColumn(props: { name: string }): JSX.Element | null {
   // bare page), it stays.
   const leaveEarlier = (event: FocusEvent) => {
     const next = event.relatedTarget;
-    if (next && !earlier.current?.contains(next) && next !== earlierButton.current) {
+    if (showEarlier && next && !earlier.current?.contains(next) && next !== earlierButton.current) {
       setShowEarlier(false);
     }
   };

@@ -50,16 +50,6 @@
   font-weight: 700;
 }
 
-/* Each tab keeps room for its label in bold, so picking one moves none of the others. */
-.tabs button::after {
-  content: attr(data-label);
-  display: block;
-  height: 0;
-  overflow: hidden;
-  visibility: hidden;
-  font-weight: 700;
-}
-
 .log {
   display: grid;
   grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);

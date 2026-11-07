@@ -80,8 +80,8 @@
 
 .equipment {
   display: grid;
-  grid-template-columns: repeat(3, 44px);
-  grid-template-rows: repeat(5, 44px);
+  grid-template-columns: repeat(3, var(--target-size));
+  grid-template-rows: repeat(5, var(--target-size));
   gap: 4px;
 }
 
@@ -106,8 +106,8 @@
 
 .inventory {
   display: grid;
-  grid-template-columns: repeat(4, 44px);
-  grid-auto-rows: 44px;
+  grid-template-columns: repeat(4, var(--target-size));
+  grid-auto-rows: var(--target-size);
   gap: 3px;
   padding: 4px;
   border: 1px solid var(--rule);
@@ -121,9 +121,9 @@
   background: none;
 }
 
-/* Picked: a thicker accent edge, not color alone (WCAG 1.4.1); above a button's hover edge. */
-.equipment .slot[aria-pressed="true"],
-.inventory .carried[aria-pressed="true"] {
+/* Picked: a thicker accent edge, not color alone (WCAG 1.4.1). */
+.slot[aria-pressed="true"],
+.carried[aria-pressed="true"] {
   border: 2px solid var(--accent);
 }
 

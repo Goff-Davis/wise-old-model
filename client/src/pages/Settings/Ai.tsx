@@ -45,12 +45,12 @@ function ModelPicker(): JSX.Element {
           <ModelOptions models={choice.models} />
         </select>
         {description && (
-          <p id={`${modelId}-about`} className={styles.hint}>
+          <p id={`${modelId}-about`} className="hint">
             {description}
           </p>
         )}
         {choice.listProblem && (
-          <p id={`${modelId}-problem`} className={styles.hint}>
+          <p id={`${modelId}-problem`} className="hint">
             {choice.listProblem}
           </p>
         )}
@@ -67,7 +67,7 @@ function ModelPicker(): JSX.Element {
           >
             <EffortOptions efforts={choice.efforts} />
           </select>
-          <p id={`${effortId}-hint`} className={styles.hint}>
+          <p id={`${effortId}-hint`} className="hint">
             {EFFORT_HINT}
           </p>
         </div>
@@ -118,7 +118,7 @@ export function Ai(): JSX.Element {
               options={BILLING}
               onChange={(billing) => update.mutate({ billing })}
             >
-              <p className={styles.hint}>
+              <p className="hint">
                 {s.billing === 'plan'
                   ? "Uses your Claude plan's usage, through Claude Code signed in on this computer (run claude, then /login)."
                   : 'Pays per token with ANTHROPIC_API_KEY from .env.'}

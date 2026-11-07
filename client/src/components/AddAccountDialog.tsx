@@ -146,7 +146,7 @@ export function AddAccountForm(props: {
             {lookUp.isPending ? 'Looking up…' : 'Look up'}
           </button>
         </div>
-        <p id={`${id}-name-hint`} className={styles.hint}>
+        <p id={`${id}-name-hint`} className="hint">
           Your name in the game, as the hiscores show it.
         </p>
         {nameProblem && <Problem>{nameProblem}</Problem>}

@@ -47,19 +47,8 @@
   gap: 18px;
 }
 
-.choice {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.muted,
-.hint {
+.muted {
   color: var(--muted);
-}
-
-.hint {
-  font-size: 0.92rem;
 }
 
 .number {

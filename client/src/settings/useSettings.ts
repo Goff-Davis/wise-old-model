@@ -3,6 +3,7 @@ import { effectiveTimeZone, type Settings, SettingsAnswerSchema } from '@wom/sha
 import { useEffect } from 'react';
 import { apiSend } from '../api/client.ts';
 import { apiQuery } from '../api/queryClient.ts';
+import { useTabIcon } from './useTabIcon.ts';
 
 const settingsQuery = apiQuery('/api/settings', SettingsAnswerSchema);
 
@@ -29,14 +30,16 @@ export function useUpdateSettings() {
 }
 
 /**
- * Keeps the page in step with the settings: puts the theme on <html>, and reports the browser's
- * time zone to the server whenever it differs from the one saved (it's what Automatic uses).
+ * Keeps the page in step with the settings: puts the theme on <html> and the icon on the tab
+ * (see useTabIcon), and reports the browser's time zone to the server whenever it differs from
+ * the one saved (it's what Automatic uses).
  */
 export function useApplySettings(): void {
   const { data } = useSettings();
   const { mutate } = useUpdateSettings();
   const theme = data?.theme;
   const savedZone = data?.detectedTimeZone;
+  useTabIcon(data?.tabIcon);
 
   useEffect(() => {
     if (!theme) return;

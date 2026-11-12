@@ -117,6 +117,29 @@ describe('Settings → Display', () => {
     expect(localStorage.getItem(THEME_HINT_KEY)).toBe('light');
   });
 
+  it("switches the tab's icon and puts it on the page", async () => {
+    const patches = fakeServer();
+    renderSettings();
+    const display = await screen.findByRole('region', { name: 'Display' });
+    const group = within(display).getByRole('group', { name: 'Tab icon' });
+    expect(
+      within(group)
+        .getAllByRole('radio')
+        .map((radio) => radio.closest('label')?.textContent),
+    ).toEqual([
+      'Pixel art',
+      "Partyhat & specs (the game's icon)",
+      "The Wise Old Man (the wiki's picture, pixelated)",
+    ]);
+    expect(within(group).getByRole('radio', { name: 'Pixel art' })).toHaveProperty('checked', true);
+    const icon = () => document.head.querySelector('link[rel="icon"]')?.getAttribute('href');
+    await waitFor(() => expect(icon()).toBe('/favicon.svg'));
+
+    fireEvent.click(within(group).getByRole('radio', { name: /^Partyhat & specs/ }));
+    await waitFor(() => expect(icon()).toBe('/api/icons/item/12399'));
+    expect(patches).toEqual([{ tabIcon: 'partyhat' }]);
+  });
+
   it('offers Automatic (showing the detected zone), UTC and every zone, and saves a pick', async () => {
     const patches = fakeServer();
     renderSettings();

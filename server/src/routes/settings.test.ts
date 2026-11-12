@@ -40,12 +40,13 @@ describe('settings routes', () => {
 
   it('save a change and answer with every setting', async () => {
     const { server } = await setup();
-    const saved = await call(server, patch({ theme: 'light', budgetUsd: 2.5 }));
+    const change = { theme: 'light', budgetUsd: 2.5, tabIcon: 'wise-old-man' } as const;
+    const saved = await call(server, patch(change));
     expect(saved.status).toBe(200);
-    expect(saved.body).toEqual({ ...defaultSettings, theme: 'light', budgetUsd: 2.5 });
+    expect(saved.body).toEqual({ ...defaultSettings, ...change });
 
     const again = await call(server, { path: '/api/settings' });
-    expect(again.body).toEqual({ ...defaultSettings, theme: 'light', budgetUsd: 2.5 });
+    expect(again.body).toEqual({ ...defaultSettings, ...change });
   });
 
   it("refuse an invalid value with Zod's message, saving nothing", async () => {
@@ -57,13 +58,14 @@ describe('settings routes', () => {
       { detectedTimeZone: 'Nowhere' },
       { maxTurns: 2.5 },
       { budgetUsd: -1 },
+      { tabIcon: 'favicon.ico' },
       { colour: 'blue' },
     ]) {
       const res = await call(server, patch(body));
       expect(res.status, JSON.stringify(body)).toBe(400);
       const error = (res.body as { error: string }).error;
       expect(error, JSON.stringify(body)).toMatch(
-        /pollSeconds|timeZone|detectedTimeZone|maxTurns|budgetUsd|colour/,
+        /pollSeconds|timeZone|detectedTimeZone|maxTurns|budgetUsd|tabIcon|colour/,
       );
     }
     expect((await call(server, { path: '/api/settings' })).body).toEqual(defaultSettings);

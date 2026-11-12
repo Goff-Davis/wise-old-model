@@ -31,11 +31,13 @@ if (typeof document !== 'undefined') {
   // jsdom lays nothing out, so it has no scrollIntoView; this one does nothing.
   Element.prototype.scrollIntoView ??= () => {};
 
-  // Without Vitest globals, Testing Library can't register its own cleanup. The app also
-  // leaves its theme on <html> and its theme hint in localStorage.
+  // Without Vitest globals, Testing Library can't register its own cleanup, which only empties
+  // <body>. The app also leaves its theme on <html>, its tab icon in <head> and its theme hint
+  // in localStorage.
   afterEach(() => {
     cleanup();
     delete document.documentElement.dataset.theme;
+    for (const link of document.head.querySelectorAll('link[rel="icon"]')) link.remove();
     localStorage.clear();
   });
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- The Wise Old Man in 16 × 16 pixel art, drawn for Wise Old Model: his blue partyhat, his
+       specs and his white beard. Each path is one color, a run of pixels per row. -->
+  <title>Wise Old Model</title>
+  <path fill="#1a1410" d="M3 0h1v1h-1zM6 0h1v1h-1zM9 0h1v1h-1zM12 0h1v1h-1zM2 1h1v1h-1zM4 1h2v1h-2zM7 1h2v1h-2zM10 1h2v1h-2zM13 1h1v1h-1zM1 2h1v1h-1zM14 2h1v1h-1zM1 3h1v1h-1zM14 3h1v1h-1zM1 4h1v1h-1zM14 4h1v1h-1zM2 5h1v1h-1zM13 5h1v1h-1zM2 6h1v1h-1zM13 6h1v1h-1zM1 7h1v1h-1zM14 7h1v1h-1zM1 8h1v1h-1zM4 8h1v1h-1zM11 8h1v1h-1zM14 8h1v1h-1zM2 9h1v1h-1zM13 9h1v1h-1zM2 10h1v1h-1zM13 10h1v1h-1zM2 11h1v1h-1zM13 11h1v1h-1zM3 12h1v1h-1zM12 12h1v1h-1zM4 13h1v1h-1zM11 13h1v1h-1zM5 14h1v1h-1zM10 14h1v1h-1zM6 15h4v1h-4z"/>
+  <path fill="#2b4cde" d="M2 2h1v1h-1zM4 2h2v1h-2zM7 2h2v1h-2zM10 2h2v1h-2zM13 2h1v1h-1zM2 3h12v1h-12z"/>
+  <path fill="#6e8cff" d="M3 1h1v1h-1zM6 1h1v1h-1zM9 1h1v1h-1zM12 1h1v1h-1zM3 2h1v1h-1zM6 2h1v1h-1zM9 2h1v1h-1zM12 2h1v1h-1z"/>
+  <path fill="#1a2c96" d="M2 4h12v1h-12z"/>
+  <path fill="#e2aa7a" d="M3 5h10v1h-10zM6 6h4v1h-4zM7 8h2v1h-2zM6 9h1v1h-1zM9 9h1v1h-1zM4 10h1v1h-1zM11 10h1v1h-1z"/>
+  <path fill="#ba7c52" d="M7 9h2v1h-2z"/>
+  <path fill="#34343a" d="M3 6h3v1h-3zM10 6h3v1h-3zM2 7h1v1h-1zM6 7h4v1h-4zM13 7h1v1h-1zM2 8h1v1h-1zM6 8h1v1h-1zM9 8h1v1h-1zM13 8h1v1h-1zM3 9h3v1h-3zM10 9h3v1h-3z"/>
+  <path fill="#c4d6e6" d="M4 7h2v1h-2zM11 7h2v1h-2zM3 8h1v1h-1zM5 8h1v1h-1zM10 8h1v1h-1zM12 8h1v1h-1z"/>
+  <path fill="#ffffff" d="M3 7h1v1h-1zM10 7h1v1h-1z"/>
+  <path fill="#f4f1e9" d="M3 10h1v1h-1zM5 10h2v1h-2zM9 10h2v1h-2zM12 10h1v1h-1zM3 11h3v1h-3zM7 11h2v1h-2zM10 11h3v1h-3zM4 12h2v1h-2zM7 12h2v1h-2zM10 12h2v1h-2zM5 13h6v1h-6zM6 14h1v1h-1zM9 14h1v1h-1z"/>
+  <path fill="#c4bdb0" d="M7 10h2v1h-2zM6 11h1v1h-1zM9 11h1v1h-1zM6 12h1v1h-1zM9 12h1v1h-1zM7 14h2v1h-2z"/>
+</svg>

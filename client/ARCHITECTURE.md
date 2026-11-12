@@ -26,7 +26,7 @@ The React app: a chat-first dashboard for one account at a time. See the [root A
 | `pages/` | One folder per page: `Overview`, `ThisWeek`, `Goals`, `BankGear`, `CollectionLog`, `Settings`; `pageList.ts` holds the menu order and URL ids |
 | `chat/` | `useChat.tsx` (the open account's chat and its streaming answer), `ChatColumn.tsx`, `Markdown.tsx` |
 | `data/` | `useFileCheck.ts`: in Automatic mode, checks the open account's Character Export files |
-| `settings/` | `useSettings.ts` (read and change settings, apply the theme, report the browser's time zone), `useModelChoice.ts` and `ModelOptions.tsx` (the chosen AI's model and effort pickers) |
+| `settings/` | `useSettings.ts` (read and change settings, apply the theme, report the browser's time zone), `useTabIcon.ts` and `pixelate.ts` (the browser tab's icon, and a picture shrunk to pixel art for it), `useModelChoice.ts` and `ModelOptions.tsx` (the chosen AI's model and effort pickers) |
 | `theme/` | `tokens.css` (both themes' colors, fonts and form controls), `fonts.ts` |
 | `test/` | Test setup, `fakeApi.ts` (a stand-in for the server) and `renderApp.tsx` |
 
@@ -82,7 +82,7 @@ flowchart LR
 | Goals | Add goal and Suggest goals (with why they wait, when they do); active goals in your order (drag, Move up and Move down, or Alt+↑/↓ on either) with progress and what's still needed; Done with dates; Add goal as a dialog picking names from the account's own lists |
 | Bank and gear | The bank's value; one search across bank, seed vault, inventory and gear; worn gear in the equipment screen's grid; the 28-slot inventory with stack sizes as the game writes them (picking a slot says what it holds on a line below); the priciest stacks |
 | Collection log | Totals and Temple's last sync; tabs like the in-game log; entries (complete ones in green) and the picked entry's items |
-| Settings | Accounts (rename, change type, delete after a question), Game data (RuneLite folder, Automatic or Manual and its interval), AI (which AI answers, from those `.env` sets up, each other one saying what it needs; its model and effort; the most tool rounds; Claude's billing and spending cap), Display (theme, time zone), About (data folder, backups, `.env` settings with keys only as set or not, credits) |
+| Settings | Accounts (rename, change type, delete after a question), Game data (RuneLite folder, Automatic or Manual and its interval), AI (which AI answers, from those `.env` sets up, each other one saying what it needs; its model and effort; the most tool rounds; Claude's billing and spending cap), Display (theme, the tab's icon, time zone), About (data folder, backups, `.env` settings with keys only as set or not, credits) |
 
 Each page gets all its data from one endpoint, already worked out by the server, and renders it.
 
@@ -126,6 +126,12 @@ stateDiagram-v2
 - **Status colors** follow the in-game quest list (red, yellow, green). Like text and muted text, each passes 7:1 on the background, panels and raised surfaces, so the colors sit close in lightness: hierarchy comes more from size and weight.
 - **No template chrome:** sentence case everywhere, no all-caps labels, no middle-dot meta strings, no arrows on buttons.
 - The last theme is also kept in `localStorage`, so `index.html` applies it before the app loads and a light page doesn't flash dark.
+- **The tab's icon** is picked in Settings → Display, to compare three:
+  - **Pixel art** of the Wise Old Man, 16 × 16, drawn for the app (`public/favicon.svg`). It's `index.html`'s own, so it shows before the app loads, and the default.
+  - **The game's Partyhat & specs**, his own hat: RuneLite's icon of item 12399.
+  - **The wiki's picture of his head, pixelated in the page** (`settings/pixelate.ts`): a square from the top of the picture, holding the hat, the specs and the top of the beard, averaged down to 16 × 16 and shown at 32 so the pixels stay sharp. If the picture can't be loaded or drawn, the pixel art shows instead.
+
+  The last two come through the server's icon routes like every other game image, so nothing of Jagex's is committed.
 - **Icons** (`components/Icon.tsx`) come from the server: wiki images by file name (`/api/icons/wiki/Attack_icon.png`) and RuneLite item icons by id (`/api/icons/item/4151`), pixel art kept sharp; a missing icon leaves a blank of its size.
 - **Accessibility:** native elements first (`<dialog>`, `<fieldset>`, form controls), ARIA patterns where needed (tabs in the Collection log, a combobox for `SearchSelect`), problems announced as they appear (`role="alert"`), and focus moved deliberately when something it was on disappears.
 - **WCAG 2.2 AAA** is the aim:

@@ -126,7 +126,7 @@ Everything else is set in the app, on the Settings page:
 
 - **Game data:** Automatic (an open page re-reads Character Export's files every few seconds as you play; the interval is adjustable) or Manual (only when you press Refresh).
 - **AI:** which AI answers (any `.env` sets up), its model and effort (picked from the models it lists), the most tool rounds per question, and, for Claude, its billing (your plan, or an API key) and a spending cap per question with a key.
-- **Display:** dark or light theme, and the time zone (automatic, or any zone).
+- **Display:** dark or light theme, the browser tab's icon (pixel art of the Wise Old Man, the game's Partyhat & specs, or the wiki's picture of him pixelated), and the time zone (automatic, or any zone).
 
 ## Usage
 

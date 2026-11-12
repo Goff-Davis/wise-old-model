@@ -13,7 +13,13 @@ const THEMES = [
   { value: 'light', label: 'Light' },
 ] as const;
 
-/** The theme and the time zone times are shown in. */
+const TAB_ICONS = [
+  { value: 'pixel-art', label: 'Pixel art' },
+  { value: 'partyhat', label: "Partyhat & specs (the game's icon)" },
+  { value: 'wise-old-man', label: "The Wise Old Man (the wiki's picture, pixelated)" },
+] as const;
+
+/** The theme, the browser tab's icon and the time zone times are shown in. */
 function Display(): JSX.Element | null {
   const settings = useSettings();
   const update = useUpdateSettings();
@@ -35,6 +41,12 @@ function Display(): JSX.Element | null {
         value={s.theme}
         options={THEMES}
         onChange={(theme) => update.mutate({ theme })}
+      />
+      <Choices
+        legend="Tab icon"
+        value={s.tabIcon}
+        options={TAB_ICONS}
+        onChange={(tabIcon) => update.mutate({ tabIcon })}
       />
       <div className={styles.field}>
         <label htmlFor={zoneId}>Time zone</label>

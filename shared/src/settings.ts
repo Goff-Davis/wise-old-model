@@ -24,6 +24,11 @@ export const PROVIDERS: Record<ProviderId, { name: string; setup: string }> = {
 /** Settings changed in the app; secrets and paths stay in .env. */
 export const SettingsSchema = z.object({
   theme: z.enum(['dark', 'light']),
+  /**
+   * The browser tab's icon: pixel art drawn for the app, the game's Partyhat & specs, or the
+   * wiki's picture of the Wise Old Man, pixelated.
+   */
+  tabIcon: z.enum(['pixel-art', 'partyhat', 'wise-old-man']),
   /** 'auto' means the browser's zone, which the page reports as detectedTimeZone. */
   timeZone: z
     .string()
@@ -98,6 +103,7 @@ export const PROVIDER_DEFAULTS: Record<ProviderId, Pick<Settings, 'model' | 'eff
 
 export const defaultSettings: Settings = {
   theme: 'dark',
+  tabIcon: 'pixel-art',
   timeZone: 'auto',
   detectedTimeZone: null,
   runeliteMode: 'automatic',
